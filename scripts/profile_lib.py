@@ -24,7 +24,7 @@ def _load_yaml(name, root=None):
     path = os.path.join(profile_dir(root), name)
     if not os.path.isfile(path):
         return {}
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return _yaml.load(f) or {}
 
 
@@ -76,8 +76,7 @@ def model(role, default=None, root=None):
 
 
 def voice_path(channel, root=None):
-    rel = (config(root).get("voice") or {}).get(channel) or f"profile/voice/{channel}.md"
-    return os.path.join(root or PM_OS_DIR, rel)
+    return os.path.join(profile_dir(root), "voice", f"{channel}.md")
 
 
 def voice_text(channel=None, root=None):
@@ -87,6 +86,6 @@ def voice_text(channel=None, root=None):
     for ch in channels:
         path = voice_path(ch, root)
         if os.path.isfile(path):
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 chunks.append(f.read().strip())
     return "\n\n".join(chunks)

@@ -79,9 +79,6 @@ def profile_root(tmp_path):
           judge: "claude-opus-4-8"
           parser: "claude-haiku-4-5"
           cost_posture: "balanced"
-        voice:
-          teams: "profile/voice/teams.md"
-          email: "profile/voice/email.md"
         active_skill_packs: ["core", "pm"]
     """))
     (prof / "voice" / "teams.md").write_text("# Teams voice\nTight, lowercase ok.\n")
@@ -161,9 +158,6 @@ models:
   judge: "claude-opus-4-8"
   parser: "claude-haiku-4-5"
   cost_posture: "balanced"   # low | balanced | high
-voice:
-  teams: "profile/voice/teams.md"
-  email: "profile/voice/email.md"
 active_skill_packs: ["core"]
 ```
 
@@ -303,7 +297,7 @@ def _load_yaml(name, root=None):
     path = os.path.join(profile_dir(root), name)
     if not os.path.isfile(path):
         return {}
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return _yaml.load(f) or {}
 
 
@@ -504,8 +498,7 @@ def model(role, default=None, root=None):
 
 
 def voice_path(channel, root=None):
-    rel = (config(root).get("voice") or {}).get(channel) or f"profile/voice/{channel}.md"
-    return os.path.join(root or PM_OS_DIR, rel)
+    return os.path.join(profile_dir(root), "voice", f"{channel}.md")
 
 
 def voice_text(channel=None, root=None):
@@ -515,10 +508,12 @@ def voice_text(channel=None, root=None):
     for ch in channels:
         path = voice_path(ch, root)
         if os.path.isfile(path):
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 chunks.append(f.read().strip())
     return "\n\n".join(chunks)
 ```
+
+Note: voice files always live at `<profile_dir>/voice/<channel>.md` (resolved via `profile_dir()`, honoring the `profile.example/` fallback) — there is no config override.
 
 **Step 4: Run to verify pass**
 

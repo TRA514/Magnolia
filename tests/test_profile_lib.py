@@ -71,3 +71,28 @@ def test_voice_text_concatenates_channels(profile_root):
 def test_voice_text_single_channel(profile_root):
     assert "Teams voice" in profile_lib.voice_text("teams", root=profile_root)
     assert "Email voice" not in profile_lib.voice_text("teams", root=profile_root)
+
+
+def test_voice_text_falls_back_to_example(tmp_path):
+    # Only profile.example/ exists (no live profile/) -> voice still resolves.
+    ex = tmp_path / "profile.example" / "voice"
+    ex.mkdir(parents=True)
+    (ex / "teams.md").write_text("# Example teams voice\n")
+    (ex / "email.md").write_text("# Example email voice\n")
+    txt = profile_lib.voice_text(root=str(tmp_path))
+    assert "Example teams voice" in txt
+    assert "Example email voice" in txt
+
+
+def test_loader_handles_comments_only_file(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "profile.yaml").write_text("# only a comment, no keys\n")
+    assert profile_lib.profile(root=str(tmp_path)) == {}
+    assert profile_lib.display_name(root=str(tmp_path)) == "Operator"
+
+
+def test_provider_handles_null_value(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "integrations.yaml").write_text("project_management:\n")
+    assert profile_lib.provider("project_management", root=str(tmp_path)) == "none"
+    assert profile_lib.jira_config(root=str(tmp_path)) == {}

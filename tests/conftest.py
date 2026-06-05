@@ -38,9 +38,6 @@ def profile_root(tmp_path):
           judge: "claude-opus-4-8"
           parser: "claude-haiku-4-5"
           cost_posture: "balanced"
-        voice:
-          teams: "profile/voice/teams.md"
-          email: "profile/voice/email.md"
         active_skill_packs: ["core", "pm"]
     """))
     (prof / "voice" / "teams.md").write_text("# Teams voice\nTight, lowercase ok.\n")

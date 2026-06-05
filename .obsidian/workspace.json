@@ -1,0 +1,231 @@
+{
+  "main": {
+    "id": "1839666cecd1d5d0",
+    "type": "split",
+    "children": [
+      {
+        "id": "fd4e808e59c58f56",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "fa3e0c0226a74f9e",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "datasets/product/packages/2026/landing-page-wysiwyg/one-pager.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "one-pager"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "b1d964fa263100b1",
+    "type": "split",
+    "children": [
+      {
+        "id": "221efc595f7b9ab9",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "0a9573a883880805",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "98a96b0c34ffc654",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "3fc62d9f604e03d4",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 418.5
+  },
+  "right": {
+    "id": "cee078b5d5666a99",
+    "type": "split",
+    "children": [
+      {
+        "id": "804954b2bad44c51",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "57340a0bc6664894",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "datasets/product/agent-output/v3-eap-weekly-2026-04-06.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for v3-eap-weekly-2026-04-06"
+            }
+          },
+          {
+            "id": "86375a02d008a298",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "datasets/product/agent-output/v3-eap-weekly-2026-04-06.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from v3-eap-weekly-2026-04-06"
+            }
+          },
+          {
+            "id": "76e08763af4f3ef3",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "19fea50e2b581343",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "553373dac9317e2e",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "datasets/product/agent-output/v3-eap-weekly-2026-04-06.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of v3-eap-weekly-2026-04-06"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "fa3e0c0226a74f9e",
+  "lastOpenFiles": [
+    "datasets/meetings/leadership/2026-05/2026-05-07_14-21_PLT L10.txt",
+    "datasets/meetings/2026-05/2026-05-07_14-21_PLT L10.txt",
+    "logs/dispatch-TASK-0518.log",
+    "logs/dispatch-TASK-0517.log",
+    "datasets/product/agent-output/2026-05-07-perkspot-pay-exclusive-vs-home-wide-tradeoff.tmp.md",
+    "datasets/product/agent-output/2026-05-07-perkspot-pay-exclusive-vs-home-wide-tradeoff.md",
+    "logs/dispatch-TASK-0516.log",
+    "datasets/product/agent-output/2026-05-07_voting-liability-and-compliance-memo.tmp.md",
+    "datasets/product/agent-output/2026-05-07_voting-liability-and-compliance-memo.md",
+    "logs/dispatch-TASK-0514.log",
+    "logs/dispatch-TASK-0519.log",
+    "datasets/product/agent-output/board-action-pages-prioritization-2026-05-07.tmp.md",
+    "datasets/product/agent-output/board-action-pages-prioritization-2026-05-07.md",
+    "logs/dispatch-TASK-0515.log",
+    "datasets/tasks/_archive/2026-05/TASK-0463.md",
+    "datasets/tasks/waiting/TASK-0520.md",
+    "datasets/tasks/collab/TASK-0519.md",
+    "datasets/tasks/collab/TASK-0518.md",
+    "datasets/tasks/collab/TASK-0517.md",
+    "datasets/tasks/collab/TASK-0516.md",
+    "datasets/tasks/agent/TASK-0515.md",
+    "datasets/tasks/agent/TASK-0514.md",
+    "datasets/meetings/leadership/2026-05/2026-05-07_13-21_Jay Mike - biweekly 1_1.txt",
+    "datasets/meetings/2026-05/2026-05-07_13-21_Jay Mike - biweekly 1_1.txt",
+    "datasets/meetings/leadership/2026-05/2026-05-07_13-54_Jay x Dennis weekly sync.txt",
+    "datasets/product/agent-output/2026-05-07_dynamic-forms-EA-customer-launch-email.tmp.md",
+    "datasets/product/agent-output/2026-05-07_dynamic-forms-EA-customer-launch-email.md",
+    "datasets/product/agent-output/2026-05-07_pmos-process-flow-brain-map.tmp.md",
+    "datasets/product/agent-output/2026-05-07_pmos-process-flow-brain-map.md",
+    "datasets/product/agent-output/2026-05-07_cai-annual-resident-experience-group-demo-script.tmp.md",
+    "datasets/product/agent-output/2026-05-07_cai-annual-resident-experience-group-demo-script.md",
+    "datasets/product/agent-output/2026-05-07_dynamic-forms-starter-templates-v2.tmp.md",
+    "datasets/product/agent-output/2026-05-07_dynamic-forms-starter-templates-v2.md",
+    "datasets/tasks/agent/TASK-0513.md",
+    "datasets/tasks/waiting/TASK-0512.md",
+    "datasets/tasks/agent/TASK-0511.md",
+    "datasets/product/agent-output/golden-age-site/images/router.png",
+    "datasets/product/agent-output/golden-age-site/images/inversion.png",
+    "datasets/product/agent-output/golden-age-site/images/hero.png",
+    "datasets/product/agent-output/golden age images/router.png",
+    "datasets/product/agent-output/golden age images/inversion.png",
+    "datasets/product/agent-output/golden age images/Hero.png"
+  ]
+}

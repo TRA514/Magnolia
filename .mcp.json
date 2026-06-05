@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "qmd": {
+      "type": "stdio",
+      "command": "/opt/homebrew/bin/qmd",
+      "args": ["mcp"],
+      "cwd": "/Users/jayjenkins/pm-os"
+    }
+  }
+}

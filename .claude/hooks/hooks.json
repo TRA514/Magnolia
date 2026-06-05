@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/jayjenkins/pm-os/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

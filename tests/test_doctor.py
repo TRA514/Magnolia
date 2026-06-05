@@ -86,3 +86,23 @@ def test_detect_assembles_capabilities(tmp_path, monkeypatch):
     assert c["jira"]["kind"] == "remote" and c["jira"]["expected"] is True
     # detect() persisted the file
     assert (tmp_path / "profile" / "capabilities.json").is_file()
+
+
+def test_report_text_lists_caps(tmp_path):
+    caps = {"schema_version": 1, "platform": "darwin", "capabilities": {
+        "qmd": {"kind": "local", "status": "missing", "remedy": "brew install qmd"},
+        "server": {"kind": "service", "status": "down", "port": 8742},
+    }}
+    text = doctor.report_text(caps)
+    assert "qmd" in text and "missing" in text
+    assert "brew install qmd" in text
+
+
+def test_check_exit_code(tmp_path, monkeypatch):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "integrations.yaml").write_text("transcript:\n  provider: none\n")
+    monkeypatch.setattr(doctor.shutil, "which", lambda n: None)
+    monkeypatch.setattr(doctor.importlib.util, "find_spec", lambda n: object())
+    doctor.detect(root=str(tmp_path))
+    assert doctor.check("qmd", root=str(tmp_path)) == 1   # missing → nonzero
+    assert doctor.check("python_deps", root=str(tmp_path)) == 0  # ok → zero

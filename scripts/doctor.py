@@ -113,3 +113,51 @@ def detect(root=None):
     }
     profile_lib.write_capabilities(doc, root)
     return doc
+
+
+def report_text(caps):
+    lines = [f"Magnolia Doctor — platform: {caps.get('platform', '?')}", ""]
+    for name, c in sorted(caps.get("capabilities", {}).items()):
+        status = c.get("status", "?")
+        line = f"  {name:14} {status}"
+        if c.get("remedy") and status != "ok":
+            line += f"   → {c['remedy']}"
+        if c.get("required") is False and status != "ok":
+            line += "   (recommended)"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def check(cap_name, root=None):
+    caps = profile_lib.read_capabilities(root)["capabilities"]
+    c = caps.get(cap_name)
+    if not c:
+        return 2
+    return 0 if c.get("status") in ("ok", "running") else 1
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="doctor")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("detect")
+    cp = sub.add_parser("check")
+    cp.add_argument("capability")
+    sub.add_parser("report")
+    args = parser.parse_args(argv)
+
+    if args.cmd == "detect":
+        from datetime import datetime, timezone
+        doc = detect()
+        doc["generated_at"] = datetime.now(timezone.utc).isoformat()
+        profile_lib.write_capabilities(doc)
+        print(report_text(doc))
+        return 0
+    if args.cmd == "report":
+        print(report_text(profile_lib.read_capabilities()))
+        return 0
+    if args.cmd == "check":
+        return check(args.capability)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

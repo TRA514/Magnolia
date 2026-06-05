@@ -89,3 +89,9 @@ def voice_text(channel=None, root=None):
             with open(path, encoding="utf-8") as f:
                 chunks.append(f.read().strip())
     return "\n\n".join(chunks)
+
+
+if __name__ == "__main__":
+    import sys
+    if "--display-name" in sys.argv:
+        print(display_name())

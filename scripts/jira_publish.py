@@ -255,6 +255,12 @@ def publish_to_jira(draft):
     if err_match:
         raise RuntimeError(f"Jira creation failed: {err_match.group(1).strip()}")
 
+    # Without a configured project key the fallback pattern degrades to
+    # ``-\d+``, which false-positive matches dates/error codes (e.g. "403-1").
+    # Treat the unconfigured-profile case as unparseable rather than guessing.
+    if not JIRA_PROJECT_KEY:
+        raise RuntimeError(f"Could not parse Jira result from Claude output. Exit code: {result.returncode}. Output: {output[:500]}")
+
     # Try to find issue key in output (fallback) — pattern is built from the
     # active profile's project key and cloud_id, not a hardcoded tenant.
     key_pat = re.escape(JIRA_PROJECT_KEY) + r"-\d+"

@@ -113,7 +113,6 @@ sync_paths:
 sync_exclude:
   - datasets/meetings/**
   - datasets/tasks/**
-  - datasets/learning/**
 EOF
 
 echo "  Written: $CONFIG_PATH"

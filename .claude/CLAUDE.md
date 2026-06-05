@@ -9,12 +9,12 @@ Two operational modes routed by working directory or invoked command:
 1. **Product Mode** (default outside `datasets/marketing/`)
    - Outputs: backlog/roadmap, customer briefs, internal docs, PRDs
    - Sources: `datasets/meetings/**`, `datasets/product/**`
-   - Commands: `/project:*`, `/metrics:*`, `/task:*`, `/strategy:*`, `/recruiting:*`
+   - Commands: `/project:*`, `/metrics:*`, `/task:*`, `/strategy:*`
 
 2. **Content Mode** (inside `datasets/marketing/**` or when `/content:*` runs)
    - Outputs: briefs, outlines, drafts, verification reports, snippets
    - Non-negotiables: intent-first, footnote+verbatim quote per factual sentence, grade 8 readability, no em dashes, "(source needed)" stops processing
-   - Sources: `datasets/marketing/content/**/inputs/**`, `datasets/learning/**`, verified meeting files
+   - Sources: `datasets/marketing/content/**/inputs/**`, verified meeting files
 
 If both could apply and the user invokes `/content:*`, prefer Content Mode.
 
@@ -33,8 +33,6 @@ Category prefix, then skill name:
 | `context-` | Reusable context assembly |
 | `workflow-` | End-to-end workflows |
 | `metric-` | Metrics analysis |
-| `hiring-` | PM hiring |
-| `recruiting-` | Recruiting workflows |
 | `task-` | Task management |
 
 ### SKILL.md format

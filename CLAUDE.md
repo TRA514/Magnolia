@@ -2,7 +2,7 @@
 
 Guidance for Claude Code working in this PM-OS repository.
 
-This is an AI-driven automation workspace for product management: meeting-driven roadmap updates, marketing content, strategic decisions, learning, and task orchestration. Workflows are decomposed into auto-discovered skills under `.claude/skills/` (flat layout — see `.claude/CLAUDE.md` for conventions).
+This is an AI-driven automation workspace for product management: meeting-driven roadmap updates, marketing content, strategic decisions, and task orchestration. Workflows are decomposed into auto-discovered skills under `.claude/skills/` (flat layout — see `.claude/CLAUDE.md` for conventions).
 
 ## Workspace Layout
 
@@ -10,9 +10,7 @@ This is an AI-driven automation workspace for product management: meeting-driven
 - `datasets/marketing/` — Content pipeline (briefs, outlines, drafts, verify, snippets)
 - `datasets/research/` — External sources organized by strategic topic
 - `datasets/strategy/` — Strategy sessions and formal memos
-- `datasets/learning/` — Notes, flashcards, decks
 - `datasets/meetings/` — Meeting transcripts (Customers/, Internal/) with YAML frontmatter
-- `datasets/recruiting/` — PM hiring openings, candidate folders, assessments
 - `datasets/tasks/` — Unified task queues (human, agent, collab, waiting)
 - `datasets/cron/` — Recurring job definitions
 - `langfuse/` — Local LangFuse Docker stack

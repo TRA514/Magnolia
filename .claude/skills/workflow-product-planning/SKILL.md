@@ -16,8 +16,8 @@ Transform meeting signals into actionable PRDs:
 ## When to Use
 
 Activate when:
-- User invokes `/project:meetings-to-backlog`
-- Automated processing via scheduled runs
+- Processing new meeting transcripts into backlog signals / PRD proposals
+- Automated processing via scheduled / headless runs
 - Regular PRD intake cycles
 
 ## Workflow Steps

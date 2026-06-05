@@ -16,7 +16,7 @@ Update roadmap with newly validated PRDs:
 ## When to Use
 
 Activate when:
-- User invokes `/project:update-roadmap`
+- Updating the roadmap with new PRDs
 - After product-planning generates PRDs
 - After interactive PRD creation
 - Manual roadmap review cycles

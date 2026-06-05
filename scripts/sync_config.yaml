@@ -21,4 +21,3 @@ sharepoint_doc_root: "/personal/jay_jenkins_vantaca_com/Documents"
 sync_exclude:
   - datasets/meetings/**
   - datasets/tasks/**
-  - datasets/learning/**

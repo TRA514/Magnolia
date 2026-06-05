@@ -18,7 +18,6 @@ Ensure all research sources and external inputs maintain:
 
 Activate automatically when:
 - Processing external sources with `research-processing` workflow
-- Validating flashcard content hashes for Mochi sync
 - Verifying meeting transcript integrity
 - User explicitly requests source validation
 - Any workflow depends on external data integrity
@@ -176,8 +175,7 @@ expiry_date: "YYYY-MM-DD"
 
 Read source from:
 - `datasets/research/{topic}/{filename}.md`, OR
-- `citations/sources.json` entry, OR
-- `datasets/learning/cards/{topic}/{filename}.md` (for flashcard validation)
+- `citations/sources.json` entry
 
 ### 2. Apply Integrity Checks
 
@@ -275,16 +273,6 @@ sha256sum /path/to/source.md | awk '{print "sha256:"$1}'
 - If integrity check fails → source not added to citations/sources.json
 - User notified of required fixes
 
-### Mochi Sync Integration
-
-**Invoked by:**
-- `mochi-sync` workflow (validates flashcard content hashes)
-
-**Behavior:**
-- Checksums determine if card content changed
-- If checksum mismatch → card marked for update in Mochi
-- If checksum matches → skip card (already synced)
-
 ### Meeting Processing Integration
 
 **Optional usage:**
@@ -315,7 +303,6 @@ Source integrity validated when:
 
 - **source-normalization**: Creates normalized source entries (invokes this skill for validation)
 - **research-processing**: Uses this skill to validate external sources
-- **mochi-sync**: Uses checksum logic from this skill for sync tracking
 
 ## Anti-Rationalization Blocks
 

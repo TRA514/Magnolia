@@ -22,8 +22,18 @@ def probe_which(name, remedy=None):
     return cap
 
 
+def _dep_missing(module):
+    try:
+        return importlib.util.find_spec(module) is None
+    except ModuleNotFoundError:
+        # A dotted name whose PARENT package is absent makes find_spec raise
+        # rather than return None. The Doctor runs on unhealthy environments by
+        # design, so treat that as "missing", never a crash.
+        return True
+
+
 def probe_python_deps(modules):
-    missing = [m for m in modules if importlib.util.find_spec(m) is None]
+    missing = [m for m in modules if _dep_missing(m)]
     cap = {"kind": "local"}
     if missing:
         cap["status"] = "degraded"

@@ -60,3 +60,28 @@ def test_install_rejects_empty_program(monkeypatch):
     import pytest
     with pytest.raises(ValueError):
         persist_lib.install(program=[], working_dir="/r", log_path="/r/l.log", activate=False)
+
+
+def test_install_macos_reports_activation_success(tmp_path, monkeypatch):
+    monkeypatch.setattr(persist_lib.platform_lib, "os_kind", lambda: "darwin")
+    monkeypatch.setattr(persist_lib.platform_lib, "launch_agents_dir", lambda: str(tmp_path))
+    import subprocess as _sp
+    monkeypatch.setattr(persist_lib.subprocess, "run",
+                        lambda *a, **k: _sp.CompletedProcess(a[0], 0, stdout=b"", stderr=b""))
+    result = persist_lib.install(program=["/usr/bin/python3", "/repo/scripts/task_server.py"],
+                                 working_dir="/repo", log_path="/repo/logs/s.log", activate=True)
+    assert result["mechanism"] == "launchagent"
+    assert result["activated"] is True
+
+
+def test_install_macos_reports_activation_failure(tmp_path, monkeypatch):
+    monkeypatch.setattr(persist_lib.platform_lib, "os_kind", lambda: "darwin")
+    monkeypatch.setattr(persist_lib.platform_lib, "launch_agents_dir", lambda: str(tmp_path))
+    import subprocess as _sp
+    monkeypatch.setattr(persist_lib.subprocess, "run",
+                        lambda *a, **k: _sp.CompletedProcess(a[0], 1, stdout=b"", stderr=b"Load failed: bad plist"))
+    result = persist_lib.install(program=["/usr/bin/python3", "/repo/scripts/task_server.py"],
+                                 working_dir="/repo", log_path="/repo/logs/s.log", activate=True)
+    assert result["mechanism"] == "launchagent"
+    assert result["activated"] is False
+    assert "activation_error" in result

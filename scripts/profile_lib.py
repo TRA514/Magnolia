@@ -69,3 +69,24 @@ def jira_config(root=None):
     if pm.get("provider") != "jira":
         return {}
     return pm.get("jira") or {}
+
+
+def model(role, default=None, root=None):
+    return (config(root).get("models") or {}).get(role, default)
+
+
+def voice_path(channel, root=None):
+    rel = (config(root).get("voice") or {}).get(channel) or f"profile/voice/{channel}.md"
+    return os.path.join(root or PM_OS_DIR, rel)
+
+
+def voice_text(channel=None, root=None):
+    """Return voice guidance. channel='teams'|'email', or None for both concatenated."""
+    channels = [channel] if channel else ["teams", "email"]
+    chunks = []
+    for ch in channels:
+        path = voice_path(ch, root)
+        if os.path.isfile(path):
+            with open(path) as f:
+                chunks.append(f.read().strip())
+    return "\n\n".join(chunks)

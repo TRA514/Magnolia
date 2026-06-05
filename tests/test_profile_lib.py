@@ -55,3 +55,19 @@ def test_jira_config_empty_when_not_jira(tmp_path):
         "project_management:\n  provider: asana\n"
     )
     assert profile_lib.jira_config(root=str(tmp_path)) == {}
+
+
+def test_model_accessor(profile_root):
+    assert profile_lib.model("judge", root=profile_root) == "claude-opus-4-8"
+    assert profile_lib.model("missing", default="x", root=profile_root) == "x"
+
+
+def test_voice_text_concatenates_channels(profile_root):
+    txt = profile_lib.voice_text(root=profile_root)
+    assert "Teams voice" in txt
+    assert "Email voice" in txt
+
+
+def test_voice_text_single_channel(profile_root):
+    assert "Teams voice" in profile_lib.voice_text("teams", root=profile_root)
+    assert "Email voice" not in profile_lib.voice_text("teams", root=profile_root)

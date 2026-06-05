@@ -1,0 +1,13 @@
+# Which external tools this operator uses. Onboarding fills these in.
+project_management:
+  provider: "none"       # jira | asana | linear | none
+  jira:
+    cloud_id: ""         # e.g. yourorg.atlassian.net
+    project_key: ""      # e.g. ABC
+    component_id: ""
+    auto_label: ""
+    default_assignee: "" # Jira accountId
+transcript:
+  provider: "none"       # otter | granola | none
+calendar:
+  provider: "none"       # m365 | google | none

@@ -80,11 +80,12 @@ datasets/evals/*
 datasets/evals/*/*
 !datasets/evals/*/*/.gitkeep
 
-# Reference folder: ignore personal reference content, but keep the voice guide
-# (reusable scaffolding — others can adapt it to their own voice)
+# Reference folder: ignore personal reference content
 datasets/reference/*
 !datasets/reference/.gitkeep
-!datasets/reference/jay-voice.md
+
+# Per-person profile is gitignored; the .example template is tracked.
+/profile/
 
 # Docs folder: exclude scratch/implementation notes, but track design plans
 docs/*

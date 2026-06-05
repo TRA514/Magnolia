@@ -1,0 +1,9 @@
+# Engine behavior knobs.
+models:
+  judge: "claude-opus-4-8"
+  parser: "claude-haiku-4-5"
+  cost_posture: "balanced"   # low | balanced | high
+voice:
+  teams: "profile/voice/teams.md"
+  email: "profile/voice/email.md"
+active_skill_packs: ["core"]

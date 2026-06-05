@@ -9,5 +9,6 @@ project_management:
     default_assignee: "" # Jira accountId
 transcript:
   provider: "none"       # otter | granola | none
+  target: "datasets/meetings/"
 calendar:
   provider: "none"       # m365 | google | none

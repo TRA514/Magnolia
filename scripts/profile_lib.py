@@ -66,6 +66,19 @@ def provider(name, root=None):
     return integration(name, root).get("provider") or "none"
 
 
+def transcript_config(root=None):
+    t = integration("transcript", root)
+    return {
+        "provider": t.get("provider") or "none",
+        "target": t.get("target") or "datasets/meetings/",
+    }
+
+
+def transcript_state_dir(root=None):
+    """Per-person runtime dir for transcript creds/session/ledger (gitignored)."""
+    return os.path.join(profile_dir(root), "transcript")
+
+
 def jira_config(root=None):
     pm = integration("project_management", root)
     if pm.get("provider") != "jira":

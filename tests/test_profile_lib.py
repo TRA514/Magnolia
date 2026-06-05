@@ -106,3 +106,17 @@ def test_server_port_default(tmp_path):
 def test_server_port_from_config(profile_root):
     # profile_root fixture defines a server block with port 8755
     assert profile_lib.server_port(root=profile_root) == 8755
+
+
+def test_transcript_config_defaults(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "integrations.yaml").write_text("transcript:\n  provider: otter\n")
+    tc = profile_lib.transcript_config(root=str(tmp_path))
+    assert tc["provider"] == "otter"
+    assert tc["target"] == "datasets/meetings/"  # default applied
+
+
+def test_transcript_dir_under_profile(tmp_path):
+    (tmp_path / "profile").mkdir()
+    d = profile_lib.transcript_state_dir(root=str(tmp_path))
+    assert d.endswith("/profile/transcript")

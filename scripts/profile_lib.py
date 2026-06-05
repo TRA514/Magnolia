@@ -75,6 +75,10 @@ def model(role, default=None, root=None):
     return (config(root).get("models") or {}).get(role, default)
 
 
+def server_port(root=None):
+    return int((config(root).get("server") or {}).get("port", 8742))
+
+
 def voice_path(channel, root=None):
     return os.path.join(profile_dir(root), "voice", f"{channel}.md")
 

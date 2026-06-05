@@ -4,3 +4,5 @@ models:
   parser: "claude-haiku-4-5"
   cost_posture: "balanced"   # low | balanced | high
 active_skill_packs: ["core"]
+server:
+  port: 8742

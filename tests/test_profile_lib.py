@@ -96,3 +96,13 @@ def test_provider_handles_null_value(tmp_path):
     (tmp_path / "profile" / "integrations.yaml").write_text("project_management:\n")
     assert profile_lib.provider("project_management", root=str(tmp_path)) == "none"
     assert profile_lib.jira_config(root=str(tmp_path)) == {}
+
+
+def test_server_port_default(tmp_path):
+    (tmp_path / "profile").mkdir()
+    assert profile_lib.server_port(root=str(tmp_path)) == 8742
+
+
+def test_server_port_from_config(profile_root):
+    # profile_root fixture defines a server block with port 8755
+    assert profile_lib.server_port(root=profile_root) == 8755

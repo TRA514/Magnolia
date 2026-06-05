@@ -39,6 +39,8 @@ def profile_root(tmp_path):
           parser: "claude-haiku-4-5"
           cost_posture: "balanced"
         active_skill_packs: ["core", "pm"]
+        server:
+          port: 8755
     """))
     (prof / "voice" / "teams.md").write_text("# Teams voice\nTight, lowercase ok.\n")
     (prof / "voice" / "email.md").write_text("# Email voice\nWarm, polished.\n")

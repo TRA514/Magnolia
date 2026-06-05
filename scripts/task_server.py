@@ -34,6 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import task_lib
 import cron_lib
 import jira_publish
+import profile_lib
 from cron_scheduler import CronScheduler
 
 # ─── Load LangFuse env vars if not already set ───────────────────────────────
@@ -50,7 +51,7 @@ if not os.environ.get("LANGFUSE_SECRET_KEY") and os.path.isfile(_env_langfuse):
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
-PORT = 8742
+PORT = profile_lib.server_port()
 PM_OS_DIR = _PM_OS
 UI_DIR = os.path.join(PM_OS_DIR, "ui", "task-board")
 

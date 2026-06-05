@@ -1,7 +1,9 @@
 """Server lifecycle primitives for the task board. Port-aware via profile config."""
 import os
 import socket
+import subprocess
 import sys
+import time
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -34,3 +36,24 @@ def is_running(port=None, root=None):
             return r.status == 200
     except Exception:
         return False
+
+
+def default_cmd():
+    return [sys.executable, os.path.join(SCRIPT_DIR, "task_server.py")]
+
+
+def start(port=None, cmd=None, timeout=15.0, poll=0.25):
+    """Launch the server detached; poll until it serves or raise TimeoutError."""
+    p = port if port is not None else profile_lib.server_port()
+    command = cmd or default_cmd()
+    proc = subprocess.Popen(command, cwd=PM_OS_DIR,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if is_running(port=p):
+            return proc
+        if proc.poll() is not None:  # process died
+            break
+        time.sleep(poll)
+    proc.terminate()
+    raise TimeoutError(f"server did not start serving on port {p} within {timeout}s")

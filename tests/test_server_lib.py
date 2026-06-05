@@ -34,3 +34,34 @@ def test_is_running_true_when_api_serves():
 
 def test_is_running_false_when_nothing_listens():
     assert server_lib.is_running(port=59997) is False
+
+
+import sys as _sys
+
+
+def test_start_polls_until_serving(tmp_path):
+    # a tiny server script that serves /api/tasks 200 on argv[1]
+    script = tmp_path / "tiny.py"
+    script.write_text(
+        "import sys\n"
+        "from http.server import BaseHTTPRequestHandler, HTTPServer\n"
+        "class H(BaseHTTPRequestHandler):\n"
+        "    def do_GET(self):\n"
+        "        self.send_response(200); self.end_headers(); self.wfile.write(b'[]')\n"
+        "    def log_message(self,*a): pass\n"
+        "HTTPServer(('127.0.0.1', int(sys.argv[1])), H).serve_forever()\n"
+    )
+    p = server_lib.free_port()
+    proc = server_lib.start(port=p, cmd=[_sys.executable, str(script), str(p)], timeout=5.0)
+    try:
+        assert server_lib.is_running(port=p) is True
+    finally:
+        proc.terminate()
+
+
+def test_start_raises_if_never_serves():
+    p = server_lib.free_port()
+    import pytest
+    with pytest.raises(TimeoutError):
+        # 'true' exits immediately, never serves
+        server_lib.start(port=p, cmd=["true"], timeout=1.5)

@@ -27,6 +27,10 @@ JIRA_COMPONENT_ID = _jira.get("component_id", "")
 JIRA_AUTO_LABEL = _jira.get("auto_label", "")
 JIRA_DEFAULT_ASSIGNEE = _jira.get("default_assignee", "")
 
+# Base for issue browse URLs, derived from the profile's cloud_id (e.g.
+# "https://yourorg.atlassian.net/browse"). Empty until a profile is configured.
+JIRA_BROWSE_BASE = f"https://{JIRA_CLOUD_ID}/browse" if JIRA_CLOUD_ID else ""
+
 # Canonical type names. Drafts that arrive with different casing or shorthand
 # get normalized so Jira's case-sensitive issueTypeName check doesn't fail.
 JIRA_TYPE_CANONICAL = {
@@ -167,7 +171,7 @@ def build_claude_prompt(draft):
     if parent_key:
         additional_fields["parent"] = {"key": parent_key}
 
-    # Assignee — Features default to Jay Jenkins unless the draft overrides.
+    # Assignee — named-parent types default to the profile assignee unless the draft overrides.
     assignee_id = (draft.get("assignee") or "").strip()
     if issue_type in NAMED_PARENT_TYPES:
         additional_fields["assignee"] = {"accountId": assignee_id or JIRA_DEFAULT_ASSIGNEE}
@@ -194,7 +198,7 @@ Call mcp__claude_ai_Jira__createJiraIssue with:
 After the tool returns, output EXACTLY one line in this format:
 JIRA_RESULT:ISSUE_KEY|ISSUE_URL
 
-For example: JIRA_RESULT:VNT-1234|https://vantaca.atlassian.net/browse/VNT-1234
+For example: JIRA_RESULT:{JIRA_PROJECT_KEY}-1234|{JIRA_BROWSE_BASE}/{JIRA_PROJECT_KEY}-1234
 
 If the tool fails, output: JIRA_ERROR:description of what went wrong
 
@@ -251,11 +255,13 @@ def publish_to_jira(draft):
     if err_match:
         raise RuntimeError(f"Jira creation failed: {err_match.group(1).strip()}")
 
-    # Try to find issue key in output (fallback)
-    key_match = re.search(r"(VNT-\d+)", output)
-    url_match = re.search(r"(https://vantaca\.atlassian\.net/browse/VNT-\d+)", output)
+    # Try to find issue key in output (fallback) — pattern is built from the
+    # active profile's project key and cloud_id, not a hardcoded tenant.
+    key_pat = re.escape(JIRA_PROJECT_KEY) + r"-\d+"
+    key_match = re.search(rf"({key_pat})", output)
+    url_match = re.search(rf"({re.escape(JIRA_BROWSE_BASE)}/{key_pat})", output) if JIRA_BROWSE_BASE else None
     if key_match:
-        url = url_match.group(1) if url_match else f"https://vantaca.atlassian.net/browse/{key_match.group(1)}"
+        url = url_match.group(1) if url_match else f"{JIRA_BROWSE_BASE}/{key_match.group(1)}"
         return key_match.group(1), url
 
     raise RuntimeError(f"Could not parse Jira result from Claude output. Exit code: {result.returncode}. Output: {output[:500]}")
@@ -336,7 +342,7 @@ def main():
         print(f"  EA Date:     {draft['ea_date'] or '(none)'}")
         print(f"  Spec Ref:    {draft['spec_reference'] or '(none)'}")
         print(f"  Commitment:  {draft['client_commitment'] or '(none)'}")
-        assignee_display = draft.get("assignee") or JIRA_DEFAULT_ASSIGNEE + " (default: Jay Jenkins)"
+        assignee_display = draft.get("assignee") or JIRA_DEFAULT_ASSIGNEE + f" (default: {profile_lib.display_name()})"
         print(f"  Assignee:    {assignee_display}")
     print(f"  Description: {draft['description'][:200]}...")
 

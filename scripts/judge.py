@@ -84,24 +84,24 @@ Return ONLY a single JSON object, no prose around it, no markdown fences:
 
 
 DEFAULT_RUBRIC_MESSAGE = """You are the PM-OS shadow judge. You score a DRAFTED MESSAGE a worker agent \
-prepared for Jay to send, judging whether Jay could send it as-is. A draft usually contains BOTH a \
+prepared for the operator to send, judging whether the operator could send it as-is. A draft usually contains BOTH a \
 Teams / short version AND an email version — judge both.
 
-A JAY'S VOICE GUIDE is provided below the task. Use it as the standard for the `voice` and `format` \
-dimensions — the message should sound like Jay and follow his channel conventions, not generic "good writing".
+A VOICE GUIDE is provided below the task. Use it as the standard for the `voice` and `format` \
+dimensions — the message should sound like the operator and follow their channel conventions, not generic "good writing".
 
 Score on a 1-10 integer scale across four dimensions:
-- voice       — does it sound like Jay per the voice guide (direct, plain, warm-but-efficient, no em dashes, \
-his asks and rhythm)? Both the Teams and email versions.
+- voice       — does it sound like the operator per the voice guide (direct, plain, warm-but-efficient, no em dashes, \
+their asks and rhythm)? Both the Teams and email versions.
 - format      — channel-fit per the guide: the Teams version tight, low-caps, minimal greeting/sign-off; the \
 email version subject + greeting + close, 1-3 sentence paragraphs, skimmable. Name the weaker channel.
 - fulfils_ask — does it make the actual request the task asked, to the right recipient, framed for them?
 - clarity     — clear, self-contained, sendable; no placeholders, loose ends, or buried ask.
 
 Do NOT penalize a message for lacking citations, footnotes, or verbatim source quotes — it is a message, \
-not a document. Judge it as something Jay will actually send.
+not a document. Judge it as something the operator will actually send.
 
-Then give an overall score (1-10) for whether Jay could send it with at most a quick glance. \
+Then give an overall score (1-10) for whether the operator could send it with at most a quick glance. \
 Calibration: 9-10 = send as-is. 7-8 = send after a small tweak. 5-6 = usable but needs real edits. \
 3-4 = significant rework. 1-2 = off-target.
 
@@ -154,7 +154,7 @@ DEFAULT_RUBRIC = DEFAULT_RUBRIC_DOCUMENT
 
 # Minimal inline fallback if the voice file and LangFuse are both unavailable.
 DEFAULT_VOICE = (
-    "Jay's voice: direct, plain, warm but efficient. No em dashes. Lead with the ask. "
+    "Operator voice: direct, plain, warm but efficient. No em dashes. Lead with the ask. "
     "Teams = tight, low caps, minimal greeting/sign-off. Email = subject + greeting + close, "
     "1-3 sentence paragraphs, ask up front."
 )
@@ -337,7 +337,7 @@ def build_prompt(kind, rubric, task_fm, body, evidence, log_tail, voice=None):
     ]
     # The voice guide is the standard for the message rubric's voice/format dims.
     if kind == "message" and voice:
-        parts.append("\n=== JAY'S VOICE GUIDE (the standard for voice & format) ===\n" + voice)
+        parts.append("\n=== VOICE GUIDE (the standard for voice & format) ===\n" + voice)
     # The execution-trace tail helps for documents; meetings/messages are judged
     # on the deliverable itself, so skip the noise there.
     if log_tail and kind == "document":

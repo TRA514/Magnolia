@@ -112,5 +112,3 @@ template-reset pass rather than read through `profile_lib`.
 - `"recruiting"` as a task-domain / qmd collection — kept by design, not person/tenant-specific.
 - `.claude/settings.local.json` — untracked (`git ls-files` confirms it is not committed), so it never ships. No action.
 - `profile.example/integrations.yaml:5` — `# e.g. yourorg.atlassian.net` is the placeholder template comment, correct as-is.
-</content>
-</invoke>

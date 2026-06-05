@@ -38,3 +38,19 @@ def integrations(root=None):
 
 def config(root=None):
     return _load_yaml("config.yaml", root)
+
+
+def display_name(root=None):
+    return profile(root).get("display_name") or "Operator"
+
+
+def email(root=None):
+    return profile(root).get("email", "")
+
+
+def company(root=None):
+    return profile(root).get("company", "")
+
+
+def persona(root=None):
+    return profile(root).get("persona") or "pm"

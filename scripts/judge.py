@@ -37,12 +37,13 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PM_OS_DIR = os.path.dirname(SCRIPT_DIR)
 LOG_DIR = os.path.join(PM_OS_DIR, "logs")
 ENV_FILE = os.path.join(PM_OS_DIR, ".env.langfuse")
-VOICE_FILE = os.path.join(PM_OS_DIR, "datasets", "reference", "jay-voice.md")
+# voice now comes from profile/voice/* via profile_lib.voice_text()
 
 sys.path.insert(0, SCRIPT_DIR)
+import profile_lib  # noqa: E402
 import task_lib  # noqa: E402
 
-JUDGE_MODEL = "claude-opus-4-8"
+JUDGE_MODEL = profile_lib.model("judge", default="claude-opus-4-8")
 ARTIFACT_CHAR_LIMIT = 16000
 LOG_TAIL_CHAR_LIMIT = 3000
 CLAUDE_TIMEOUT = 240  # seconds
@@ -232,27 +233,24 @@ def fetch_rubric(kind):
 
 
 def fetch_voice():
-    """Return (voice_text, source_label) for Jay's voice guide.
+    """Return (voice_text, source_label) for the operator's voice guide.
 
-    Prefer the LangFuse prompt (`judge-voice-jay`); fall back to reading the
-    on-disk source of truth; final fallback is a minimal inline default.
+    Prefer the LangFuse prompt (`judge-voice`); fall back to the on-disk voice
+    cards resolved via profile_lib; final fallback is a minimal inline default.
     """
     try:
         from langfuse_client import fetch_prompt
-        p = fetch_prompt("judge-voice-jay")
+        p = fetch_prompt("judge-voice")
         if p is not None:
             text = p.prompt if hasattr(p, "prompt") else None
             version = getattr(p, "version", None)
             if text:
-                return text, f"langfuse:judge-voice-jay:v{version}" if version else "langfuse:judge-voice-jay"
+                return text, f"langfuse:judge-voice:v{version}" if version else "langfuse:judge-voice"
     except Exception as e:
         log(f"voice fetch from LangFuse failed ({e}); falling back to file")
-    try:
-        if os.path.isfile(VOICE_FILE):
-            with open(VOICE_FILE, "r", encoding="utf-8", errors="replace") as f:
-                return f.read(), "file:jay-voice.md"
-    except OSError:
-        pass
+    voice = profile_lib.voice_text()
+    if voice:
+        return voice, "profile:voice"
     return DEFAULT_VOICE, "inline"
 
 

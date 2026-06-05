@@ -3,7 +3,9 @@
 The engine reads identity and integration values ONLY through this module.
 Resolves the active profile dir as profile/ if present, else profile.example/.
 """
+import json
 import os
+import tempfile
 from ruamel.yaml import YAML
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -93,6 +95,39 @@ def voice_text(channel=None, root=None):
             with open(path, encoding="utf-8") as f:
                 chunks.append(f.read().strip())
     return "\n\n".join(chunks)
+
+
+CAPABILITIES_SCHEMA_VERSION = 1
+
+
+def read_capabilities(root=None):
+    """Read profile/capabilities.json, returning an empty-but-valid doc if absent."""
+    path = os.path.join(profile_dir(root), "capabilities.json")
+    if not os.path.isfile(path):
+        return {"schema_version": CAPABILITIES_SCHEMA_VERSION, "capabilities": {}}
+    with open(path, encoding="utf-8") as f:
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError:
+            return {"schema_version": CAPABILITIES_SCHEMA_VERSION, "capabilities": {}}
+    data.setdefault("schema_version", CAPABILITIES_SCHEMA_VERSION)
+    data.setdefault("capabilities", {})
+    return data
+
+
+def write_capabilities(data, root=None):
+    """Atomically write capabilities.json into the live profile dir."""
+    data.setdefault("schema_version", CAPABILITIES_SCHEMA_VERSION)
+    target = os.path.join(profile_dir(root), "capabilities.json")
+    dir_ = os.path.dirname(target)
+    fd, tmp = tempfile.mkstemp(prefix=".capabilities-", dir=dir_)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, target)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
 
 
 if __name__ == "__main__":

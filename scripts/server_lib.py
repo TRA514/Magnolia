@@ -43,7 +43,16 @@ def default_cmd():
 
 
 def start(port=None, cmd=None, timeout=15.0, poll=0.25):
-    """Launch the server detached; poll until it serves or raise TimeoutError."""
+    """Launch the server detached; poll until it serves or raise TimeoutError.
+
+    On any failure the spawned process is terminated (escalating to kill) so a
+    failed start never leaves a lingering server.
+
+    NOTE: when cmd is the default (task_server.py), the server resolves its own
+    port from the profile config, so an explicit `port` argument must match the
+    configured port. The onboarding flow persists the chosen port to config
+    BEFORE calling start(), so the default `port=None` path stays consistent.
+    """
     p = port if port is not None else profile_lib.server_port()
     command = cmd or default_cmd()
     proc = subprocess.Popen(command, cwd=PM_OS_DIR,
@@ -56,4 +65,9 @@ def start(port=None, cmd=None, timeout=15.0, poll=0.25):
             break
         time.sleep(poll)
     proc.terminate()
+    try:
+        proc.wait(timeout=2.0)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=2.0)
     raise TimeoutError(f"server did not start serving on port {p} within {timeout}s")

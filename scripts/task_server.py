@@ -3,7 +3,7 @@
 task_server.py — Local HTTP server for PM-OS task management.
 
 Serves the task board web UI and exposes a JSON API backed by task_lib.py.
-Runs on port 8742 using only Python stdlib.
+Runs on the configured server port (default 8742) using only Python stdlib.
 
 API endpoints:
   GET  /api/tasks            — List non-archived tasks (filterable)

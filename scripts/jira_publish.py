@@ -15,14 +15,17 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import profile_lib
+
 PM_OS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Jira config (from workflow-jira-home skill)
-JIRA_CLOUD_ID = "vantaca.atlassian.net"
-JIRA_PROJECT_KEY = "VNT"
-JIRA_COMPONENT_ID = "10011"  # Vantaca HXP
-JIRA_AUTO_LABEL = "home_aidlc"  # AI DLC swim lane indicator. Not auto-applied — drafts decide; see Swim Lane Rule in workflow-jira-home/SKILL.md.
-JIRA_DEFAULT_ASSIGNEE = "712020:aeec48b7-3829-433b-9125-c8c2a4c84e6f"  # Jay Jenkins — default assignee for Features
+# Jira config — sourced from the active profile via profile_lib (not hardcoded).
+_jira = profile_lib.jira_config()
+JIRA_CLOUD_ID = _jira.get("cloud_id", "")
+JIRA_PROJECT_KEY = _jira.get("project_key", "")
+JIRA_COMPONENT_ID = _jira.get("component_id", "")
+JIRA_AUTO_LABEL = _jira.get("auto_label", "")
+JIRA_DEFAULT_ASSIGNEE = _jira.get("default_assignee", "")
 
 # Canonical type names. Drafts that arrive with different casing or shorthand
 # get normalized so Jira's case-sensitive issueTypeName check doesn't fail.

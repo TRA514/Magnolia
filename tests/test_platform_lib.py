@@ -22,8 +22,12 @@ def test_open_url_cmd_per_os(monkeypatch):
 def test_package_install_cmd_per_os(monkeypatch):
     monkeypatch.setattr(platform_lib, "os_kind", lambda: "darwin")
     assert platform_lib.package_install_cmd("pandoc") == ["brew", "install", "pandoc"]
+    monkeypatch.setattr(platform_lib, "os_kind", lambda: "linux")
+    assert platform_lib.package_install_cmd("pandoc") == ["brew", "install", "pandoc"]
     monkeypatch.setattr(platform_lib, "os_kind", lambda: "windows")
     assert platform_lib.package_install_cmd("pandoc") == ["winget", "install", "--id", "pandoc", "-e"]
+    # documented no-equivalent package → None (unsupported-on-this-OS signal, not a broken command)
+    assert platform_lib.package_install_cmd("fswatch") is None
 
 
 def test_launch_agents_dir(monkeypatch):

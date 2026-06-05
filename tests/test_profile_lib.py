@@ -34,3 +34,24 @@ def test_identity_fallbacks_when_absent(tmp_path):
     (tmp_path / "profile").mkdir()
     assert profile_lib.display_name(root=str(tmp_path)) == "Operator"
     assert profile_lib.persona(root=str(tmp_path)) == "pm"
+
+
+def test_integration_and_provider(profile_root):
+    assert profile_lib.provider("transcript", root=profile_root) == "granola"
+    assert profile_lib.provider("calendar", root=profile_root) == "m365"
+    assert profile_lib.provider("nonexistent", root=profile_root) == "none"
+
+
+def test_jira_config_when_jira(profile_root):
+    jc = profile_lib.jira_config(root=profile_root)
+    assert jc["cloud_id"] == "acme.atlassian.net"
+    assert jc["project_key"] == "ACM"
+    assert jc["default_assignee"] == "acct-123"
+
+
+def test_jira_config_empty_when_not_jira(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "integrations.yaml").write_text(
+        "project_management:\n  provider: asana\n"
+    )
+    assert profile_lib.jira_config(root=str(tmp_path)) == {}

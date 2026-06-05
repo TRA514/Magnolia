@@ -54,3 +54,18 @@ def company(root=None):
 
 def persona(root=None):
     return profile(root).get("persona") or "pm"
+
+
+def integration(name, root=None):
+    return integrations(root).get(name) or {}
+
+
+def provider(name, root=None):
+    return integration(name, root).get("provider") or "none"
+
+
+def jira_config(root=None):
+    pm = integration("project_management", root)
+    if pm.get("provider") != "jira":
+        return {}
+    return pm.get("jira") or {}

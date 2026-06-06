@@ -535,6 +535,16 @@ def update_task(task_id, changes=None, comment=None, actor="human"):
     If 'queue' is in changes, the file is moved to the new queue directory.
     """
     filepath, current_queue = _find_task_file(task_id)
+    archived = False
+    if filepath is None:
+        # Fall back to the archive: completed tasks are moved under
+        # ARCHIVE_DIR/YYYY-MM/ by complete_task (the live file is removed).
+        # Apply changes in place — do NOT move the file back to a queue.
+        for root, _dirs, files in os.walk(ARCHIVE_DIR):
+            if f"{task_id}.md" in files:
+                filepath = os.path.join(root, f"{task_id}.md")
+                archived = True
+                break
     if filepath is None:
         raise FileNotFoundError(f"Task {task_id} not found")
 
@@ -553,6 +563,11 @@ def update_task(task_id, changes=None, comment=None, actor="human"):
     # Append activity log entry if comment provided
     if comment:
         body = body.rstrip("\n") + f"\n\n### {now} — {actor} [{comment_type}]\n{comment}\n"
+
+    # Archived tasks stay in the archive; write in place and return.
+    if archived:
+        _write_task_file(filepath, fm, body)
+        return filepath
 
     # Handle queue movement
     if new_queue and new_queue != current_queue:

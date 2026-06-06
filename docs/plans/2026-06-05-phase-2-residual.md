@@ -44,8 +44,7 @@ Verified on macOS (the dev machine) at Phase 2 close. Each item marked with hone
       `run_task_server.sh`, or the ported Otter files.
   - `grep -rn "/Users/jayjenkins/pm-os"` over those files returns no matches. Enforced going
     forward by `test_script_paths.py`, `test_hook_paths.py`, and `test_otter_port.py`.
-    (NOTE: `.claude/mcp.json` is NOT in this list and DOES still carry the hardcoded path — see the
-    found-but-unplanned bug below.)
+    (`.claude/mcp.json` was also de-personalized post-merge-of-tasks — see the resolved item below.)
 - [x] `meta-onboard` + `workflow-doctor` skills present with valid frontmatter.
   - Both `SKILL.md` files have `name`, `description`, and `allowed-tools`. Covered by
     `test_skill_frontmatter.py` (workflow_doctor_frontmatter, meta_onboard_frontmatter_and_persona).
@@ -56,16 +55,19 @@ Verified on macOS (the dev machine) at Phase 2 close. Each item marked with hone
 
 ---
 
-## ⚠️ Found-but-unplanned bug (highest priority follow-up)
+## ✅ Found-but-unplanned bug — RESOLVED
 
-- **`.claude/mcp.json` still hardcodes `"cwd": "/Users/jayjenkins/pm-os"`** for the qmd MCP server.
-  This is the SAME class of latent production-pointer bug that Task 18 fixed for the hooks, but no
-  Phase-2 task covered it. A teammate's qmd MCP server would point its working dir at a
-  likely-nonexistent production path.
-  - Follow-up: de-personalize it — but first verify whether Claude Code's `mcp.json` supports
-    `$CLAUDE_PROJECT_DIR` or a relative `cwd` (the `hooks.json` `$CLAUDE_PROJECT_DIR` trick may NOT
-    apply to `mcp.json`).
-  - Note: Phase 1's residual triage believed this was handled in Phase 1 (Tasks 9-10) but it was not.
+- **`.claude/mcp.json` hardcoded `"cwd": "/Users/jayjenkins/pm-os"`** for the qmd MCP server (same
+  production-pointer class Task 18 fixed for the hooks; no Phase-2 task had covered it; Phase 1's
+  triage wrongly believed it was handled in Tasks 9-10).
+  - **Fixed:** verified against the Claude Code docs that `cwd` is NOT a supported `.mcp.json` field
+    (Claude Code passes the project root to the server via `CLAUDE_PROJECT_DIR` and defaults the
+    working dir to the launch dir), and that qmd resolves its config/collections from the global
+    `~/.config/qmd/index.yml` with absolute collection paths — so qmd never needed a `cwd`. Removed
+    the `cwd` field entirely. Also changed `command` from `/opt/homebrew/bin/qmd` to PATH-resolved
+    `qmd` (consistent with how the Doctor probes it via `shutil.which("qmd")`; portable across
+    Intel/Apple-Silicon/non-Homebrew). Regression-guarded by `tests/test_mcp_config.py`.
+  - `.claude/` now contains zero `/Users/jayjenkins/pm-os` references.
 
 ---
 

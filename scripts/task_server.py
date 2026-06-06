@@ -513,7 +513,7 @@ def apply_recommendation(task_id):
     t = task_lib.read_task(task_id)["frontmatter"]
     patch_path = t.get("patch_path")
     if not patch_path:
-        raise ValueError("no patch_path on this recommendation")
+        raise ValueError("No patch to apply automatically — apply this change by hand per the card's notes, then dismiss it.")
     abspath = patch_path if os.path.isabs(patch_path) else os.path.join(PM_OS_DIR, patch_path)
     chk = subprocess.run(["git", "-C", PM_OS_DIR, "apply", "--check", abspath],
                          capture_output=True, text=True)
@@ -582,8 +582,10 @@ def handle_accept(handler, task_id):
     """POST /api/tasks/{id}/accept — apply a recommendation's patch, spawn a receipt."""
     try:
         receipt_id = apply_recommendation(task_id)
-    except RuntimeError as e:
-        # Patch won't apply cleanly — surface the plain reason as a 409.
+    except (ValueError, RuntimeError) as e:
+        # ValueError: no patch to auto-apply (prose-only card). RuntimeError: patch
+        # won't apply / nothing to commit. Both are operator-actionable — surface the
+        # plain reason as a 409, not an opaque 500.
         _error_response(handler, str(e), status=409)
         return
     except Exception as e:

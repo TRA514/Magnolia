@@ -166,9 +166,10 @@ Task {task_id}. Follow these steps:
 
    **Fallback — cluster that can't be a clean patch:** if a fix genuinely can't be expressed
    as a unified diff (e.g. it spans many files or needs human judgment per file), create a
-   prose-only recommendation card — same command, **omit `--patch-path`** — with the change
-   described in `--description`. On accept, Task 8 opens the named files for manual editing
-   rather than applying a patch. Prefer a real patch whenever one is feasible.
+   prose-only recommendation card — same command, **omit `--patch-path`** — and put the EXACT
+   manual change steps in `--description` (which file, what edit, why). Accept does NOT
+   auto-apply a patch-less card: it returns a plain message telling the operator to apply the
+   change by hand per the card's notes, then dismiss it. Prefer a real patch whenever one is feasible.
 
    Clusters beyond the top 3 are recorded in `recommendations.md` only — not carded.
 

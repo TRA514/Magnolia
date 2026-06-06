@@ -51,7 +51,7 @@ DEFAULTS = [
             "queue": "agent", "priority": "medium", "domain": "ops",
             "description": (
                 "Weekly self-improvement. Run `python3 scripts/eval_digest.py --days 7`, "
-                "cluster failures by step, and for the top clusters draft a machine-applicable "
+                "cluster failures by deliverable kind, and for the top clusters draft a machine-applicable "
                 ".patch + a recommendation card each (eval-analyst worker). Propose only; nothing "
                 "auto-applies."
             ),

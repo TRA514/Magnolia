@@ -47,6 +47,14 @@ def test_accept_bad_patch_raises(tasks_root, tmp_path, monkeypatch):
         task_server.apply_recommendation(tid)
 
 
+def test_accept_no_patch_raises_valueerror(tasks_root, tmp_path, monkeypatch):
+    import task_server, task_lib, pytest
+    monkeypatch.setattr(task_server, "PM_OS_DIR", str(tmp_path))
+    tid, _ = task_lib.create_task("rec", queue="collab", card_type="recommendation")  # no patch_path
+    with pytest.raises(ValueError):
+        task_server.apply_recommendation(tid)
+
+
 def test_undo_reverts_commit(tasks_root, tmp_path, monkeypatch):
     import task_server, task_lib
     repo = tmp_path / "repo"

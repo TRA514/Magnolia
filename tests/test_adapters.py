@@ -44,3 +44,18 @@ def test_asana_publish_raises_not_configured(tmp_path):
     from adapters.project_management._contract import NotConfigured
     with pytest.raises(NotConfigured):
         asana.publish({"summary": "x"}, root=str(tmp_path))
+
+
+def test_transcript_loader_dispatches_otter(profile_root, monkeypatch):
+    import profile_lib
+    monkeypatch.setattr(profile_lib, "provider", lambda fam, root=None: "otter")
+    mod = adapters.get("transcript", root=profile_root)
+    from adapters.transcript import otter
+    assert mod is otter
+
+
+def test_granola_sync_reports_unsupported(tmp_path):
+    from adapters.transcript import granola
+    result = granola.sync(root=str(tmp_path))
+    assert result["status"] == "unsupported"
+    assert result["provider"] == "granola"

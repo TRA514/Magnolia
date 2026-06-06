@@ -17,7 +17,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from dotenv import load_dotenv
 from otterai import OtterAI
 
 # ── Engine wiring ────────────────────────────────────────────────────────────────
@@ -42,9 +41,6 @@ def _timeout_wrapper(original_request, default_timeout):
 SCRIPT_DIR = Path(__file__).parent.resolve()
 STATE_DIR = Path(profile_lib.transcript_state_dir())
 STATE_DIR.mkdir(parents=True, exist_ok=True)
-
-# Load creds (.env) from the profile transcript state dir
-load_dotenv(STATE_DIR / ".env")
 
 # Meetings deposit target = PM_OS_DIR + transcript_config()["target"]
 MEETINGS_DIR = Path(profile_lib.PM_OS_DIR) / profile_lib.transcript_config()["target"]
@@ -340,15 +336,19 @@ def main() -> None:
             # ── Task extraction hook ─────────────────────────────────────
             final_path = state[speech_id].get("final_path") or (str(txt_path) if txt_path else None)
             if final_path:
+                # Build one augmented-PATH env shared by both subprocess hooks.
+                # Under a LaunchAgent the inherited PATH is minimal (/usr/bin:/bin),
+                # so both `claude` (task-extract) and `qmd` must get the prepended dirs.
+                hook_env = os.environ.copy()
+                hook_env.pop("CLAUDECODE", None)  # allow nested claude -p
+                hook_env.pop("CLAUDE_CODE_ENTRYPOINT", None)
+                hook_env["PATH"] = (
+                    str(Path.home() / ".local" / "bin")
+                    + ":/opt/homebrew/bin"
+                    + ":" + hook_env.get("PATH", "/usr/bin:/bin")
+                )
+
                 try:
-                    hook_env = os.environ.copy()
-                    hook_env.pop("CLAUDECODE", None)  # allow nested claude -p
-                    hook_env.pop("CLAUDE_CODE_ENTRYPOINT", None)
-                    hook_env["PATH"] = (
-                        str(Path.home() / ".local" / "bin")
-                        + ":/opt/homebrew/bin"
-                        + ":" + hook_env.get("PATH", "/usr/bin:/bin")
-                    )
                     log_dir = Path(profile_lib.PM_OS_DIR) / "logs"
                     log_dir.mkdir(parents=True, exist_ok=True)
                     hook_log = open(log_dir / "task-extract.log", "a")
@@ -373,6 +373,7 @@ def main() -> None:
                         ["qmd", "update", "-c", "meetings_product"],
                         cwd=str(profile_lib.PM_OS_DIR),
                         start_new_session=True,
+                        env=hook_env,
                         stdout=qmd_log,
                         stderr=qmd_log,
                     )

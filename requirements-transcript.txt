@@ -1,4 +1,3 @@
 git+https://github.com/gmchad/otterai-api.git
-python-dotenv
 playwright
 openai

@@ -138,3 +138,21 @@ def test_doc_sync_config_from_integrations(tmp_path):
 def test_doc_sync_config_defaults_disabled(tmp_path):
     (tmp_path / "profile").mkdir()
     assert profile_lib.doc_sync_config(root=str(tmp_path))["enabled"] is False
+
+
+def test_pendo_config_reads_from_profile(profile_root):
+    import profile_lib
+    p = os.path.join(profile_root, "profile", "integrations.yaml")
+    with open(p, "a") as f:
+        f.write("analytics:\n  pendo:\n    provider: pendo\n"
+                "    subscription_id: '123'\n    app_ids: {web: 'a1'}\n")
+    cfg = profile_lib.pendo_config(root=profile_root)
+    assert cfg["subscription_id"] == "123"
+    assert cfg["app_ids"]["web"] == "a1"
+
+
+def test_databricks_config_defaults_empty(profile_root):
+    import profile_lib
+    cfg = profile_lib.databricks_config(root=profile_root)
+    assert cfg["catalog"] == ""
+    assert cfg["sources"] == {}

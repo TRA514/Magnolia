@@ -54,11 +54,13 @@ _LOCAL_TOOLS = {
     # No Homebrew formula/tap exists for the Microsoft Graph CLI — the official
     # macOS route is the release binary from GitHub put on PATH (per
     # github.com/microsoftgraph/msgraph-cli and aka.ms/get/graphcli).
+    # msgraph_cli (mgc): no Homebrew formula exists; binary download from aka.ms.
+    # Remedy URL/asset name should be confirmed on a live Doctor run.
     "msgraph_cli":{"bin": "mgc", "required": False,
                    "detail": "recommended for doc-sync + bulk Teams/OneDrive",
                    "remedy": "download mgc from https://aka.ms/get/graphcli/latest/"
-                             "osx-arm64.zip (osx-x64.zip on Intel), unzip, and add the "
-                             "folder to PATH  # confirm on live Doctor run"},
+                             "osx-arm64.zip (osx-x64.zip on Intel Macs), extract it, "
+                             "and add the folder to your PATH"},
 }
 _PYTHON_DEPS = ["ruamel.yaml"]
 # Remote connectors keyed by the integration category that implies them.

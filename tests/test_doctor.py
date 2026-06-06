@@ -93,6 +93,7 @@ def test_msgraph_remedy_is_a_real_install_command():
     remedy = doctor._LOCAL_TOOLS["msgraph_cli"]["remedy"]
     assert "claude.ai/code install" not in remedy   # placeholder gone
     assert "mgc" in remedy or "msgraph" in remedy
+    assert "# confirm" not in remedy   # internal note must not leak to users
 
 
 def test_detect_preserves_stamped_remote_status(tmp_path, monkeypatch):

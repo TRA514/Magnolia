@@ -262,6 +262,22 @@ async function openTask(taskId) {
     sum.forEach(([k, v]) => html += `<div class="dt-sum-item"><span class="dt-sum-k">${k}</span><span class="dt-sum-v">${escapeHtml(String(v))}</span></div>`);
     html += `</div></div>`;
 
+    // ── Human react — per-task 👍/👎 for completed/judged agent work ────
+    const isAgentish2 = task.queue === 'agent' || task.queue === 'collab';
+    const showReact = isAgentish2 && (isAgentComplete || task.judge_score != null);
+    if (showReact) {
+      const upActive = task.human_react === 'up' ? ' active' : '';
+      const downActive = task.human_react === 'down' ? ' active' : '';
+      html += `<div class="dt-section">`;
+      html += `<div class="dt-sec-head"><span class="dt-sec-title">Your take</span></div>`;
+      html += `<div class="react-row">`;
+      html += `<button class="react-btn${upActive}" data-react="up" onclick="reactTask('${task.id}','up')">👍</button>`;
+      html += `<button class="react-btn${downActive}" data-react="down" onclick="reactTask('${task.id}','down')">👎</button>`;
+      html += `<input id="react-note-${task.id}" class="react-note" placeholder="optional note" value="${escapeHtml(task.human_react_note || '')}"/>`;
+      html += `</div>`;
+      html += `</div>`;
+    }
+
     // ── Pipeline (evals) — filled async into this slot ─────────────────
     html += `<div class="dt-section" id="pipeline-slot"></div>`;
 
@@ -385,6 +401,23 @@ async function addComment() {
   } catch (err) {
     toast(`Error: ${err.message}`);
   }
+}
+
+// ─── Human react ─────────────────────────────────────────────────────
+
+async function reactTask(id, react) {
+  const el = document.getElementById(`react-note-${id}`);
+  const note = el ? el.value : '';
+  try {
+    const res = await fetch(`${API}/tasks/${id}/react`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ react, note }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    // No success banner — the board treats a click as its own confirmation
+    // (toast() suppresses non-error types). Re-render shows the active state.
+    openTask(id); // refresh modal to reflect active state
+  } catch (e) { toast(`React failed: ${e.message}`); }
 }
 
 // ─── Start Agent ─────────────────────────────────────────────────────

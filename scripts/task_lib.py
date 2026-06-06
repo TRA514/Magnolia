@@ -456,6 +456,11 @@ def list_tasks(queue=None, status=None, domain=None, priority=None,
                 "judge_dimensions": fm.get("judge_dimensions"),
                 "judge_rubric_version": fm.get("judge_rubric_version"),
                 "judge_scored_at": fm.get("judge_scored_at"),
+                "judge_kind": fm.get("judge_kind"),
+                "human_react": fm.get("human_react"),
+                "human_react_note": fm.get("human_react_note"),
+                "human_reacted_at": fm.get("human_reacted_at"),
+                "card_type": fm.get("card_type"),
                 "file": os.path.relpath(filepath, TASKS_DIR),
             })
 
@@ -507,6 +512,11 @@ def list_archived(limit=200):
                 "judge_dimensions": fm.get("judge_dimensions"),
                 "judge_rubric_version": fm.get("judge_rubric_version"),
                 "judge_scored_at": fm.get("judge_scored_at"),
+                "judge_kind": fm.get("judge_kind"),
+                "human_react": fm.get("human_react"),
+                "human_react_note": fm.get("human_react_note"),
+                "human_reacted_at": fm.get("human_reacted_at"),
+                "card_type": fm.get("card_type"),
             })
 
     # Sort by updated descending (newest first); missing/None values sort last
@@ -704,6 +714,25 @@ def update_task_description(task_id, new_description, actor="human"):
     fm["updated"] = now
     _write_task_file(filepath, fm, new_body)
     return filepath
+
+
+def react_to_task(task_id, react, note=None, actor="human"):
+    """Record the operator's per-task reaction. react is 'up' or 'down'.
+
+    Writes human_react / human_react_note / human_reacted_at to frontmatter and
+    logs an activity comment. Archive-aware via update_task.
+    """
+    if react not in ("up", "down"):
+        raise ValueError("react must be 'up' or 'down'")
+    changes = {
+        "human_react": react,
+        "human_react_note": (note or None),
+        "human_reacted_at": _now_iso(),
+    }
+    icon = "👍" if react == "up" else "👎"
+    comment = f"Human react: {icon}" + (f" — {note}" if note else "")
+    update_task(task_id, changes=changes, comment=comment, actor=actor)
+    return changes
 
 
 def get_task_full(task_id):

@@ -879,6 +879,13 @@
   .dt-sum-k { font-size: 11px; color: var(--text-dim); }
   .dt-sum-v { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
 
+  /* ── Human react — per-task 👍/👎 + optional note ─────────────────── */
+  .react-row { display: flex; align-items: center; gap: 8px; }
+  .react-btn { font-size: 16px; line-height: 1; padding: 6px 10px; border-radius: 9px; border: 1px solid var(--border-soft); background: var(--surface-hover); cursor: pointer; transition: border-color 120ms var(--ease, ease), background 120ms var(--ease, ease); }
+  .react-btn:hover { border-color: var(--accent); }
+  .react-btn.active { border-color: var(--accent); background: var(--accent-soft); }
+  .react-note { flex: 1; min-width: 0; font-size: 13px; padding: 7px 10px; border-radius: 9px; border: 1px solid var(--border-soft); background: var(--surface); color: var(--text); }
+
   /* ── Thread — activity + comments, one calm timeline, no left bar ── */
   .dt-thread { display: flex; flex-direction: column; }
   .dt-event { display: grid; grid-template-columns: 14px 1fr; column-gap: 11px; padding: 11px 0; border-bottom: 1px solid var(--border-soft); }

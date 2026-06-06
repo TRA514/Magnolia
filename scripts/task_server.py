@@ -542,6 +542,36 @@ def handle_dispatch_task(handler, task_id):
     })
 
 
+def handle_react(handler, task_id):
+    """POST /api/tasks/{id}/react — record human 👍/👎 + optional note to frontmatter."""
+    body = _read_request_body(handler)
+    react = body.get("react")
+    note = body.get("note") or None
+    if react not in ("up", "down"):
+        _error_response(handler, "react must be 'up' or 'down'")
+        return
+    try:
+        task_lib.react_to_task(task_id, react, note=note)
+    except Exception as e:
+        _error_response(handler, f"React failed: {e}", status=500)
+        return
+    # Silent LangFuse mirror (opt-in): score the worker-execution trace if enabled.
+    try:
+        from langfuse_client import get_langfuse, score_trace
+        lf = get_langfuse()
+        if lf is not None:
+            result = lf.api.trace.list(session_id=task_id, order_by="timestamp.desc")
+            traces = result.data if hasattr(result, "data") else []
+            for t in traces:
+                if str(getattr(t, "name", "")).startswith("worker-execution"):
+                    score_trace(getattr(t, "id", None), "human-feedback",
+                                1.0 if react == "up" else 0.0, comment=note or "", data_type="NUMERIC")
+                    break
+    except Exception:
+        pass
+    _json_response(handler, {"ok": True, "task_id": task_id, "react": react})
+
+
 def handle_rerun_task(handler, task_id):
     """POST /api/tasks/{id}/rerun — Reset agent state and re-dispatch the task."""
     try:
@@ -1377,6 +1407,16 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
                 _error_response(self, "Invalid task ID format", status=400)
             else:
                 handle_dispatch_task(self, task_id)
+            return True
+
+        # Match /api/tasks/{id}/react
+        match = re.match(r"^/api/tasks/([^/]+)/react$", path)
+        if match and method == "POST":
+            task_id = _parse_task_id(match.group(1))
+            if task_id is None:
+                _error_response(self, "Invalid task ID format", status=400)
+            else:
+                handle_react(self, task_id)
             return True
 
         # Match /api/tasks/{id}/rerun

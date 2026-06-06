@@ -32,6 +32,7 @@ CONFIG_PATH = SCRIPT_DIR / "sync_config.yaml"
 MANIFEST_PATH = SCRIPT_DIR / "_sync_manifest.json"
 REFERENCE_DOCX = SCRIPT_DIR / "pandoc_reference.docx"
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     import profile_lib
 except Exception:  # pragma: no cover — profile_lib optional at import time
@@ -65,8 +66,16 @@ def load_config():
     # minimal config from the profile so legacy-free installs still work.
     if not CONFIG_PATH.exists():
         if prof_enabled:
+            resolved_root = os.path.expanduser(prof.get("onedrive_root", ""))
+            if not resolved_root:
+                print(
+                    "Error: doc_sync is enabled but onedrive_root is not set — "
+                    "run the Doctor to detect your OneDrive root, or set "
+                    "doc_sync.onedrive_root in profile/integrations.yaml"
+                )
+                sys.exit(1)
             return {
-                "onedrive_root": os.path.expanduser(prof.get("onedrive_root", "")),
+                "onedrive_root": resolved_root,
                 "sharepoint_site": prof.get("sharepoint_site", "PM-OS"),
                 "sharepoint_tenant_url": "",
                 "sharepoint_doc_root": "",

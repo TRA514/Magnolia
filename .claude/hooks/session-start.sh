@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SKILL_ROOT="/Users/jayjenkins/pm-os/.claude/skills"
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$HOOK_DIR/../.." && pwd)"
+SKILL_ROOT="$REPO_ROOT/.claude/skills"
 using_skills_content=$(cat "${SKILL_ROOT}/meta-using-skills/SKILL.md" 2>&1 || echo "Error: using-skills skill not found. Skills system may not be fully initialized.")
 
 # Escape for JSON
 using_skills_escaped=$(echo "$using_skills_content" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | awk '{printf "%s\\n", $0}')
 
 # Resolve the operator's display name from the active profile (robust relative path)
-OPERATOR=$(python3 "$(dirname "$0")/../../scripts/profile_lib.py" --display-name 2>/dev/null || echo "the operator")
+OPERATOR=$(python3 "$REPO_ROOT/scripts/profile_lib.py" --display-name 2>/dev/null || echo "the operator")
 
 cat <<EOF
 {

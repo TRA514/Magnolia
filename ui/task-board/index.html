@@ -334,6 +334,13 @@
   .card-action.primary { color: var(--accent); }
   .card-action.primary:hover { background: var(--accent-soft); border-color: color-mix(in oklab, var(--accent) 40%, transparent); }
 
+  /* ─── Card faces: diff / preview / agreement (Phase 4, minimal) ───────── */
+  .card-body { margin-top: 10px; font-size: 11.5px; color: var(--text-muted); line-height: 1.5; }
+  .rec-line, .receipt-line, .grad-stat { display: block; }
+  .grad-stat + .grad-stat { margin-top: 3px; }
+  .rec-patch { color: var(--text); font-family: var(--mono, ui-monospace, monospace); }
+  .card-body-agreement .grad-stat b { color: var(--text); }
+
   /* ─── Modal ────────────────────────────────────────────────────────── */
   .modal-overlay {
     display: none; position: fixed; inset: 0;

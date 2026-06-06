@@ -79,8 +79,9 @@ function _qDims(dims) {
   return `<div class="q-dims">${cols}</div>`;
 }
 
-function _qAgreement(g, langfuse) {
-  if (!langfuse) return 'agreement paused — LangFuse offline';
+function _qAgreement(g) {
+  // Agreement comes purely from frontmatter (human_react vs judge), aggregated in
+  // build_quality. No LangFuse dependency — it's computed even when LangFuse is off.
   if (g.agreement_pct == null || !g.reacted) return 'no ratings from you yet';
   return `you agree ${g.agreement_pct}%`;
 }
@@ -122,7 +123,10 @@ async function renderQuality() {
 
   data.groups.forEach(g => {
     const tone = _qTone(g.avg_score);
-    const phase = (g.phase || '').toLowerCase() === 'trusted' ? 'trusted' : 'observe-only';
+    // g.phase is the REAL ladder tier from build_quality: shadow / gated / autonomous.
+    // Map to a friendly label that's honest to the tier (no invented states).
+    const _PHASE_LABEL = { shadow: 'observe-only', gated: 'gated', autonomous: 'autonomous/trusted' };
+    const phase = _PHASE_LABEL[(g.phase || '').toLowerCase()] || (g.phase || 'observe-only');
     html += `
       <div class="card q-card ${tone}">
         <div class="q-card-head">
@@ -134,7 +138,7 @@ async function renderQuality() {
           ${_qSpark(g)}
         </div>
         ${_qDims(g.dimensions)}
-        <div class="q-foot"><span>${g.count} reviewed</span><span class="q-foot-sep">·</span><span>${_qAgreement(g, data.langfuse)}</span></div>
+        <div class="q-foot"><span>${g.count} reviewed</span><span class="q-foot-sep">·</span><span>${_qAgreement(g)}</span></div>
       </div>`;
   });
   html += `</div>`;

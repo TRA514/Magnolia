@@ -488,6 +488,122 @@ def handle_dispatch_task(handler, task_id):
     })
 
 
+# ─── Card actions: accept → apply → receipt → undo, and graduate ─────────────
+# These power the recommendation/receipt/graduation card types. The git path runs
+# with `git -C PM_OS_DIR`; tests monkeypatch PM_OS_DIR to a throwaway repo.
+
+def apply_recommendation(task_id):
+    """Accept a recommendation: git apply its patch, commit, spawn a receipt card.
+
+    Returns the receipt task id. Raises RuntimeError on a patch that won't apply
+    (the handler maps that to a 409).
+
+    Working-tree assumption: `git add -A` stages ALL working-tree changes, so the
+    accept-commit (and therefore the receipt's one-tap Undo) assumes a clean tree —
+    unrelated edits would get swept into this commit. Acceptable for Phase 4 (single
+    user, deliberate action); Phase 6 should scope the commit to the patch's files.
+    """
+    t = task_lib.read_task(task_id)["frontmatter"]
+    patch_path = t.get("patch_path")
+    if not patch_path:
+        raise ValueError("no patch_path on this recommendation")
+    abspath = patch_path if os.path.isabs(patch_path) else os.path.join(PM_OS_DIR, patch_path)
+    chk = subprocess.run(["git", "-C", PM_OS_DIR, "apply", "--check", abspath],
+                         capture_output=True, text=True)
+    if chk.returncode != 0:
+        raise RuntimeError(f"patch does not apply cleanly: {chk.stderr.strip()[:300]}")
+    subprocess.run(["git", "-C", PM_OS_DIR, "apply", abspath], check=True, capture_output=True, text=True)
+    subprocess.run(["git", "-C", PM_OS_DIR, "add", "-A"], check=True, capture_output=True, text=True)
+    msg = f"apply recommendation {task_id}: {t.get('title', '')}"
+    subprocess.run(["git", "-C", PM_OS_DIR, "commit", "-m", msg], check=True, capture_output=True, text=True)
+    rev = subprocess.run(["git", "-C", PM_OS_DIR, "rev-parse", "HEAD"],
+                         capture_output=True, text=True).stdout.strip()
+    task_lib.update_task(task_id, changes={"status": "done"}, comment="Accepted - applied", actor="human")
+    receipt_id, _ = task_lib.create_task(
+        f"Applied: {t.get('title', '')}", queue="human", domain="ops", creator="agent",
+        description=f"Applied recommendation {task_id}. One-tap Undo reverts it.",
+        card_type="receipt")
+    task_lib.update_task(receipt_id, changes={"revert_commit": rev, "source_recommendation": task_id})
+    return receipt_id
+
+
+def undo_receipt(task_id):
+    """Undo a receipt: git revert the commit it recorded, mark the receipt done."""
+    t = task_lib.read_task(task_id)["frontmatter"]
+    rev = t.get("revert_commit")
+    if not rev:
+        raise ValueError("no revert_commit on this receipt")
+    subprocess.run(["git", "-C", PM_OS_DIR, "revert", "--no-edit", rev], check=True,
+                   capture_output=True, text=True)
+    task_lib.update_task(task_id, changes={"status": "done"}, comment="Undone - reverted", actor="human")
+
+
+def graduate_card(task_id, ladder_path=None):
+    """Graduate a task-type to its proposed tier in the ladder store."""
+    t = task_lib.read_task(task_id)["frontmatter"]
+    task_type = t.get("grad_task_type")
+    proposed = t.get("grad_proposed_tier")
+    if not task_type or not proposed:
+        raise ValueError("graduation card missing grad_task_type / grad_proposed_tier")
+    ladder_lib.set_tier(task_type, proposed, path=ladder_path)
+    task_lib.update_task(task_id, changes={"status": "done"},
+                         comment=f"Graduated {task_type} -> {proposed}", actor="human")
+
+
+def handle_accept(handler, task_id):
+    """POST /api/tasks/{id}/accept — apply a recommendation's patch, spawn a receipt."""
+    try:
+        receipt_id = apply_recommendation(task_id)
+    except RuntimeError as e:
+        # Patch won't apply cleanly — surface the plain reason as a 409.
+        _error_response(handler, str(e), status=409)
+        return
+    except Exception as e:
+        _error_response(handler, f"Accept failed: {e}", status=500)
+        return
+    _json_response(handler, {"ok": True, "receipt_id": receipt_id})
+
+
+def handle_reject(handler, task_id):
+    """POST /api/tasks/{id}/reject — dismiss a recommendation (no git)."""
+    try:
+        task_lib.update_task(task_id, changes={"status": "done"}, comment="Rejected", actor="human")
+    except Exception as e:
+        _error_response(handler, f"Reject failed: {e}", status=500)
+        return
+    _json_response(handler, {"ok": True})
+
+
+def handle_graduate(handler, task_id):
+    """POST /api/tasks/{id}/graduate — advance a task-type to its proposed tier."""
+    try:
+        graduate_card(task_id)
+    except Exception as e:
+        _error_response(handler, f"Graduate failed: {e}", status=500)
+        return
+    _json_response(handler, {"ok": True})
+
+
+def handle_keep(handler, task_id):
+    """POST /api/tasks/{id}/keep — dismiss a receipt, keeping the applied change."""
+    try:
+        task_lib.update_task(task_id, changes={"status": "done"}, comment="Kept", actor="human")
+    except Exception as e:
+        _error_response(handler, f"Keep failed: {e}", status=500)
+        return
+    _json_response(handler, {"ok": True})
+
+
+def handle_undo(handler, task_id):
+    """POST /api/tasks/{id}/undo — revert the commit a receipt recorded."""
+    try:
+        undo_receipt(task_id)
+    except Exception as e:
+        _error_response(handler, f"Undo failed: {e}", status=500)
+        return
+    _json_response(handler, {"ok": True})
+
+
 def handle_react(handler, task_id):
     """POST /api/tasks/{id}/react — record human 👍/👎 + optional note to frontmatter."""
     body = _read_request_body(handler)
@@ -1363,6 +1479,20 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
                 _error_response(self, "Invalid task ID format", status=400)
             else:
                 handle_react(self, task_id)
+            return True
+
+        # Match card-action verbs: /api/tasks/{id}/{accept|reject|graduate|keep|undo}
+        _card_handlers = {
+            "accept": handle_accept, "reject": handle_reject,
+            "graduate": handle_graduate, "keep": handle_keep, "undo": handle_undo,
+        }
+        match = re.match(r"^/api/tasks/([^/]+)/(accept|reject|graduate|keep|undo)$", path)
+        if match and method == "POST":
+            task_id = _parse_task_id(match.group(1))
+            if task_id is None:
+                _error_response(self, "Invalid task ID format", status=400)
+            else:
+                _card_handlers[match.group(2)](self, task_id)
             return True
 
         # Match /api/tasks/{id}/rerun

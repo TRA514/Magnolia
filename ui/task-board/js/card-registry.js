@@ -142,13 +142,28 @@ function _renderSignals(task, signalsSpec) {
 }
 
 // ─── Body renderers ──────────────────────────────────────────────────────────
-// diff / preview / agreement card surfaces ship in a later phase. For now these
-// are minimal placeholders that just exercise the slot so the contract holds.
-// The `task` card type has body:null → _renderBody returns '' and no slot emits.
+// diff / preview / agreement card faces. IMPORTANT: card faces render from the
+// list PROJECTION (list_tasks), which has NO `body` — so these use ONLY projected
+// fields (patch_path, grad_*). Full detail lives in the modal (openTask fetches
+// the full task). Minimal by design; Phase 6 restyles. The `task` card type has
+// body:null → _renderBody returns '' and no slot emits.
 const bodyRenderers = {
-  diff(task)      { return `<div class="card-body card-body-diff" data-card-body="diff"></div>`; },
-  preview(task)   { return `<div class="card-body card-body-preview" data-card-body="preview"></div>`; },
-  agreement(task) { return `<div class="card-body card-body-agreement" data-card-body="agreement"></div>`; },
+  diff(task) {
+    return `<div class="card-body card-body-diff" data-card-body="diff">
+      <div class="rec-line">Proposed change${task.patch_path ? ` · <span class="rec-patch">${escapeHtml(task.patch_path.split('/').pop())}</span>` : ' (manual)'}</div>
+    </div>`;
+  },
+  preview(task) {
+    return `<div class="card-body card-body-preview" data-card-body="preview">
+      <div class="receipt-line">Applied — Undo reverts this change.</div>
+    </div>`;
+  },
+  agreement(task) {
+    return `<div class="card-body card-body-agreement" data-card-body="agreement">
+      <div class="grad-stat"><b>${escapeHtml(task.grad_task_type || '')}</b>: ${escapeHtml(task.grad_current_tier || 'shadow')} → ${escapeHtml(task.grad_proposed_tier || '')}</div>
+      <div class="grad-stat">approval ${task.grad_approval_pct ?? '—'}% · agreement ${task.grad_agreement_pct ?? '—'}% · n=${task.grad_n ?? '—'}</div>
+    </div>`;
+  },
 };
 
 function _renderBody(task, bodyName) {
@@ -175,8 +190,19 @@ function _renderActions(task, actionIds) {
         parts.push(`<a class="card-action" href="${escapeHtml(out.href)}"${ext} onclick="event.stopPropagation()">${svgIcon('output')}${out.label}</a>`);
       }
     }
-    // Future card-type actions (accept/reject/keep/undo/graduate/publish_jira)
-    // have no handler wired yet → intentionally render nothing for now.
+    // Card-type action verbs → POST /api/tasks/{id}/{verb} via cardAction (tasks.js).
+    // The board refresh after the call is the confirmation (toast suppresses success).
+    else if (id === 'accept') {
+      parts.push(`<button class="card-action primary" onclick="cardAction('${task.id}','accept',event)">${svgIcon('done')}Accept</button>`);
+    } else if (id === 'reject') {
+      parts.push(`<button class="card-action" onclick="cardAction('${task.id}','reject',event)">Reject</button>`);
+    } else if (id === 'graduate') {
+      parts.push(`<button class="card-action primary" onclick="cardAction('${task.id}','graduate',event)">${svgIcon('done')}Graduate</button>`);
+    } else if (id === 'keep') {
+      parts.push(`<button class="card-action primary" onclick="cardAction('${task.id}','keep',event)">${svgIcon('done')}Keep</button>`);
+    } else if (id === 'undo') {
+      parts.push(`<button class="card-action" onclick="cardAction('${task.id}','undo',event)">Undo</button>`);
+    }
   }
   return parts.length ? `<div class="card-actions">${parts.join('')}</div>` : '';
 }

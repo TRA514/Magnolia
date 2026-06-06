@@ -420,6 +420,19 @@ async function reactTask(id, react) {
   } catch (e) { toast(`React failed: ${e.message}`); }
 }
 
+// ─── Card actions (accept / reject / graduate / keep / undo) ─────────
+// Thin POST to /api/tasks/{id}/{action}; a board refresh is the confirmation
+// (toast() suppresses non-error messages by design, so we only toast failures).
+async function cardAction(id, action, ev) {
+  if (ev) ev.stopPropagation();
+  try {
+    const res = await fetch(`${API}/tasks/${id}/${action}`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    fetchTasks(); // refresh the board — this is the user-visible confirmation
+  } catch (e) { toast(`${action} failed: ${e.message}`); }
+}
+
 // ─── Start Agent ─────────────────────────────────────────────────────
 
 async function startAgent(taskId) {

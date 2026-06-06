@@ -46,6 +46,11 @@ def _load(path):
 
 
 def _save(d, path):
+    # Concurrency: in practice this store has one writer at a time (the weekly
+    # graduation cron, plus the occasional graduate-click handler). _save is atomic
+    # via os.replace, so reads never see a torn file. Full read-modify-write locking
+    # is intentionally deferred — worst case is a rare lost counter increment that
+    # self-heals on the next weekly assessment.
     p = _path(path)
     os.makedirs(os.path.dirname(p), exist_ok=True)
     tmp = p + ".tmp"

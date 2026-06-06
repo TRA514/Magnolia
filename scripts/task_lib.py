@@ -222,7 +222,8 @@ def create_task(title, queue="human", priority="medium", domain=None,
                 task_type=None, meeting_attendees=None,
                 meeting_duration=None, meeting_title=None,
                 meeting_description=None, message_channel=None,
-                message_to=None, message_subject=None, message_body=None):
+                message_to=None, message_subject=None, message_body=None,
+                card_type=None, patch_path=None):
     """Create a new task file in the appropriate queue directory.
 
     Returns (task_id, filepath).
@@ -268,6 +269,11 @@ def create_task(title, queue="human", priority="medium", domain=None,
         "blocked_by": [],
         "blocks": [],
     }
+
+    if card_type:
+        frontmatter["card_type"] = card_type
+    if patch_path:
+        frontmatter["patch_path"] = patch_path
 
     # Add waiting metadata if applicable
     if queue == "waiting":

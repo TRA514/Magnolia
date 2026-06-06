@@ -91,6 +91,8 @@ def cmd_add(args):
         message_to=args.message_to,
         message_subject=args.message_subject,
         message_body=args.message_body,
+        card_type=args.card_type,
+        patch_path=args.patch_path,
     )
     print(f"Created {task_id} in {args.queue} queue")
     print(f"  File: {os.path.relpath(filepath, os.path.dirname(task_lib.TASKS_DIR))}")
@@ -400,6 +402,10 @@ def main():
     p_add.add_argument("--message-to", default=None, help="Message recipient (send-message)")
     p_add.add_argument("--message-subject", default=None, help="Message subject (send-message, email)")
     p_add.add_argument("--message-body", default=None, help="Message body draft (send-message)")
+    p_add.add_argument("--card-type", default=None,
+                       help="Card type for the board renderer (recommendation|graduation|receipt)")
+    p_add.add_argument("--patch-path", default=None,
+                       help="Path to a .patch file (recommendation cards)")
     p_add.set_defaults(func=cmd_add)
 
     # ─── list ────────────────────────────────────────────────────────────

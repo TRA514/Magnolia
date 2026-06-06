@@ -441,9 +441,9 @@ After clustering signals from local meeting transcripts, optionally enrich with 
 
 Cross-reference meeting signal clusters with Pendo customer feedback to surface signals that never made it into a meeting.
 
-1. **Topic validation**: Use `mcp__claude_ai_Pendo__generate_feedback_topics` (subId: `4818486697721856`) with date range matching the synthesis window. Compare AI-clustered feedback topics against your meeting signal clusters — overlapping themes validate signal strength; new topics may represent gaps.
+1. **Topic validation**: Use `mcp__claude_ai_Pendo__generate_feedback_topics` (subId: from profile (`profile_lib.py --pendo-subid`)) with date range matching the synthesis window. Compare AI-clustered feedback topics against your meeting signal clusters — overlapping themes validate signal strength; new topics may represent gaps.
 
-2. **Raw feedback**: Use `mcp__claude_ai_Pendo__get_feedback_items` (subId: `4818486697721856`) filtered by:
+2. **Raw feedback**: Use `mcp__claude_ai_Pendo__get_feedback_items` (subId: from profile (`profile_lib.py --pendo-subid`)) filtered by:
    - `feedbackTypes`: ["Pain Point", "Product Issues", "Product Enhancement Request"] to find signals matching meeting themes
    - `startDate`/`endDate` matching the synthesis window
    - Optionally `accountIds` if customer-filtered synthesis
@@ -460,8 +460,8 @@ Query recent Gong call data for sales/CS signals that complement meeting transcr
 **Key points from recent calls:**
 ```sql
 SELECT c.id, c.title, c.started, c.brief, ckp.text as key_point
-FROM is_prod.gongio.call c
-JOIN is_prod.gongio.call_key_point ckp ON c.id = ckp.call_id
+FROM {catalog}.gongio.call c
+JOIN {catalog}.gongio.call_key_point ckp ON c.id = ckp.call_id
 WHERE c.started >= '{cutoff_date}'
   AND c._fivetran_deleted = false
 ORDER BY c.started DESC
@@ -473,8 +473,8 @@ LIMIT 100
 SELECT ct.name as tracker_name, ct.phrase,
        SUM(ct.count) as total_mentions,
        COUNT(DISTINCT ct.call_id) as calls_mentioned
-FROM is_prod.gongio.call_tracker ct
-JOIN is_prod.gongio.call c ON CAST(ct.call_id AS STRING) = c.id
+FROM {catalog}.gongio.call_tracker ct
+JOIN {catalog}.gongio.call c ON CAST(ct.call_id AS STRING) = c.id
 WHERE c.started >= '{cutoff_date}'
   AND ct._fivetran_deleted = false
 GROUP BY ct.name, ct.phrase
@@ -491,7 +491,7 @@ Query recent support tickets for pain point signals.
 SELECT custom_product_field, custom_intent, custom_sentiment,
        COUNT(*) as ticket_count,
        SUM(CASE WHEN priority IN ('urgent', 'high') THEN 1 ELSE 0 END) as high_priority
-FROM is_prod.zendesk.ticket
+FROM {catalog}.zendesk.ticket
 WHERE created_at >= '{cutoff_date}'
   AND custom_product_field IS NOT NULL
 GROUP BY custom_product_field, custom_intent, custom_sentiment

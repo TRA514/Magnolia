@@ -117,7 +117,7 @@ The `meeting-synthesis` skill (invoked in Step 2) now includes optional MCP enri
 
 When checking proposed PRDs against existing backlog, also verify against Pendo instrumentation:
 
-Use `mcp__claude_ai_Pendo__searchEntities` (subId: `4818486697721856`, appId: "-323232", itemType: ["Feature", "Page"], search: "{proposed_feature_name}", search_fallback: ["{feature_keyword}"]) to check:
+Use `mcp__claude_ai_Pendo__searchEntities` (subId: from profile (`profile_lib.py --pendo-subid`), appId: from profile `app_ids` map, itemType: ["Feature", "Page"], search: "{proposed_feature_name}", search_fallback: ["{feature_keyword}"]) to check:
 - Whether the feature/page already exists in Pendo (suggesting it may already be built)
 - Whether related features exist that the PRD should reference
 - Get Pendo entity IDs to include in the PRD for future measurement
@@ -126,7 +126,7 @@ Use `mcp__claude_ai_Pendo__searchEntities` (subId: `4818486697721856`, appId: "-
 
 For high-priority PRD candidates, optionally pull supporting data:
 - **Usage evidence**: `mcp__claude_ai_Pendo__activityQuery` for current state of the area being improved
-- **Support burden**: Zendesk ticket count for the product area via `SELECT COUNT(*) FROM is_prod.zendesk.ticket WHERE custom_product_field LIKE '%{area}%' AND created_at >= DATE_SUB(CURRENT_DATE(), 90)`
+- **Support burden**: Zendesk ticket count for the product area via `SELECT COUNT(*) FROM {catalog}.zendesk.ticket WHERE custom_product_field LIKE '%{area}%' AND created_at >= DATE_SUB(CURRENT_DATE(), 90)`
 - **Customer feedback**: `mcp__claude_ai_Pendo__get_feedback_items` with `similaritySearchTerms` matching the PRD topic
 
 ### 7. Output PRD Proposals

@@ -1,6 +1,6 @@
 ---
 name: eval-analyst
-description: Weekly feedback-loop / self-improvement pass — reads LangFuse human annotations, clusters failures by step, and proposes fixes at the right altitude. Read-only on the world; writes a local report and drops one collab review card. Never applies changes.
+description: Weekly feedback-loop / self-improvement pass — reads the frontmatter-sourced feedback digest, clusters failures by deliverable kind, and proposes fixes at the right altitude. Read-only on the world; writes a local report and drops one machine-applicable .patch + recommendation card per clustered change. Never applies changes.
 priority: 6
 match:
   task_type: []
@@ -38,18 +38,22 @@ pass (ROADMAP §1, "Self-improvement loop"). Read and follow CLAUDE.md.
 
 ## Your Focus
 
-Human thumbs-up/down and free-text annotations already land on LangFuse traces, but
-nothing reads them back. **Capture ≠ learning.** Your job closes that loop: read the
-week's negative signal, cluster failures **by step**, and propose concrete, executable
+Judge scores and human thumbs-up/down + free-text reactions already land on task
+frontmatter, but nothing reads them back. **Capture ≠ learning.** Your job closes that
+loop: read the week's negative signal (assembled by `eval_digest.py` from task
+frontmatter), cluster failures **by deliverable kind**, and propose concrete, executable
 fixes at the right altitude. You are `meta-refine-workflow` pointed inward.
 
 ## CRITICAL: Propose only — never apply
 
 - You do **NOT** edit skills, workers, prompts, or any system file. You **draft proposals.**
-- Your deliverable is (1) a plan-style `recommendations.md` on disk and (2) **one**
-  `collab` review card whose body is that proposal. Jay reviews it; on approval an agent
-  (or Jay) executes the changes. Nothing auto-applies.
-- You are read-only on the outside world — no external MCP writes, no Jira, no sending.
+- Your deliverable is (1) a plan-style `recommendations.md` on disk and (2) for each of the
+  top clusters, a machine-applicable `.patch` file plus **one** `recommendation` `collab`
+  card pointing at it. Jay reviews each card; on accept, the accept-handler runs
+  `git apply` on the patch, commits, and writes a receipt. Nothing auto-applies — you only
+  draft the patches and the cards.
+- You are read-only on the outside world — no external MCP writes, no Jira, no sending —
+  and you never apply your own patches.
 
 ## Available Skills
 
@@ -73,21 +77,27 @@ Task {task_id}. Follow these steps:
    - Weekly run: `python3 scripts/eval_digest.py --days 7`
    - Backfill run: `python3 scripts/eval_digest.py --all`
    - Or, if the task names an already-generated digest dir, skip straight to reading it.
-   The script writes `digest.json` + `digest.md` under `datasets/evals/feedback-loop/{date}[-backfill]/`.
-   Read `digest.json` — that is your source material.
+   `eval_digest.py` reads the negative signal from task frontmatter (judge scores + human
+   reactions), not LangFuse. It writes `digest.json` + `digest.md` under
+   `datasets/evals/feedback-loop/{date}[-backfill]/`. Read `digest.json` — that is your
+   source material.
 
 4. Handle the clean case:
-   If `status` is `clean` or `no-data` (no negative signal, or LangFuse was down), write a
-   short "clean week / no data" note into `recommendations.md` in the same dir, complete the
-   task pointing at it, and **do not create a collab card.** Stop there.
+   If `status` is `clean` or `no-data` (no negative signal in the window), write a short
+   "clean week / no data" note into `recommendations.md` in the same dir, complete the task
+   pointing at it, and **do not create any collab / recommendation card.** Stop there.
 
-5. Cluster failures **by step**:
-   Group the flagged traces by `step` (the trace name — e.g. `worker-execution`,
-   `worker-match`, `task-parser`) and by worker/task-type. For each cluster ask: is this a
-   worker-match problem? a specific skill? the voice/tone? the output shape? Read the verbatim
-   annotation comments — they are the signal. Separate recurring patterns from one-offs.
-   Use qmd / Read to inspect the actual skill, worker, or prompt a cluster points at before
-   proposing a change to it.
+5. Cluster failures **by deliverable kind**:
+   The digest's `by_step` keys are `judge_kind` values — the KIND of deliverable that was
+   judged: `document`, `message`, or `meeting` (NOT old trace names like `worker-execution`
+   or `task-parser`). Group the flagged entries by that kind and by worker/task-type. For
+   each cluster, reason about *what* is failing: is this a worker-match problem? a specific
+   skill? the voice/tone? the output shape? — that diagnostic framing is your analysis of
+   the cluster, not a literal `step` value. The signal is in each flagged entry's
+   `negative_scores` (judge `why` + human notes) and its `output_summary`, which is now the
+   **agent_output FILE PATH** — `Read` that artifact when you need the full detail of what
+   went out. Separate recurring patterns from one-offs. Use qmd / Read to inspect the actual
+   skill, worker, or prompt a cluster points at before proposing a change to it.
 
 6. Decide the **altitude** of each fix (pick the cheapest that solves the cluster):
    - a skill edit — `.claude/skills/<name>/SKILL.md`
@@ -117,18 +127,50 @@ Task {task_id}. Follow these steps:
       - Change: <the specific edit / proposed diff, precise enough to execute>
       - Evidence: <which cluster / annotations motivate it>
       - Risk / reversibility: <low/med + how to undo>
+      - Card: <recommendation card id + patch path, or "noted only — not carded">
    2. ...
    ```
 
-8. Drop **one** collab review card with the proposal as its body:
-   Run:
-   ```
-   ./scripts/task.sh add "Feedback-loop recommendations — <window>" \
-     -q collab -p high -d ops --creator agent \
-     --tags "eval,self-improvement" \
-     --description "$(cat datasets/evals/feedback-loop/<dir>/recommendations.md)"
-   ```
-   Then note the new collab task id in your completion.
+   `recommendations.md` is the durable artifact and the task `--output`. It lists **all**
+   clusters; clusters beyond the top 3 are noted here but **not** carded (stay calm — don't
+   manufacture work).
+
+8. Emit a `.patch` + recommendation card per change — top **≤3 clusters by flagged count**:
+   For each of the top 3 clusters (most-flagged first), turn the recommended change into a
+   machine-applicable proposal:
+
+   a. **Inspect the real target file(s)** the fix touches (Read / qmd) — never propose a
+      diff against a file you haven't opened.
+
+   b. **Craft a unified-diff `.patch`** and write it to
+      `datasets/evals/feedback-loop/<dir>/<slug>.patch` (one patch per cluster; `<slug>` is a
+      short kebab-case name for the change). The patch must apply from the repo root.
+
+   c. **Validate the patch applies cleanly** before carding it — this is mandatory, so the
+      accept-handler (Task 8) can `git apply` it without surprises:
+      ```
+      git apply --check datasets/evals/feedback-loop/<dir>/<slug>.patch
+      ```
+      If `git apply --check` fails, fix the patch and re-check. Do **not** create the card
+      until it passes.
+
+   d. **Create the recommendation card** pointing at the validated patch:
+      ```
+      ./scripts/task.sh add "<short title>" \
+        -q collab -p high -d ops --creator agent --tags "eval,self-improvement" \
+        --card-type recommendation \
+        --patch-path "datasets/evals/feedback-loop/<dir>/<slug>.patch" \
+        --description "<human preview: what / why / evidence / risk-reversibility>"
+      ```
+      Note each new card id in `recommendations.md` and your completion.
+
+   **Fallback — cluster that can't be a clean patch:** if a fix genuinely can't be expressed
+   as a unified diff (e.g. it spans many files or needs human judgment per file), create a
+   prose-only recommendation card — same command, **omit `--patch-path`** — with the change
+   described in `--description`. On accept, Task 8 opens the named files for manual editing
+   rather than applying a patch. Prefer a real patch whenever one is feasible.
+
+   Clusters beyond the top 3 are recorded in `recommendations.md` only — not carded.
 
 9. Complete:
    Run: ./scripts/task.sh agent:complete {task_id} --output "datasets/evals/feedback-loop/<dir>/recommendations.md"
@@ -141,8 +183,11 @@ If you hit an unrecoverable error:
    Run: ./scripts/task.sh agent:fail {task_id} --error "what went wrong"
 
 {rerun_block}Important rules:
-- Never apply a change — draft the proposal and the collab card, nothing else.
+- Never apply a change — draft the `.patch` files and the recommendation cards, nothing
+  else. The accept-handler (not you) runs `git apply`.
 - Always inspect the real file a recommendation targets before proposing the edit.
+- Every patch must pass `git apply --check` before its card is created.
 - Every recommendation names an exact path and a specific, executable change.
 - Prefer the cheapest altitude that fixes the cluster; consolidate related complaints.
+- Card only the top ≤3 clusters by flagged count; note the rest in `recommendations.md`.
 - No negative signal → no card. Don't manufacture work.

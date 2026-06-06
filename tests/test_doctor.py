@@ -88,6 +88,13 @@ def test_detect_assembles_capabilities(tmp_path, monkeypatch):
     assert (tmp_path / "profile" / "capabilities.json").is_file()
 
 
+def test_msgraph_remedy_is_a_real_install_command():
+    # The msgraph_cli remedy must be a real macOS install route, not a placeholder.
+    remedy = doctor._LOCAL_TOOLS["msgraph_cli"]["remedy"]
+    assert "claude.ai/code install" not in remedy   # placeholder gone
+    assert "mgc" in remedy or "msgraph" in remedy
+
+
 def test_detect_preserves_stamped_remote_status(tmp_path, monkeypatch):
     (tmp_path / "profile").mkdir()
     (tmp_path / "profile" / "integrations.yaml").write_text(

@@ -140,6 +140,10 @@ Verified on macOS (the dev machine) at Phase 2 close. Each item marked with hone
 ### run_task_server.sh
 - Line 10 comment references the stale `com.jayjenkins.task-server` plist label
   (persist_lib uses `com.pm-os.task-server`).
+- **Known issue:** Line 28 hardcodes `/opt/homebrew/bin/python3` and line 18 hardcodes the
+  Homebrew PATH. This is the macOS manual-fallback LaunchAgent entrypoint (the cross-platform
+  path is `persist_lib`), but it silently fails on Intel Macs (`/usr/local`) or a non-Homebrew
+  Python. Fix: resolve python via `command -v python3` / PATH. Low priority (fallback only).
 
 ### probe_transcript (doctor.py)
 - Does an existence-only check on `session.json`, not true freshness. If a stale-but-present session

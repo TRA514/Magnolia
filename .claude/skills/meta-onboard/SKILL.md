@@ -53,12 +53,18 @@ is visible on the board once it spawns), mark it in-progress as you begin, done 
 3. **Integrations** — ask: Otter or Granola? Jira / Asana / Linear / none? Teams & Outlook (M365)?
    Default M365 Teams+Outlook ON. Write `profile/integrations.yaml`. (Both Otter and Granola are
    offered; Otter is wired today.)
-4. **Doctor pass** — run `python3 scripts/doctor.py detect`, then invoke the `workflow-doctor` skill
-   to remediate. Continue even if some capabilities can't be fixed — degraded features just stay
-   disabled with a reason; onboarding never blocks.
-5. **Spin up the board** — pick a free port if 8742 is taken (record it in `profile/config.yaml`
-   `server.port`). Use `server_lib.start()` to launch and verify it serves, `persist_lib.install(...)`
-   to make it survive reboots, then `platform_lib.open_url(server_lib.url())`. **This is the
+4. **Doctor pass** — invoke the `workflow-doctor` skill; it runs `python3 scripts/doctor.py detect`
+   and remediates conversationally. Continue even if some capabilities can't be fixed — degraded
+   features just stay disabled with a reason; onboarding never blocks.
+5. **Spin up the board** — pick a free port with `server_lib.free_port()` if 8742 is taken, and
+   record it in `profile/config.yaml` `server.port` BEFORE launching (the server reads its port from
+   config). Launch with `server_lib.start(cmd=server_lib.default_cmd())` and verify it serves —
+   `default_cmd()` yields `[python, .../task_server.py]`. Make it survive reboots with
+   `persist_lib.install(program=server_lib.default_cmd(), working_dir=<repo>, log_path=<repo>/logs/task-server.log)`
+   (install requires a non-empty program list, so pass `default_cmd()`). It returns a dict; on macOS
+   check the `activated` flag — if it's False (see `activation_error`), let them know auto-start-on-reboot
+   didn't engage yet (the board still runs now, it just won't relaunch on reboot until that's sorted)
+   and move on without blocking. Then open it: `platform_lib.open_url(server_lib.url())`. **This is the
    board-spawn beat** — welcome them onto their live board.
 6. **Voice discovery** — if M365 is authorized, study their recent Teams + Outlook messages (and any
    adopted/feed transcripts) and draft `profile/voice/teams.md` and `profile/voice/email.md`, then

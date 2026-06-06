@@ -42,6 +42,36 @@ DEFAULTS = [
             ),
         },
     },
+    {
+        "name": "Weekly self-improvement",
+        "cron_expr": "0 9 * * 1",  # Monday 09:00 (with the Doctor cron)
+        "cron_human": "Every Monday at 9:00am",
+        "task_template": {
+            "title": "Feedback-loop self-improvement pass {date}",
+            "queue": "agent", "priority": "medium", "domain": "ops",
+            "description": (
+                "Weekly self-improvement. Run `python3 scripts/eval_digest.py --days 7`, "
+                "cluster failures by step, and for the top clusters draft a machine-applicable "
+                ".patch + a recommendation card each (eval-analyst worker). Propose only; nothing "
+                "auto-applies."
+            ),
+        },
+    },
+    {
+        "name": "Graduation ladder",
+        "cron_expr": "30 9 * * 1",  # Monday 09:30, after the digest pass
+        "cron_human": "Every Monday at 9:30am",
+        "task_template": {
+            "title": "Trust-ladder graduation assessment {date}",
+            "queue": "agent", "priority": "low", "domain": "ops",
+            "description": (
+                "Run `python3 scripts/graduation_assess.py`. Deterministic: assess each task-type's "
+                "approval + judge-human agreement over the rolling window, create graduation cards "
+                "for types ready to climb, and auto-demote types whose scores dropped. No analysis "
+                "needed beyond running the script and reporting what it created."
+            ),
+        },
+    },
 ]
 
 

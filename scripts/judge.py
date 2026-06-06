@@ -435,29 +435,15 @@ def write_back(task_id, verdict, rubric_version, kind):
         "judge_scored_at": task_lib._now_iso(),
     }
     comment = f"Judge scored: {verdict['score']}/10 — {verdict['why']}"
+    # task_lib.update_task is archive-aware: it falls back to walking ARCHIVE_DIR
+    # and writing in place, raising FileNotFoundError only when the task exists
+    # nowhere. Let it handle both the live and archived cases; never raise into
+    # the caller (judge.py stays strictly additive and exits 0).
     try:
         task_lib.update_task(task_id, changes=changes, comment=comment, actor="judge")
         return True
-    except FileNotFoundError:
-        pass  # task already archived — update_task can't locate it; write in place
-    # Archive-aware fallback using task_lib primitives.
-    filepath = None
-    for root, _dirs, files in os.walk(task_lib.ARCHIVE_DIR):
-        if f"{task_id}.md" in files:
-            filepath = os.path.join(root, f"{task_id}.md")
-            break
-    if not filepath:
-        log(f"could not locate task file for {task_id} to write verdict")
-        return False
-    try:
-        fm, body = task_lib._parse_task_file(filepath)
-        fm.update(changes)
-        fm["updated"] = task_lib._now_iso()
-        body = body.rstrip("\n") + f"\n\n### {fm['updated']} — judge [comment]\n{comment}\n"
-        task_lib._write_task_file(filepath, fm, body)
-        return True
     except Exception as e:
-        log(f"archive write-back failed: {e}")
+        log(f"write-back failed for {task_id}: {e}")
         return False
 
 

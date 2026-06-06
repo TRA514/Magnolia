@@ -461,6 +461,13 @@ def list_tasks(queue=None, status=None, domain=None, priority=None,
                 "human_react_note": fm.get("human_react_note"),
                 "human_reacted_at": fm.get("human_reacted_at"),
                 "card_type": fm.get("card_type"),
+                "grad_task_type": fm.get("grad_task_type"),
+                "grad_current_tier": fm.get("grad_current_tier"),
+                "grad_proposed_tier": fm.get("grad_proposed_tier"),
+                "grad_n": fm.get("grad_n"),
+                "grad_approval_pct": fm.get("grad_approval_pct"),
+                "grad_agreement_pct": fm.get("grad_agreement_pct"),
+                "grad_examples": fm.get("grad_examples"),
                 "file": os.path.relpath(filepath, TASKS_DIR),
             })
 
@@ -517,6 +524,13 @@ def list_archived(limit=200):
                 "human_react_note": fm.get("human_react_note"),
                 "human_reacted_at": fm.get("human_reacted_at"),
                 "card_type": fm.get("card_type"),
+                "grad_task_type": fm.get("grad_task_type"),
+                "grad_current_tier": fm.get("grad_current_tier"),
+                "grad_proposed_tier": fm.get("grad_proposed_tier"),
+                "grad_n": fm.get("grad_n"),
+                "grad_approval_pct": fm.get("grad_approval_pct"),
+                "grad_agreement_pct": fm.get("grad_agreement_pct"),
+                "grad_examples": fm.get("grad_examples"),
             })
 
     # Sort by updated descending (newest first); missing/None values sort last

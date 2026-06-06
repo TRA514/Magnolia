@@ -86,6 +86,15 @@ def jira_config(root=None):
     return pm.get("jira") or {}
 
 
+def doc_sync_config(root=None):
+    d = integration("doc_sync", root)
+    return {
+        "onedrive_root": d.get("onedrive_root", ""),
+        "sharepoint_site": d.get("sharepoint_site", "PM-OS"),
+        "enabled": bool(d.get("enabled", False)),
+    }
+
+
 def model(role, default=None, root=None):
     return (config(root).get("models") or {}).get(role, default)
 

@@ -93,6 +93,10 @@ def _remote_seeds(root=None):
 
 
 def detect(root=None):
+    # Remote (claude.ai connector) status is stamped IN-SESSION by Claude — detect()
+    # cannot probe it. Read the prior doc so we can carry forward any stamped status
+    # instead of clobbering it back to "unknown" on every run.
+    prior = profile_lib.read_capabilities(root).get("capabilities", {})
     caps = {}
     for name, spec in _LOCAL_TOOLS.items():
         binname = spec.get("bin", name)
@@ -105,7 +109,13 @@ def detect(root=None):
     caps["python_deps"] = probe_python_deps(_PYTHON_DEPS)
     caps["server"] = probe_server(profile_lib.server_port(root))
     caps["transcript"] = probe_transcript(root)
-    caps.update(_remote_seeds(root))
+    for name, seed in _remote_seeds(root).items():
+        prev = prior.get(name)
+        if prev and prev.get("kind") == "remote" and prev.get("status") not in (None, "unknown"):
+            seed = {**seed, "status": prev["status"]}
+            if "last_seen" in prev:
+                seed["last_seen"] = prev["last_seen"]
+        caps[name] = seed
     doc = {
         "schema_version": profile_lib.CAPABILITIES_SCHEMA_VERSION,
         "platform": platform_lib.os_kind(),

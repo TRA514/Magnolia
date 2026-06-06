@@ -8,7 +8,7 @@ allowed-tools: Bash, Read, Edit
 
 You are the remediation half of the Doctor. Detection is deterministic Python
 (`scripts/doctor.py`); your job is the adaptive, conversational fixing. The human
-does only the irreducible minimum — clicking "Authorize," pasting a token.
+does only the irreducible minimum — clicking "Authorize."
 
 ## Loop
 
@@ -27,6 +27,9 @@ does only the irreducible minimum — clicking "Authorize," pasting a token.
      Then verify by making one cheap read-only call to that MCP. If it works, set that
      capability's `status` to `ok` and `last_seen` to today in `capabilities.json`; if it
      fails, set `needs_reauth` with a short `reason`.
+   - **service** (`server`, the task server): if `status` is `down`, the remedy is to start
+     the task server (`scripts/run_task_server.sh` on macOS, or `server_lib.start` during
+     onboarding) — not a brew install or re-auth.
 3. **Re-detect** (`doctor.py detect`) and confirm what's now green.
 4. **Report** calmly: what's working, what's still degraded (and that its features are simply
    disabled until fixed — nothing is broken), and the single next action if any.

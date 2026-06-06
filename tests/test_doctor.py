@@ -88,6 +88,40 @@ def test_detect_assembles_capabilities(tmp_path, monkeypatch):
     assert (tmp_path / "profile" / "capabilities.json").is_file()
 
 
+def test_detect_preserves_stamped_remote_status(tmp_path, monkeypatch):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "integrations.yaml").write_text(
+        "project_management:\n  provider: jira\n"
+        "transcript:\n  provider: none\n"
+    )
+    monkeypatch.setattr(doctor.shutil, "which", lambda n: None)
+    monkeypatch.setattr(doctor.importlib.util, "find_spec", lambda n: object())
+    # first detect seeds jira as remote/unknown
+    caps1 = doctor.detect(root=str(tmp_path))
+    assert caps1["capabilities"]["jira"]["status"] == "unknown"
+    # Claude stamps jira ok + last_seen (simulate the workflow-doctor skill)
+    doc = doctor.profile_lib.read_capabilities(root=str(tmp_path))
+    doc["capabilities"]["jira"]["status"] = "ok"
+    doc["capabilities"]["jira"]["last_seen"] = "2026-06-05"
+    doctor.profile_lib.write_capabilities(doc, root=str(tmp_path))
+    # re-detect must PRESERVE the stamp, not clobber back to unknown
+    caps2 = doctor.detect(root=str(tmp_path))
+    assert caps2["capabilities"]["jira"]["status"] == "ok"
+    assert caps2["capabilities"]["jira"]["last_seen"] == "2026-06-05"
+
+
+def test_detect_seeds_new_remote_as_unknown(tmp_path, monkeypatch):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "integrations.yaml").write_text(
+        "project_management:\n  provider: jira\n"
+        "transcript:\n  provider: none\n"
+    )
+    monkeypatch.setattr(doctor.shutil, "which", lambda n: None)
+    monkeypatch.setattr(doctor.importlib.util, "find_spec", lambda n: object())
+    caps = doctor.detect(root=str(tmp_path))
+    assert caps["capabilities"]["jira"]["status"] == "unknown"  # first-seen → unknown
+
+
 def test_report_text_lists_caps(tmp_path):
     caps = {"schema_version": 1, "platform": "darwin", "capabilities": {
         "qmd": {"kind": "local", "status": "missing", "remedy": "brew install qmd"},

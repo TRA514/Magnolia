@@ -41,3 +41,14 @@ def test_unknown_body_renderer_is_caught():
     errors = card_schema.validate_doc(reg, signal_ids=set(), tokens=set(),
                                       body_renderers={"diff", "preview", "agreement"})
     assert any("nope" in e for e in errors)
+
+
+def test_functional_colors_and_rem_sizes_are_rejected():
+    reg = {"slotOrder": ["head", "title", "context", "signals", "body", "actions"],
+           "signals": {"a": {"icon": "due", "border": "rgba(0,0,0,.5)"},
+                       "b": {"icon": "due", "radius": "0.5rem"}},
+           "actions": {},
+           "cardTypes": {"task": {"signals": [], "actions": [], "body": None}}}
+    errors = card_schema.validate_doc(reg, signal_ids={"a", "b"}, tokens=set())
+    assert any("rgba" in e for e in errors)
+    assert any("0.5rem" in e for e in errors)

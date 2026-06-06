@@ -15,9 +15,13 @@ SIGNAL_IDS = os.path.join(ROOT, "ui", "task-board", "cardtypes", "signal-ids.txt
 TEMPLATE_CSS = os.path.join(ROOT, "ui", "task-board", "themes", "_TEMPLATE.css")
 BODY_RENDERERS = {"diff", "preview", "agreement"}
 SLOT_ORDER = ["head", "title", "context", "signals", "body", "actions"]
-SLOTS = set(SLOT_ORDER)
 
-_COLOR_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b|\brgb\(|\bhsl\(|\b\d+px\b")
+_COLOR_RE = re.compile(
+    r"#[0-9a-fA-F]{3,8}\b"           # hex
+    r"|\b(?:rgba?|hsla?|oklch|lab)\(" # functional color
+    r"|\b\d+(?:\.\d+)?(?:px|rem|em)\b" # sizes
+    r"|\b\d+%"                          # percentages
+)
 
 
 def _theme_tokens():

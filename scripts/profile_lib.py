@@ -95,6 +95,24 @@ def doc_sync_config(root=None):
     }
 
 
+def _analytics(name, root=None):
+    return (integrations(root).get("analytics") or {}).get(name) or {}
+
+
+def pendo_config(root=None):
+    p = _analytics("pendo", root)
+    return {"provider": p.get("provider") or "none",
+            "subscription_id": p.get("subscription_id", ""),
+            "app_ids": p.get("app_ids") or {}}
+
+
+def databricks_config(root=None):
+    d = _analytics("databricks", root)
+    return {"provider": d.get("provider") or "none",
+            "catalog": d.get("catalog", ""),
+            "sources": d.get("sources") or {}}
+
+
 def model(role, default=None, root=None):
     return (config(root).get("models") or {}).get(role, default)
 
@@ -156,3 +174,7 @@ if __name__ == "__main__":
     import sys
     if "--display-name" in sys.argv:
         print(display_name())
+    if "--pendo-subid" in sys.argv:
+        print(pendo_config().get("subscription_id", ""))
+    if "--databricks-catalog" in sys.argv:
+        print(databricks_config().get("catalog", ""))

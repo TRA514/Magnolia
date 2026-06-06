@@ -35,6 +35,8 @@ import task_lib
 import cron_lib
 import jira_publish
 import profile_lib
+import adapters
+from adapters.project_management._contract import NotConfigured
 from cron_scheduler import CronScheduler
 
 # ─── Load LangFuse env vars if not already set ───────────────────────────────
@@ -712,8 +714,30 @@ def handle_publish_jira(handler, task_id):
         _error_response(handler, "No JIRA_DRAFT block found in task body", status=400)
         return
 
+    # Dispatch through the adapter loader so the configured project-management
+    # provider is used (mirrors how the transcript family dispatches).
+    pm = adapters.get("project_management")
+    if pm is None:
+        msg = "No project-management tool is configured for this install"
+        try:
+            task_lib.update_task(task_id, changes={}, comment=f"Jira publish failed: {msg}", actor="system")
+        except Exception:
+            pass
+        jira_publish._trace_publish(task_id, draft, error=msg)
+        _error_response(handler, msg, status=400)
+        return
+
     try:
-        issue_key, issue_url = jira_publish.publish_to_jira(draft)
+        issue_key, issue_url = pm.publish(draft)
+    except NotConfigured as e:
+        # Selected provider isn't set up (e.g. the Asana stub) — degrade gracefully.
+        try:
+            task_lib.update_task(task_id, changes={}, comment=f"Jira publish failed: {e}", actor="system")
+        except Exception:
+            pass
+        jira_publish._trace_publish(task_id, draft, error=str(e))
+        _error_response(handler, str(e), status=400)
+        return
     except RuntimeError as e:
         # Log the error to the task activity log
         try:

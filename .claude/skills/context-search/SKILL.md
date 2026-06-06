@@ -297,10 +297,10 @@ qmd searches local PM-OS datasets (meetings, research, product artifacts, tasks)
 
 | Need | MCP Tool | Example |
 |------|----------|---------|
-| Product entity search | `mcp__claude_ai_Pendo__searchEntities` (subId: `4818486697721856`) | Find pages, features, guides by name/concept |
+| Product entity search | `mcp__claude_ai_Pendo__searchEntities` (subId: from profile (`profile_lib.py --pendo-subid`)) | Find pages, features, guides by name/concept |
 | Customer feedback search | `mcp__claude_ai_Pendo__get_feedback_items` with `similaritySearchTerms` | Semantic search across Pendo Listen feedback |
-| Gong transcript search | Databricks: `SELECT sentence FROM is_prod.gongio.transcript WHERE sentence LIKE '%{terms}%'` | Keyword search in sales call transcripts |
-| Zendesk ticket search | Databricks: `SELECT subject, description FROM is_prod.zendesk.ticket WHERE subject LIKE '%{terms}%' OR custom_intent LIKE '%{terms}%'` | Search support ticket subjects and intents |
-| Engineering work items | Databricks: `SELECT title, state FROM is_prod.azure_devops.work_item WHERE title LIKE '%{terms}%'` | Find related ADO work items |
+| Gong transcript search | Databricks: `SELECT sentence FROM {catalog}.gongio.transcript WHERE sentence LIKE '%{terms}%'` | Keyword search in sales call transcripts |
+| Zendesk ticket search | Databricks: `SELECT subject, description FROM {catalog}.zendesk.ticket WHERE subject LIKE '%{terms}%' OR custom_intent LIKE '%{terms}%'` | Search support ticket subjects and intents |
+| Engineering work items | Databricks: `SELECT title, state FROM {catalog}.azure_devops.work_item WHERE title LIKE '%{terms}%'` | Find related ADO work items |
 
 **When to supplement**: If qmd results are sparse or the query involves sales/support/product analytics data that wouldn't be in local meeting files or research docs, try the MCP sources above.

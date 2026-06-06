@@ -30,22 +30,18 @@ def sync(root=None):
     # ``root`` selects the profile used to resolve the provider. Note that for
     # the Otter provider the ported runner operates on the LIVE profile and does
     # not thread ``root`` (single-install assumption — see _run_otter).
+    #
+    # Dispatch goes through the adapter loader: provider -> module behind the
+    # transcript seam. Otter's adapter delegates back to _run_otter (above), so
+    # the headless structured-error contract and its test monkeypatch still hold.
     provider = profile_lib.transcript_config(root)["provider"]
     if provider == "none":
         return {"status": "skipped", "provider": "none"}
-    if provider == "otter":
-        # Finding #3: this is a headless entrypoint (onboarding/cron). A failure
-        # inside the real Otter sync must surface as a structured status rather
-        # than crashing the caller.
-        try:
-            _run_otter(root)
-        except Exception as e:  # narrow: Exception, not BaseException
-            return {"status": "error", "provider": "otter", "error": str(e)}
-        return {"status": "ok", "provider": "otter"}
-    if provider == "granola":
-        return {"status": "unsupported", "provider": "granola",
-                "note": "Granola adapter lands in Phase 3"}
-    return {"status": "unsupported", "provider": provider}
+    import adapters
+    mod = adapters.get("transcript", root)
+    if mod is None:
+        return {"status": "unsupported", "provider": provider}
+    return mod.sync(root)
 
 
 if __name__ == "__main__":

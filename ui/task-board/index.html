@@ -738,6 +738,7 @@
   .dt-art-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .dt-artifact {
     display: flex; flex-direction: column; gap: 6px;
+    min-width: 0; /* allow grid item to shrink so the path ellipsis can engage */
     padding: 14px 15px 13px; text-decoration: none; color: inherit;
     border: 1px solid color-mix(in oklab, var(--accent) 24%, var(--border-soft));
     background: color-mix(in oklab, var(--accent) 5%, var(--surface-hover));
@@ -1009,6 +1010,7 @@
 <script src="/js/icons.js"></script>
 <script src="/js/router.js"></script>
 <script src="/js/tasks.js"></script>
+<script src="/js/card-registry.js"></script>
 <script src="/js/board.js"></script>
 <script src="/js/now.js"></script>
 <script src="/js/activity.js"></script>

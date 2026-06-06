@@ -16,3 +16,12 @@ doc_sync:
   onedrive_root: ""      # auto-detected by the Doctor (OneDrive-* under ~/Library/CloudStorage)
   sharepoint_site: "PM-OS"
   enabled: false
+analytics:
+  pendo:
+    provider: "none"      # pendo | none
+    subscription_id: ""
+    app_ids: {}
+  databricks:
+    provider: "none"      # databricks | none
+    catalog: ""
+    sources: {}

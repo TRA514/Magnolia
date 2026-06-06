@@ -87,9 +87,18 @@ def assess(ladder_path=None, now_iso=None):
                 created.append({"task_type": task_type, "proposed_tier": nxt})
 
         # --- demotion check (only for already-climbed types) ---
+        # Demotion is gated on min_judged just like promotion: an under-sized window
+        # must not demote a type on noise. Insufficient data resets the streak (treated
+        # as not-below) rather than accumulating toward a demotion.
+        # (The promotion and demotion metric bands are non-overlapping by construction —
+        # the next-tier bar sits well above the current-tier entry bar — so a single
+        # window cannot both promotion-card and register as below in practice.)
         if cur != "shadow":
             entry = th[ENTRY_KEY[cur]]
-            below = (agreement < entry["min_agreement"] or approval < entry["min_approval"])
+            if n >= entry["min_judged"]:
+                below = (agreement < entry["min_agreement"] or approval < entry["min_approval"])
+            else:
+                below = False  # not enough data this window to justify demotion
             streak = ladder_lib.note_demotion_signal(task_type, below, path=ladder_path)
             if below and streak >= th["demote_consecutive"]:
                 ladder_lib.demote(task_type, path=ladder_path)

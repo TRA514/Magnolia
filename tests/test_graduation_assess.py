@@ -48,3 +48,13 @@ def test_auto_demote_after_consecutive_bad_windows(tasks_root, tmp_path):
     assert ladder_lib.tier_of("prd-draft", path=p) == "gated"   # 1st bad window: no demote yet
     graduation_assess.assess(ladder_path=p, now_iso="2026-06-17T00:00:00Z")
     assert ladder_lib.tier_of("prd-draft", path=p) == "shadow"  # 2nd consecutive: demoted
+
+
+def test_no_demote_on_insufficient_data(tasks_root, tmp_path):
+    import task_lib, graduation_assess, ladder_lib
+    p = str(tmp_path / "ladder.json")
+    ladder_lib.set_tier("prd-draft", "gated", path=p)
+    _judged(task_lib, "prd-draft", 3, react="down", n=2)  # n=2 < min_judged 6 for the gated entry bar
+    graduation_assess.assess(ladder_path=p, now_iso="2026-06-10T00:00:00Z")
+    graduation_assess.assess(ladder_path=p, now_iso="2026-06-17T00:00:00Z")
+    assert ladder_lib.tier_of("prd-draft", path=p) == "gated"  # sparse window must NOT demote

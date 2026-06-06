@@ -27,6 +27,9 @@ Verified on macOS (the dev machine) at Phase 2 close. Each item marked with hone
     `is_running()` until the `/api/tasks` endpoint serves 200, raising `TimeoutError` (and killing
     the child) otherwise. Covered by `test_server_lib.py` (start_polls_until_serving,
     start_raises_if_never_serves, start_kills_child_that_ignores_sigterm).
+    (config→server-port threading is validated by unit tests — `test_profile_lib.server_port` +
+    `test_server_lib.start`; the macOS e2e injects an explicit port+cmd and does not exercise the
+    production default-port path end-to-end.)
 - [x] `persist_lib` writes a LaunchAgent on macOS with no hardcoded user path.
   - `test_persist_lib.py::test_render_plist_has_no_hardcoded_user_and_uses_repo_path` and
     `test_install_macos_writes_plist` pass. Path is derived from the repo, not a personal home dir.

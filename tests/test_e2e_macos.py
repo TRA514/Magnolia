@@ -37,3 +37,7 @@ def test_detect_then_serve(tmp_path):
         assert server_lib.is_running(port=p)
     finally:
         proc.terminate()
+        try:
+            proc.wait(timeout=2.0)
+        except Exception:
+            proc.kill()

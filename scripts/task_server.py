@@ -32,6 +32,7 @@ class ReusableHTTPServer(ThreadingHTTPServer):
 # Add script directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import task_lib
+import ladder_lib
 import cron_lib
 import jira_publish
 import profile_lib
@@ -195,72 +196,24 @@ def _task_type_of(task):
     return task.get("task_type") or task.get("domain") or "uncategorized"
 
 
-def _human_feedback_for_task(lf, task_id, hf_by_trace):
-    """Return human-feedback scores (👍/👎) across a task's traces, newest first.
-
-    `hf_by_trace` is a prebuilt {traceId: [{value, comment}]} map (one global
-    score pull, not one per task). Returns [] when none / LangFuse unavailable.
-    """
-    out = []
-    try:
-        result = lf.api.trace.list(session_id=task_id, order_by="timestamp.desc")
-        traces = result.data if hasattr(result, "data") else []
-        for t in traces:
-            tid = getattr(t, "id", None)
-            if tid in hf_by_trace:
-                out.extend(hf_by_trace[tid])
-    except Exception:
-        pass
-    return out
-
-
-def handle_quality(handler):
-    """GET /api/quality — Read-only shadow-judge scoreboard by task-type.
+def build_quality(ladder_path=None):
+    """Pure shadow-judge scoreboard aggregation, sourced from frontmatter.
 
     Aggregates judged tasks (those with judge_score) into a row per task-type:
-    count, average score, trend, per-dimension averages, and — where a human has
-    thumbed the task's trace — judge↔you agreement %. Also returns the
-    disagreement list (judge vs. you divergences) as evidence behind agreement.
-    Agreement degrades gracefully to null when LangFuse is unavailable.
+    count, average score, trend, per-dimension averages, judge↔human agreement %
+    (from each task's human_react frontmatter), and the ladder trust-tier label.
+    Also returns the disagreement list (judge vs. human divergences). No LangFuse
+    dependency for agreement; the langfuse flag is still surfaced for the UI.
     """
-    try:
-        active = task_lib.list_tasks()
-        archived = task_lib.list_archived(limit=1000)
-    except Exception as e:
-        _error_response(handler, f"Failed to gather tasks: {e}", status=500)
-        return
-
+    active = task_lib.list_tasks()
+    archived = task_lib.list_archived(limit=1000)
     judged = [t for t in (active + archived) if t.get("judge_score") is not None]
-
-    lf = _get_langfuse()
-
-    # One global score pull → {traceId: [human-feedback]}, reused for every task.
-    hf_by_trace = {}
-    if lf is not None:
-        try:
-            from langfuse_client import list_scores
-            for s in list_scores():
-                if s.get("name") == "human-feedback":
-                    try:
-                        hf_by_trace.setdefault(s.get("traceId"), []).append(
-                            {"value": float(s.get("value")), "comment": s.get("comment") or ""})
-                    except (TypeError, ValueError):
-                        pass
-        except Exception:
-            pass
-
-    groups = {}
-    disagreements = []
-
+    groups, disagreements = {}, []
     for t in judged:
         gkey = _task_type_of(t)
-        g = groups.setdefault(gkey, {
-            "task_type": gkey, "count": 0, "scores": [], "scored_at": [],
-            # Dimension keys are kind-specific (document vs message); collect
-            # whatever keys appear so the scoreboard isn't locked to one set.
-            "dimensions": {},
-            "phase": "Shadow", "agree": 0, "disagree": 0,
-        })
+        g = groups.setdefault(gkey, {"task_type": gkey, "count": 0, "scores": [],
+                                     "scored_at": [], "dimensions": {},
+                                     "agree": 0, "disagree": 0})
         try:
             score = float(t["judge_score"])
         except (TypeError, ValueError):
@@ -276,23 +229,20 @@ def handle_quality(handler):
                         g["dimensions"].setdefault(k, []).append(float(v))
                     except (TypeError, ValueError):
                         pass
-
-        # Agreement: compare the human 👍/👎 (if any) to the judge's verdict.
-        if lf is not None and hf_by_trace:
-            fb = _human_feedback_for_task(lf, t["id"], hf_by_trace)
-            if fb:
-                human_positive = fb[0]["value"] == 1.0
-                judge_positive = score >= JUDGE_GOOD_THRESHOLD
-                if human_positive == judge_positive:
-                    g["agree"] += 1
-                else:
-                    g["disagree"] += 1
-                    disagreements.append({
-                        "task_id": t["id"], "title": t.get("title", ""),
-                        "task_type": gkey, "judge_score": score,
-                        "judge_why": t.get("judge_why", ""),
-                        "human_value": fb[0]["value"], "human_comment": fb[0]["comment"],
-                    })
+        # Agreement: compare the human 👍/👎 (from frontmatter) to the judge.
+        react = t.get("human_react")
+        if react in ("up", "down"):
+            human_positive = react == "up"
+            judge_positive = score >= JUDGE_GOOD_THRESHOLD
+            if human_positive == judge_positive:
+                g["agree"] += 1
+            else:
+                g["disagree"] += 1
+                disagreements.append({
+                    "task_id": t["id"], "title": t.get("title", ""), "task_type": gkey,
+                    "judge_score": score, "judge_why": t.get("judge_why", ""),
+                    "human_value": 1 if human_positive else 0,
+                    "human_comment": t.get("human_react_note", "")})
 
     def avg(xs):
         return round(sum(xs) / len(xs), 1) if xs else None
@@ -300,7 +250,6 @@ def handle_quality(handler):
     rows = []
     for g in groups.values():
         scores = g["scores"]
-        # Trend: mean of the newer half minus the older half (by scored_at).
         order = sorted(range(len(scores)), key=lambda i: g["scored_at"][i])
         ordered = [scores[i] for i in order]
         trend = None
@@ -311,27 +260,24 @@ def handle_quality(handler):
                 trend = round((sum(newer) / len(newer)) - (sum(older) / len(older)), 1)
         reacted = g["agree"] + g["disagree"]
         rows.append({
-            "task_type": g["task_type"],
-            "count": g["count"],
-            "avg_score": avg(scores),
-            "trend": trend,
-            # Chronological score history (oldest→newest) so the sparkline can
-            # SHOW the trend. Capped to the last 8 points; the UI slices too.
-            "history": [round(v, 1) for v in ordered[-8:]],
-            "phase": g["phase"],
+            "task_type": g["task_type"], "count": g["count"], "avg_score": avg(scores),
+            "trend": trend, "history": [round(v, 1) for v in ordered[-8:]],
+            "phase": ladder_lib.tier_of(g["task_type"], path=ladder_path),
             "dimensions": {k: avg(v) for k, v in g["dimensions"].items()},
             "agreement_pct": round(100 * g["agree"] / reacted) if reacted else None,
-            "reacted": reacted,
-        })
-
+            "reacted": reacted})
     rows.sort(key=lambda r: r["count"], reverse=True)
     disagreements.sort(key=lambda d: d["judge_score"])
-    _json_response(handler, {
-        "groups": rows,
-        "disagreements": disagreements,
-        "total_judged": len(judged),
-        "langfuse": lf is not None,
-    })
+    return {"groups": rows, "disagreements": disagreements,
+            "total_judged": len(judged), "langfuse": _get_langfuse() is not None}
+
+
+def handle_quality(handler):
+    """GET /api/quality — read-only shadow-judge scoreboard, frontmatter-sourced."""
+    try:
+        _json_response(handler, build_quality())
+    except Exception as e:
+        _error_response(handler, f"Failed to gather tasks: {e}", status=500)
 
 
 def handle_get_task(handler, task_id):

@@ -502,6 +502,13 @@ def apply_recommendation(task_id):
     accept-commit (and therefore the receipt's one-tap Undo) assumes a clean tree —
     unrelated edits would get swept into this commit. Acceptable for Phase 4 (single
     user, deliberate action); Phase 6 should scope the commit to the patch's files.
+
+    Partial-failure rollback: if any step after `git apply` fails (including a commit
+    that has nothing staged — e.g. a patch touching only gitignored paths), the
+    working tree is hard-reset to HEAD (`git reset --hard HEAD`) before raising a
+    RuntimeError. This relies on the same clean-working-tree assumption above —
+    reset --hard would also discard unrelated working-tree edits, which is acceptable
+    for Phase 4 but is another reason Phase 6 should scope the commit.
     """
     t = task_lib.read_task(task_id)["frontmatter"]
     patch_path = t.get("patch_path")
@@ -512,13 +519,27 @@ def apply_recommendation(task_id):
                          capture_output=True, text=True)
     if chk.returncode != 0:
         raise RuntimeError(f"patch does not apply cleanly: {chk.stderr.strip()[:300]}")
+    # Pre-gate passed; apply for real. From here on, a failure leaves the tree dirty,
+    # so any failure rolls back to HEAD before raising (RuntimeError -> 409).
     subprocess.run(["git", "-C", PM_OS_DIR, "apply", abspath], check=True, capture_output=True, text=True)
-    subprocess.run(["git", "-C", PM_OS_DIR, "add", "-A"], check=True, capture_output=True, text=True)
-    msg = f"apply recommendation {task_id}: {t.get('title', '')}"
-    subprocess.run(["git", "-C", PM_OS_DIR, "commit", "-m", msg], check=True, capture_output=True, text=True)
-    rev = subprocess.run(["git", "-C", PM_OS_DIR, "rev-parse", "HEAD"],
-                         capture_output=True, text=True).stdout.strip()
-    task_lib.update_task(task_id, changes={"status": "done"}, comment="Accepted - applied", actor="human")
+    try:
+        subprocess.run(["git", "-C", PM_OS_DIR, "add", "-A"], check=True, capture_output=True, text=True)
+        # `git diff --cached --quiet` returns 0 when NOTHING is staged.
+        staged = subprocess.run(["git", "-C", PM_OS_DIR, "diff", "--cached", "--quiet"],
+                                capture_output=True, text=True)
+        if staged.returncode == 0:
+            raise RuntimeError("patch produced no committable changes")
+        msg = f"apply recommendation {task_id}: {t.get('title', '')}"
+        subprocess.run(["git", "-C", PM_OS_DIR, "commit", "-m", msg], check=True, capture_output=True, text=True)
+        rev = subprocess.run(["git", "-C", PM_OS_DIR, "rev-parse", "HEAD"],
+                             check=True, capture_output=True, text=True).stdout.strip()
+    except Exception as e:
+        # Roll back the half-applied change so a failed accept never strands the tree.
+        subprocess.run(["git", "-C", PM_OS_DIR, "reset", "--hard", "HEAD"],
+                       capture_output=True, text=True)
+        raise RuntimeError(str(e)) if not isinstance(e, RuntimeError) else e
+    # Commit landed; archive the recommendation so it leaves the actionable lanes.
+    task_lib.complete_task(task_id, actor="human")
     receipt_id, _ = task_lib.create_task(
         f"Applied: {t.get('title', '')}", queue="human", domain="ops", creator="agent",
         description=f"Applied recommendation {task_id}. One-tap Undo reverts it.",
@@ -533,8 +554,15 @@ def undo_receipt(task_id):
     rev = t.get("revert_commit")
     if not rev:
         raise ValueError("no revert_commit on this receipt")
-    subprocess.run(["git", "-C", PM_OS_DIR, "revert", "--no-edit", rev], check=True,
-                   capture_output=True, text=True)
+    rv = subprocess.run(["git", "-C", PM_OS_DIR, "revert", "--no-edit", rev],
+                        capture_output=True, text=True)
+    if rv.returncode != 0:
+        # A later commit touched the same lines: the revert conflicted and left the
+        # tree half-reverted (REVERT_HEAD + conflict markers). Abort to restore it,
+        # best-effort, then surface a 409 (same RuntimeError type accept uses).
+        subprocess.run(["git", "-C", PM_OS_DIR, "revert", "--abort"],
+                       capture_output=True, text=True)
+        raise RuntimeError("Couldn't undo automatically - later changes conflict; revert by hand.")
     task_lib.update_task(task_id, changes={"status": "done"}, comment="Undone - reverted", actor="human")
 
 
@@ -546,8 +574,8 @@ def graduate_card(task_id, ladder_path=None):
     if not task_type or not proposed:
         raise ValueError("graduation card missing grad_task_type / grad_proposed_tier")
     ladder_lib.set_tier(task_type, proposed, path=ladder_path)
-    task_lib.update_task(task_id, changes={"status": "done"},
-                         comment=f"Graduated {task_type} -> {proposed}", actor="human")
+    # Archive so the graduation card leaves the actionable lanes.
+    task_lib.complete_task(task_id, actor="human")
 
 
 def handle_accept(handler, task_id):
@@ -567,7 +595,7 @@ def handle_accept(handler, task_id):
 def handle_reject(handler, task_id):
     """POST /api/tasks/{id}/reject — dismiss a recommendation (no git)."""
     try:
-        task_lib.update_task(task_id, changes={"status": "done"}, comment="Rejected", actor="human")
+        task_lib.cancel_task(task_id, reason="rejected", actor="human")
     except Exception as e:
         _error_response(handler, f"Reject failed: {e}", status=500)
         return
@@ -587,7 +615,7 @@ def handle_graduate(handler, task_id):
 def handle_keep(handler, task_id):
     """POST /api/tasks/{id}/keep — dismiss a receipt, keeping the applied change."""
     try:
-        task_lib.update_task(task_id, changes={"status": "done"}, comment="Kept", actor="human")
+        task_lib.complete_task(task_id, actor="human")
     except Exception as e:
         _error_response(handler, f"Keep failed: {e}", status=500)
         return
@@ -598,6 +626,10 @@ def handle_undo(handler, task_id):
     """POST /api/tasks/{id}/undo — revert the commit a receipt recorded."""
     try:
         undo_receipt(task_id)
+    except RuntimeError as e:
+        # Conflict on revert — surface the plain reason as a 409.
+        _error_response(handler, str(e), status=409)
+        return
     except Exception as e:
         _error_response(handler, f"Undo failed: {e}", status=500)
         return

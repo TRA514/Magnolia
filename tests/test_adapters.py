@@ -29,3 +29,18 @@ def test_jira_publish_delegates_to_publish_to_jira(profile_root, monkeypatch):
     key, url = jira_adapter.publish({"summary": "x", "type": "Bug"}, root=profile_root)
     assert key == "ACM-1"
     assert captured["draft"]["summary"] == "x"
+
+
+def test_asana_stub_is_not_configured(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "integrations.yaml").write_text(
+        "project_management:\n  provider: asana\n")
+    from adapters.project_management import asana
+    assert asana.is_configured(root=str(tmp_path)) is False
+
+
+def test_asana_publish_raises_not_configured(tmp_path):
+    from adapters.project_management import asana
+    from adapters.project_management._contract import NotConfigured
+    with pytest.raises(NotConfigured):
+        asana.publish({"summary": "x"}, root=str(tmp_path))

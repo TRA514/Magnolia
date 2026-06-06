@@ -1,0 +1,29 @@
+{
+  "slotOrder": ["head", "title", "context", "signals", "body", "actions"],
+  "signals": {
+    "due":        { "icon": "due",      "variant": "due" },
+    "overdue":    { "icon": "overdue",  "variant": "overdue" },
+    "waiting_on": { "icon": "hourglass","variant": "waiting" },
+    "waiting_due":{ "icon": "due",      "variant": "due" },
+    "schedule":   { "icon": "meeting",  "variant": "meeting" },
+    "message":    { "icon": "chat",     "variant": "message" },
+    "jira_draft": { "icon": "jira",     "variant": "accent" },
+    "cron":       { "icon": "cron",     "variant": "cron" }
+  },
+  "actions": {
+    "mark_done":   { "label": "Mark done",       "handler": "quickDone",   "primary": true },
+    "open_output": { "label": "Open output",     "handler": "outputLink",  "truncatePath": true },
+    "publish_jira":{ "label": "Publish to Jira", "handler": "publishJira" },
+    "accept":      { "label": "Accept",          "handler": "cardAccept",  "primary": true },
+    "reject":      { "label": "Reject",          "handler": "cardReject" },
+    "keep":        { "label": "Keep",            "handler": "cardKeep",    "primary": true },
+    "undo":        { "label": "Undo",            "handler": "cardUndo" },
+    "graduate":    { "label": "Graduate",        "handler": "cardGraduate","primary": true }
+  },
+  "cardTypes": {
+    "task":           { "signals": "auto", "actions": ["mark_done", "open_output"], "body": null },
+    "recommendation": { "signals": [],     "actions": ["accept", "reject"],        "body": "diff" },
+    "receipt":        { "signals": [],     "actions": ["keep", "undo"],            "body": "preview" },
+    "graduation":     { "signals": [],     "actions": ["graduate"],                "body": "agreement" }
+  }
+}

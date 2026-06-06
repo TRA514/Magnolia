@@ -26,6 +26,14 @@ def test_hardcoded_color_is_rejected():
     assert any("token" in e.lower() or "color" in e.lower() for e in errors)
 
 
+def test_reordered_slots_are_rejected():
+    reg = {"slotOrder": ["title", "head", "context", "signals", "body", "actions"],
+           "signals": {}, "actions": {},
+           "cardTypes": {"task": {"signals": [], "actions": [], "body": None}}}
+    errors = card_schema.validate_doc(reg, signal_ids=set(), tokens=set())
+    assert any("slotOrder" in e for e in errors)
+
+
 def test_unknown_body_renderer_is_caught():
     reg = {"slotOrder": ["head", "title", "context", "signals", "body", "actions"],
            "signals": {}, "actions": {},

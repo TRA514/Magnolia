@@ -14,7 +14,8 @@ REGISTRY = os.path.join(ROOT, "ui", "task-board", "cardtypes", "registry.json")
 SIGNAL_IDS = os.path.join(ROOT, "ui", "task-board", "cardtypes", "signal-ids.txt")
 TEMPLATE_CSS = os.path.join(ROOT, "ui", "task-board", "themes", "_TEMPLATE.css")
 BODY_RENDERERS = {"diff", "preview", "agreement"}
-SLOTS = {"head", "title", "context", "signals", "body", "actions"}
+SLOT_ORDER = ["head", "title", "context", "signals", "body", "actions"]
+SLOTS = set(SLOT_ORDER)
 
 _COLOR_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b|\brgb\(|\bhsl\(|\b\d+px\b")
 
@@ -35,8 +36,8 @@ def _declared_signal_ids():
 
 def validate_doc(reg, signal_ids, tokens, body_renderers=BODY_RENDERERS):
     errors = []
-    if set(reg.get("slotOrder", [])) != SLOTS:
-        errors.append(f"slotOrder must be exactly {sorted(SLOTS)}")
+    if reg.get("slotOrder", []) != SLOT_ORDER:
+        errors.append(f"slotOrder must be exactly {SLOT_ORDER}")
     cat_sig = reg.get("signals", {})
     cat_act = reg.get("actions", {})
 

@@ -222,7 +222,8 @@ def create_task(title, queue="human", priority="medium", domain=None,
                 task_type=None, meeting_attendees=None,
                 meeting_duration=None, meeting_title=None,
                 meeting_description=None, message_channel=None,
-                message_to=None, message_subject=None, message_body=None):
+                message_to=None, message_subject=None, message_body=None,
+                card_type=None, patch_path=None):
     """Create a new task file in the appropriate queue directory.
 
     Returns (task_id, filepath).
@@ -268,6 +269,11 @@ def create_task(title, queue="human", priority="medium", domain=None,
         "blocked_by": [],
         "blocks": [],
     }
+
+    if card_type:
+        frontmatter["card_type"] = card_type
+    if patch_path:
+        frontmatter["patch_path"] = patch_path
 
     # Add waiting metadata if applicable
     if queue == "waiting":
@@ -450,6 +456,21 @@ def list_tasks(queue=None, status=None, domain=None, priority=None,
                 "judge_dimensions": fm.get("judge_dimensions"),
                 "judge_rubric_version": fm.get("judge_rubric_version"),
                 "judge_scored_at": fm.get("judge_scored_at"),
+                "judge_kind": fm.get("judge_kind"),
+                "human_react": fm.get("human_react"),
+                "human_react_note": fm.get("human_react_note"),
+                "human_reacted_at": fm.get("human_reacted_at"),
+                "card_type": fm.get("card_type"),
+                "patch_path": fm.get("patch_path"),
+                "revert_commit": fm.get("revert_commit"),
+                "source_recommendation": fm.get("source_recommendation"),
+                "grad_task_type": fm.get("grad_task_type"),
+                "grad_current_tier": fm.get("grad_current_tier"),
+                "grad_proposed_tier": fm.get("grad_proposed_tier"),
+                "grad_n": fm.get("grad_n"),
+                "grad_approval_pct": fm.get("grad_approval_pct"),
+                "grad_agreement_pct": fm.get("grad_agreement_pct"),
+                "grad_examples": fm.get("grad_examples"),
                 "file": os.path.relpath(filepath, TASKS_DIR),
             })
 
@@ -501,6 +522,21 @@ def list_archived(limit=200):
                 "judge_dimensions": fm.get("judge_dimensions"),
                 "judge_rubric_version": fm.get("judge_rubric_version"),
                 "judge_scored_at": fm.get("judge_scored_at"),
+                "judge_kind": fm.get("judge_kind"),
+                "human_react": fm.get("human_react"),
+                "human_react_note": fm.get("human_react_note"),
+                "human_reacted_at": fm.get("human_reacted_at"),
+                "card_type": fm.get("card_type"),
+                "patch_path": fm.get("patch_path"),
+                "revert_commit": fm.get("revert_commit"),
+                "source_recommendation": fm.get("source_recommendation"),
+                "grad_task_type": fm.get("grad_task_type"),
+                "grad_current_tier": fm.get("grad_current_tier"),
+                "grad_proposed_tier": fm.get("grad_proposed_tier"),
+                "grad_n": fm.get("grad_n"),
+                "grad_approval_pct": fm.get("grad_approval_pct"),
+                "grad_agreement_pct": fm.get("grad_agreement_pct"),
+                "grad_examples": fm.get("grad_examples"),
             })
 
     # Sort by updated descending (newest first); missing/None values sort last
@@ -519,6 +555,16 @@ def update_task(task_id, changes=None, comment=None, actor="human"):
     If 'queue' is in changes, the file is moved to the new queue directory.
     """
     filepath, current_queue = _find_task_file(task_id)
+    archived = False
+    if filepath is None:
+        # Fall back to the archive: completed tasks are moved under
+        # ARCHIVE_DIR/YYYY-MM/ by complete_task (the live file is removed).
+        # Apply changes in place — do NOT move the file back to a queue.
+        for root, _dirs, files in os.walk(ARCHIVE_DIR):
+            if f"{task_id}.md" in files:
+                filepath = os.path.join(root, f"{task_id}.md")
+                archived = True
+                break
     if filepath is None:
         raise FileNotFoundError(f"Task {task_id} not found")
 
@@ -537,6 +583,11 @@ def update_task(task_id, changes=None, comment=None, actor="human"):
     # Append activity log entry if comment provided
     if comment:
         body = body.rstrip("\n") + f"\n\n### {now} — {actor} [{comment_type}]\n{comment}\n"
+
+    # Archived tasks stay in the archive; write in place and return.
+    if archived:
+        _write_task_file(filepath, fm, body)
+        return filepath
 
     # Handle queue movement
     if new_queue and new_queue != current_queue:
@@ -698,6 +749,25 @@ def update_task_description(task_id, new_description, actor="human"):
     fm["updated"] = now
     _write_task_file(filepath, fm, new_body)
     return filepath
+
+
+def react_to_task(task_id, react, note=None, actor="human"):
+    """Record the operator's per-task reaction. react is 'up' or 'down'.
+
+    Writes human_react / human_react_note / human_reacted_at to frontmatter and
+    logs an activity comment. Archive-aware via update_task.
+    """
+    if react not in ("up", "down"):
+        raise ValueError("react must be 'up' or 'down'")
+    changes = {
+        "human_react": react,
+        "human_react_note": (note or None),
+        "human_reacted_at": _now_iso(),
+    }
+    icon = "👍" if react == "up" else "👎"
+    comment = f"Human react: {icon}" + (f" — {note}" if note else "")
+    update_task(task_id, changes=changes, comment=comment, actor=actor)
+    return changes
 
 
 def get_task_full(task_id):

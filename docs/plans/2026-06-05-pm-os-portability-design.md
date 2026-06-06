@@ -90,7 +90,7 @@ LangFuse-via-Docker is a non-starter for non-technical teammates. Its four jobs 
 | LangFuse did | Now |
 |---|---|
 | Prompt store + versions | **Files in `engine/prompts/`; git is the version history** |
-| Execution traces | **Local JSONL** (already written today) |
+| Execution traces | **Claude Code session JSONL** (`~/.claude/projects/<slug>/`, written for free per `claude` invocation; not yet task-joined — capturing the dispatch `session_id` is a future enhancement) |
 | Scores + annotations | **Task markdown frontmatter** (`judge_score`, `judge_why`, `human_react`, optional note) |
 | The UI | **Board → Quality tab** |
 

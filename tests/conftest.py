@@ -45,3 +45,24 @@ def profile_root(tmp_path):
     (prof / "voice" / "teams.md").write_text("# Teams voice\nTight, lowercase ok.\n")
     (prof / "voice" / "email.md").write_text("# Email voice\nWarm, polished.\n")
     return str(tmp_path)
+
+
+@pytest.fixture
+def tasks_root(tmp_path, monkeypatch):
+    """Redirect task_lib's on-disk dirs to a temp tree and seed the counter.
+
+    Returns the temp PM-OS root. Use task_lib.create_task / update_task against it.
+    """
+    import task_lib
+    tasks_dir = tmp_path / "datasets" / "tasks"
+    archive_dir = tasks_dir / "_archive"
+    for q in ("human", "agent", "collab", "waiting"):
+        (tasks_dir / q).mkdir(parents=True, exist_ok=True)
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    (tasks_dir / "_counter").write_text("0")
+    monkeypatch.setattr(task_lib, "TASKS_DIR", str(tasks_dir))
+    monkeypatch.setattr(task_lib, "ARCHIVE_DIR", str(archive_dir))
+    # COUNTER_FILE is derived from TASKS_DIR at import time, so _next_id() would
+    # otherwise read the real counter. Redirect it to the temp counter too.
+    monkeypatch.setattr(task_lib, "COUNTER_FILE", str(tasks_dir / "_counter"))
+    return str(tmp_path)

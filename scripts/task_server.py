@@ -32,6 +32,7 @@ class ReusableHTTPServer(ThreadingHTTPServer):
 # Add script directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import task_lib
+import ladder_lib
 import cron_lib
 import jira_publish
 import profile_lib
@@ -195,72 +196,24 @@ def _task_type_of(task):
     return task.get("task_type") or task.get("domain") or "uncategorized"
 
 
-def _human_feedback_for_task(lf, task_id, hf_by_trace):
-    """Return human-feedback scores (👍/👎) across a task's traces, newest first.
-
-    `hf_by_trace` is a prebuilt {traceId: [{value, comment}]} map (one global
-    score pull, not one per task). Returns [] when none / LangFuse unavailable.
-    """
-    out = []
-    try:
-        result = lf.api.trace.list(session_id=task_id, order_by="timestamp.desc")
-        traces = result.data if hasattr(result, "data") else []
-        for t in traces:
-            tid = getattr(t, "id", None)
-            if tid in hf_by_trace:
-                out.extend(hf_by_trace[tid])
-    except Exception:
-        pass
-    return out
-
-
-def handle_quality(handler):
-    """GET /api/quality — Read-only shadow-judge scoreboard by task-type.
+def build_quality(ladder_path=None):
+    """Pure shadow-judge scoreboard aggregation, sourced from frontmatter.
 
     Aggregates judged tasks (those with judge_score) into a row per task-type:
-    count, average score, trend, per-dimension averages, and — where a human has
-    thumbed the task's trace — judge↔you agreement %. Also returns the
-    disagreement list (judge vs. you divergences) as evidence behind agreement.
-    Agreement degrades gracefully to null when LangFuse is unavailable.
+    count, average score, trend, per-dimension averages, judge↔human agreement %
+    (from each task's human_react frontmatter), and the ladder trust-tier label.
+    Also returns the disagreement list (judge vs. human divergences). No LangFuse
+    dependency for agreement; the langfuse flag is still surfaced for the UI.
     """
-    try:
-        active = task_lib.list_tasks()
-        archived = task_lib.list_archived(limit=1000)
-    except Exception as e:
-        _error_response(handler, f"Failed to gather tasks: {e}", status=500)
-        return
-
+    active = task_lib.list_tasks()
+    archived = task_lib.list_archived(limit=1000)
     judged = [t for t in (active + archived) if t.get("judge_score") is not None]
-
-    lf = _get_langfuse()
-
-    # One global score pull → {traceId: [human-feedback]}, reused for every task.
-    hf_by_trace = {}
-    if lf is not None:
-        try:
-            from langfuse_client import list_scores
-            for s in list_scores():
-                if s.get("name") == "human-feedback":
-                    try:
-                        hf_by_trace.setdefault(s.get("traceId"), []).append(
-                            {"value": float(s.get("value")), "comment": s.get("comment") or ""})
-                    except (TypeError, ValueError):
-                        pass
-        except Exception:
-            pass
-
-    groups = {}
-    disagreements = []
-
+    groups, disagreements = {}, []
     for t in judged:
         gkey = _task_type_of(t)
-        g = groups.setdefault(gkey, {
-            "task_type": gkey, "count": 0, "scores": [], "scored_at": [],
-            # Dimension keys are kind-specific (document vs message); collect
-            # whatever keys appear so the scoreboard isn't locked to one set.
-            "dimensions": {},
-            "phase": "Shadow", "agree": 0, "disagree": 0,
-        })
+        g = groups.setdefault(gkey, {"task_type": gkey, "count": 0, "scores": [],
+                                     "scored_at": [], "dimensions": {},
+                                     "agree": 0, "disagree": 0})
         try:
             score = float(t["judge_score"])
         except (TypeError, ValueError):
@@ -276,23 +229,20 @@ def handle_quality(handler):
                         g["dimensions"].setdefault(k, []).append(float(v))
                     except (TypeError, ValueError):
                         pass
-
-        # Agreement: compare the human 👍/👎 (if any) to the judge's verdict.
-        if lf is not None and hf_by_trace:
-            fb = _human_feedback_for_task(lf, t["id"], hf_by_trace)
-            if fb:
-                human_positive = fb[0]["value"] == 1.0
-                judge_positive = score >= JUDGE_GOOD_THRESHOLD
-                if human_positive == judge_positive:
-                    g["agree"] += 1
-                else:
-                    g["disagree"] += 1
-                    disagreements.append({
-                        "task_id": t["id"], "title": t.get("title", ""),
-                        "task_type": gkey, "judge_score": score,
-                        "judge_why": t.get("judge_why", ""),
-                        "human_value": fb[0]["value"], "human_comment": fb[0]["comment"],
-                    })
+        # Agreement: compare the human 👍/👎 (from frontmatter) to the judge.
+        react = t.get("human_react")
+        if react in ("up", "down"):
+            human_positive = react == "up"
+            judge_positive = score >= JUDGE_GOOD_THRESHOLD
+            if human_positive == judge_positive:
+                g["agree"] += 1
+            else:
+                g["disagree"] += 1
+                disagreements.append({
+                    "task_id": t["id"], "title": t.get("title", ""), "task_type": gkey,
+                    "judge_score": score, "judge_why": t.get("judge_why", ""),
+                    "human_value": 1 if human_positive else 0,
+                    "human_comment": t.get("human_react_note", "")})
 
     def avg(xs):
         return round(sum(xs) / len(xs), 1) if xs else None
@@ -300,7 +250,6 @@ def handle_quality(handler):
     rows = []
     for g in groups.values():
         scores = g["scores"]
-        # Trend: mean of the newer half minus the older half (by scored_at).
         order = sorted(range(len(scores)), key=lambda i: g["scored_at"][i])
         ordered = [scores[i] for i in order]
         trend = None
@@ -311,27 +260,24 @@ def handle_quality(handler):
                 trend = round((sum(newer) / len(newer)) - (sum(older) / len(older)), 1)
         reacted = g["agree"] + g["disagree"]
         rows.append({
-            "task_type": g["task_type"],
-            "count": g["count"],
-            "avg_score": avg(scores),
-            "trend": trend,
-            # Chronological score history (oldest→newest) so the sparkline can
-            # SHOW the trend. Capped to the last 8 points; the UI slices too.
-            "history": [round(v, 1) for v in ordered[-8:]],
-            "phase": g["phase"],
+            "task_type": g["task_type"], "count": g["count"], "avg_score": avg(scores),
+            "trend": trend, "history": [round(v, 1) for v in ordered[-8:]],
+            "phase": ladder_lib.tier_of(g["task_type"], path=ladder_path),
             "dimensions": {k: avg(v) for k, v in g["dimensions"].items()},
             "agreement_pct": round(100 * g["agree"] / reacted) if reacted else None,
-            "reacted": reacted,
-        })
-
+            "reacted": reacted})
     rows.sort(key=lambda r: r["count"], reverse=True)
     disagreements.sort(key=lambda d: d["judge_score"])
-    _json_response(handler, {
-        "groups": rows,
-        "disagreements": disagreements,
-        "total_judged": len(judged),
-        "langfuse": lf is not None,
-    })
+    return {"groups": rows, "disagreements": disagreements,
+            "total_judged": len(judged), "langfuse": _get_langfuse() is not None}
+
+
+def handle_quality(handler):
+    """GET /api/quality — read-only shadow-judge scoreboard, frontmatter-sourced."""
+    try:
+        _json_response(handler, build_quality())
+    except Exception as e:
+        _error_response(handler, f"Failed to gather tasks: {e}", status=500)
 
 
 def handle_get_task(handler, task_id):
@@ -540,6 +486,186 @@ def handle_dispatch_task(handler, task_id):
         "status": "ok",
         "message": f"Agent dispatched for {task_id}",
     })
+
+
+# ─── Card actions: accept → apply → receipt → undo, and graduate ─────────────
+# These power the recommendation/receipt/graduation card types. The git path runs
+# with `git -C PM_OS_DIR`; tests monkeypatch PM_OS_DIR to a throwaway repo.
+
+def apply_recommendation(task_id):
+    """Accept a recommendation: git apply its patch, commit, spawn a receipt card.
+
+    Returns the receipt task id. Raises RuntimeError on a patch that won't apply
+    (the handler maps that to a 409).
+
+    Working-tree assumption: `git add -A` stages ALL working-tree changes, so the
+    accept-commit (and therefore the receipt's one-tap Undo) assumes a clean tree —
+    unrelated edits would get swept into this commit. Acceptable for Phase 4 (single
+    user, deliberate action); Phase 6 should scope the commit to the patch's files.
+
+    Partial-failure rollback: if any step after `git apply` fails (including a commit
+    that has nothing staged — e.g. a patch touching only gitignored paths), the
+    working tree is hard-reset to HEAD (`git reset --hard HEAD`) before raising a
+    RuntimeError. This relies on the same clean-working-tree assumption above —
+    reset --hard would also discard unrelated working-tree edits, which is acceptable
+    for Phase 4 but is another reason Phase 6 should scope the commit.
+    """
+    t = task_lib.read_task(task_id)["frontmatter"]
+    patch_path = t.get("patch_path")
+    if not patch_path:
+        raise ValueError("No patch to apply automatically — apply this change by hand per the card's notes, then dismiss it.")
+    abspath = patch_path if os.path.isabs(patch_path) else os.path.join(PM_OS_DIR, patch_path)
+    chk = subprocess.run(["git", "-C", PM_OS_DIR, "apply", "--check", abspath],
+                         capture_output=True, text=True)
+    if chk.returncode != 0:
+        raise RuntimeError(f"patch does not apply cleanly: {chk.stderr.strip()[:300]}")
+    # Pre-gate passed; apply for real. From here on, a failure leaves the tree dirty,
+    # so any failure rolls back to HEAD before raising (RuntimeError -> 409).
+    subprocess.run(["git", "-C", PM_OS_DIR, "apply", abspath], check=True, capture_output=True, text=True)
+    try:
+        subprocess.run(["git", "-C", PM_OS_DIR, "add", "-A"], check=True, capture_output=True, text=True)
+        # `git diff --cached --quiet` returns 0 when NOTHING is staged.
+        staged = subprocess.run(["git", "-C", PM_OS_DIR, "diff", "--cached", "--quiet"],
+                                capture_output=True, text=True)
+        if staged.returncode == 0:
+            raise RuntimeError("patch produced no committable changes")
+        msg = f"apply recommendation {task_id}: {t.get('title', '')}"
+        subprocess.run(["git", "-C", PM_OS_DIR, "commit", "-m", msg], check=True, capture_output=True, text=True)
+        rev = subprocess.run(["git", "-C", PM_OS_DIR, "rev-parse", "HEAD"],
+                             check=True, capture_output=True, text=True).stdout.strip()
+    except Exception as e:
+        # Roll back the half-applied change so a failed accept never strands the tree.
+        subprocess.run(["git", "-C", PM_OS_DIR, "reset", "--hard", "HEAD"],
+                       capture_output=True, text=True)
+        raise RuntimeError(str(e)) if not isinstance(e, RuntimeError) else e
+    # Commit landed; archive the recommendation so it leaves the actionable lanes.
+    task_lib.complete_task(task_id, actor="human")
+    receipt_id, _ = task_lib.create_task(
+        f"Applied: {t.get('title', '')}", queue="human", domain="ops", creator="agent",
+        description=f"Applied recommendation {task_id}. One-tap Undo reverts it.",
+        card_type="receipt")
+    task_lib.update_task(receipt_id, changes={"revert_commit": rev, "source_recommendation": task_id})
+    return receipt_id
+
+
+def undo_receipt(task_id):
+    """Undo a receipt: git revert the commit it recorded, mark the receipt done."""
+    t = task_lib.read_task(task_id)["frontmatter"]
+    rev = t.get("revert_commit")
+    if not rev:
+        raise ValueError("no revert_commit on this receipt")
+    rv = subprocess.run(["git", "-C", PM_OS_DIR, "revert", "--no-edit", rev],
+                        capture_output=True, text=True)
+    if rv.returncode != 0:
+        # A later commit touched the same lines: the revert conflicted and left the
+        # tree half-reverted (REVERT_HEAD + conflict markers). Abort to restore it,
+        # best-effort, then surface a 409 (same RuntimeError type accept uses).
+        subprocess.run(["git", "-C", PM_OS_DIR, "revert", "--abort"],
+                       capture_output=True, text=True)
+        raise RuntimeError("Couldn't undo automatically - later changes conflict; revert by hand.")
+    task_lib.update_task(task_id, changes={"status": "done"}, comment="Undone - reverted", actor="human")
+
+
+def graduate_card(task_id, ladder_path=None):
+    """Graduate a task-type to its proposed tier in the ladder store."""
+    t = task_lib.read_task(task_id)["frontmatter"]
+    task_type = t.get("grad_task_type")
+    proposed = t.get("grad_proposed_tier")
+    if not task_type or not proposed:
+        raise ValueError("graduation card missing grad_task_type / grad_proposed_tier")
+    ladder_lib.set_tier(task_type, proposed, path=ladder_path)
+    # Archive so the graduation card leaves the actionable lanes.
+    task_lib.complete_task(task_id, actor="human")
+
+
+def handle_accept(handler, task_id):
+    """POST /api/tasks/{id}/accept — apply a recommendation's patch, spawn a receipt."""
+    try:
+        receipt_id = apply_recommendation(task_id)
+    except (ValueError, RuntimeError) as e:
+        # ValueError: no patch to auto-apply (prose-only card). RuntimeError: patch
+        # won't apply / nothing to commit. Both are operator-actionable — surface the
+        # plain reason as a 409, not an opaque 500.
+        _error_response(handler, str(e), status=409)
+        return
+    except Exception as e:
+        _error_response(handler, f"Accept failed: {e}", status=500)
+        return
+    _json_response(handler, {"ok": True, "receipt_id": receipt_id})
+
+
+def handle_reject(handler, task_id):
+    """POST /api/tasks/{id}/reject — dismiss a recommendation (no git)."""
+    try:
+        task_lib.cancel_task(task_id, reason="rejected", actor="human")
+    except Exception as e:
+        _error_response(handler, f"Reject failed: {e}", status=500)
+        return
+    _json_response(handler, {"ok": True})
+
+
+def handle_graduate(handler, task_id):
+    """POST /api/tasks/{id}/graduate — advance a task-type to its proposed tier."""
+    try:
+        graduate_card(task_id)
+    except Exception as e:
+        _error_response(handler, f"Graduate failed: {e}", status=500)
+        return
+    _json_response(handler, {"ok": True})
+
+
+def handle_keep(handler, task_id):
+    """POST /api/tasks/{id}/keep — dismiss a receipt, keeping the applied change."""
+    try:
+        task_lib.complete_task(task_id, actor="human")
+    except Exception as e:
+        _error_response(handler, f"Keep failed: {e}", status=500)
+        return
+    _json_response(handler, {"ok": True})
+
+
+def handle_undo(handler, task_id):
+    """POST /api/tasks/{id}/undo — revert the commit a receipt recorded."""
+    try:
+        undo_receipt(task_id)
+    except RuntimeError as e:
+        # Conflict on revert — surface the plain reason as a 409.
+        _error_response(handler, str(e), status=409)
+        return
+    except Exception as e:
+        _error_response(handler, f"Undo failed: {e}", status=500)
+        return
+    _json_response(handler, {"ok": True})
+
+
+def handle_react(handler, task_id):
+    """POST /api/tasks/{id}/react — record human 👍/👎 + optional note to frontmatter."""
+    body = _read_request_body(handler)
+    react = body.get("react")
+    note = body.get("note") or None
+    if react not in ("up", "down"):
+        _error_response(handler, "react must be 'up' or 'down'")
+        return
+    try:
+        task_lib.react_to_task(task_id, react, note=note)
+    except Exception as e:
+        _error_response(handler, f"React failed: {e}", status=500)
+        return
+    # Silent LangFuse mirror (opt-in): score the worker-execution trace if enabled.
+    try:
+        from langfuse_client import get_langfuse, score_trace
+        lf = get_langfuse()
+        if lf is not None:
+            result = lf.api.trace.list(session_id=task_id, order_by="timestamp.desc")
+            traces = result.data if hasattr(result, "data") else []
+            for t in traces:
+                if str(getattr(t, "name", "")).startswith("worker-execution"):
+                    score_trace(getattr(t, "id", None), "human-feedback",
+                                1.0 if react == "up" else 0.0, comment=note or "", data_type="NUMERIC")
+                    break
+    except Exception:
+        pass
+    _json_response(handler, {"ok": True, "task_id": task_id, "react": react})
 
 
 def handle_rerun_task(handler, task_id):
@@ -1377,6 +1503,30 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
                 _error_response(self, "Invalid task ID format", status=400)
             else:
                 handle_dispatch_task(self, task_id)
+            return True
+
+        # Match /api/tasks/{id}/react
+        match = re.match(r"^/api/tasks/([^/]+)/react$", path)
+        if match and method == "POST":
+            task_id = _parse_task_id(match.group(1))
+            if task_id is None:
+                _error_response(self, "Invalid task ID format", status=400)
+            else:
+                handle_react(self, task_id)
+            return True
+
+        # Match card-action verbs: /api/tasks/{id}/{accept|reject|graduate|keep|undo}
+        _card_handlers = {
+            "accept": handle_accept, "reject": handle_reject,
+            "graduate": handle_graduate, "keep": handle_keep, "undo": handle_undo,
+        }
+        match = re.match(r"^/api/tasks/([^/]+)/(accept|reject|graduate|keep|undo)$", path)
+        if match and method == "POST":
+            task_id = _parse_task_id(match.group(1))
+            if task_id is None:
+                _error_response(self, "Invalid task ID format", status=400)
+            else:
+                _card_handlers[match.group(2)](self, task_id)
             return True
 
         # Match /api/tasks/{id}/rerun

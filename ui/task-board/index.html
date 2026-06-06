@@ -334,6 +334,13 @@
   .card-action.primary { color: var(--accent); }
   .card-action.primary:hover { background: var(--accent-soft); border-color: color-mix(in oklab, var(--accent) 40%, transparent); }
 
+  /* ─── Card faces: diff / preview / agreement (Phase 4, minimal) ───────── */
+  .card-body { margin-top: 10px; font-size: 11.5px; color: var(--text-muted); line-height: 1.5; }
+  .rec-line, .receipt-line, .grad-stat { display: block; }
+  .grad-stat + .grad-stat { margin-top: 3px; }
+  .rec-patch { color: var(--text); font-family: var(--mono, ui-monospace, monospace); }
+  .card-body-agreement .grad-stat b { color: var(--text); }
+
   /* ─── Modal ────────────────────────────────────────────────────────── */
   .modal-overlay {
     display: none; position: fixed; inset: 0;
@@ -878,6 +885,13 @@
   .dt-sum-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .dt-sum-k { font-size: 11px; color: var(--text-dim); }
   .dt-sum-v { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+
+  /* ── Human react — per-task 👍/👎 + optional note ─────────────────── */
+  .react-row { display: flex; align-items: center; gap: 8px; }
+  .react-btn { font-size: 16px; line-height: 1; padding: 6px 10px; border-radius: 9px; border: 1px solid var(--border-soft); background: var(--surface-hover); cursor: pointer; transition: border-color 120ms var(--ease, ease), background 120ms var(--ease, ease); }
+  .react-btn:hover { border-color: var(--accent); }
+  .react-btn.active { border-color: var(--accent); background: var(--accent-soft); }
+  .react-note { flex: 1; min-width: 0; font-size: 13px; padding: 7px 10px; border-radius: 9px; border: 1px solid var(--border-soft); background: var(--surface); color: var(--text); }
 
   /* ── Thread — activity + comments, one calm timeline, no left bar ── */
   .dt-thread { display: flex; flex-direction: column; }

@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
 """
-eval_digest.py — Deterministic LangFuse negative-signal pull for the weekly
-feedback-loop improvement pass (ROADMAP §1 / cron #5).
+eval_digest.py — Deterministic negative-signal pull for the weekly feedback-loop
+improvement pass (ROADMAP §1 / cron #5).
 
-Reads human annotations (thumbs-down + free-text) that have landed on LangFuse
-traces, joins each to its originating PM-OS task, clusters by pipeline step and
-by worker, and writes structured raw material for the eval-analyst worker to
-turn into recommendations. No LLM here — this is the deterministic data layer.
+Reads negative eval signal from TASK FRONTMATTER (not LangFuse): judge scores
+written by judge.py (judge_score / judge_why / judge_kind / judge_scored_at) and
+human reactions written by the task board (human_react / human_react_note /
+human_reacted_at). A task is negative when its judge_score is below
+JUDGE_GOOD_THRESHOLD or a human reacted thumbs-down. Negative tasks are clustered
+by pipeline step (judge_kind) and by worker/task-type, producing structured raw
+material for the eval-analyst worker. No LLM here — deterministic data layer.
 
-Scores read (written by task_server.py):
-    human-feedback   NUMERIC      1 = 👍, 0 = 👎
-    human-annotation CATEGORICAL  category + free-text comment
-
-Reads go through the LangFuse REST API directly. The Python SDK's read surface
-changed across v3/v4 (attribute is `scores` vs `score`, etc.) and is unreliable;
-the REST API is stable across versions — same approach langfuse_client.py takes
-for writes. Driving off the /scores endpoint (which returns each score's
-traceId) is also far cheaper than walking every trace.
+Reading from frontmatter (via task_lib's list_tasks/list_archived projections)
+means teammates without a running LangFuse stack still get a useful digest. The
+output shape (digest.json / digest.md keys) is unchanged so the downstream
+eval-analyst worker contract holds.
 
 Usage:
     python3 scripts/eval_digest.py                  # last 7 days
@@ -28,169 +26,104 @@ Outputs (to --out, default datasets/evals/feedback-loop/{date}[-backfill]/):
     digest.json   structured, for the agent
     digest.md     human-readable
 
-Exit 0 even when LangFuse is unavailable (writes a stub report) — safe under
-headless cron dispatch.
+Exit 0 even on error (writes a stub report) — safe under headless cron dispatch.
 """
 
 import argparse
-import base64
 import json
-import os
 import sys
-import urllib.parse
-import urllib.request
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+import task_lib
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
-TASKS_DIR = PROJECT_DIR / "datasets" / "tasks"
 FEEDBACK_DIR = PROJECT_DIR / "datasets" / "evals" / "feedback-loop"
-ENV_FILE = PROJECT_DIR / ".env.langfuse"
 
-PAGE_LIMIT = 100
-MAX_PAGES = 200  # safety cap: PAGE_LIMIT * MAX_PAGES scores
-
-
-# ── Env / REST ────────────────────────────────────────────────────────────────
-
-def load_env():
-    """Load .env.langfuse into os.environ (export KEY=VALUE or KEY=VALUE)."""
-    if not ENV_FILE.exists():
-        return
-    for line in ENV_FILE.read_text().splitlines():
-        line = line.strip()
-        if line.startswith("#") or "=" not in line:
-            continue
-        line = line.removeprefix("export ")
-        key, _, val = line.partition("=")
-        val = val.strip().strip('"').strip("'")
-        os.environ.setdefault(key.strip(), val)
-
-
-def _auth_header():
-    pk = os.environ.get("LANGFUSE_PUBLIC_KEY", "")
-    sk = os.environ.get("LANGFUSE_SECRET_KEY", "")
-    if not sk:
-        return None
-    return "Basic " + base64.b64encode(f"{pk}:{sk}".encode()).decode()
-
-
-def rest_get(path, params=None):
-    """GET the LangFuse public REST API. Returns parsed JSON or None."""
-    auth = _auth_header()
-    if auth is None:
-        return None
-    host = os.environ.get("LANGFUSE_HOST", "http://localhost:3000")
-    url = f"{host}/api/public{path}"
-    if params:
-        url += "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
-    req = urllib.request.Request(url, headers={"Authorization": auth}, method="GET")
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        return json.loads(resp.read().decode("utf-8"))
-
-
-# ── Fetch ─────────────────────────────────────────────────────────────────────
-
-def fetch_scores(from_ts=None):
-    """Page through /scores newest-first. Returns list of score dicts.
-
-    Each: {name, value, comment, traceId, timestamp, dataType}.
-    from_ts: ISO string to filter by score timestamp, or None for all history.
-    """
-    scores = []
-    first = rest_get("/scores", {"limit": PAGE_LIMIT, "page": 1, "fromTimestamp": from_ts})
-    if first is None:
-        return None  # signals unavailable
-    total_pages = first.get("meta", {}).get("totalPages", 1)
-    scores.extend(first.get("data", []))
-    for page in range(2, min(total_pages, MAX_PAGES) + 1):
-        batch = rest_get("/scores", {"limit": PAGE_LIMIT, "page": page, "fromTimestamp": from_ts})
-        if not batch:
-            break
-        scores.extend(batch.get("data", []))
-    return scores
-
-
-_TRACE_CACHE = {}
-
-
-def fetch_trace(trace_id):
-    """GET a single trace; cached. Returns dict or None."""
-    if not trace_id:
-        return None
-    if trace_id in _TRACE_CACHE:
-        return _TRACE_CACHE[trace_id]
-    try:
-        t = rest_get(f"/traces/{urllib.parse.quote(trace_id)}")
-    except Exception:
-        t = None
-    _TRACE_CACHE[trace_id] = t
-    return t
-
-
-# ── Task join ─────────────────────────────────────────────────────────────────
-
-_TASK_INDEX = None
-
-
-def find_task(task_id):
-    """Locate a task file by id under datasets/tasks/** and pull light metadata."""
-    global _TASK_INDEX
-    if not task_id:
-        return None
-    if _TASK_INDEX is None:
-        _TASK_INDEX = {p.stem: p for p in TASKS_DIR.glob("**/*.md")}
-    path = _TASK_INDEX.get(task_id)
-    if not path:
-        return None
-    title = queue = domain = tags = ""
-    try:
-        text = path.read_text(errors="replace")
-        if text.startswith("---"):
-            fm = text.split("---", 2)[1]
-            for line in fm.splitlines():
-                k, _, v = line.partition(":")
-                k = k.strip().lower()
-                v = v.strip().strip('"').strip("'")
-                if k == "title":
-                    title = v
-                elif k == "queue":
-                    queue = v
-                elif k == "domain":
-                    domain = v
-                elif k == "tags":
-                    tags = v
-    except Exception:
-        pass
-    return {"task_id": task_id, "title": title, "queue": queue,
-            "domain": domain, "tags": tags,
-            "path": str(path.relative_to(PROJECT_DIR))}
+JUDGE_GOOD_THRESHOLD = 7  # mirror task_server.JUDGE_GOOD_THRESHOLD
 
 
 # ── Signal logic ──────────────────────────────────────────────────────────────
 
-def is_negative(score):
-    """thumbs-down, or any human-annotation (annotations are signal by definition)."""
-    name = (score.get("name") or "").lower()
-    val = score.get("value")
-    if name == "human-feedback":
+def _is_negative(t):
+    s = t.get("judge_score")
+    if s is not None:
         try:
-            return float(val) == 0.0
+            if float(s) < JUDGE_GOOD_THRESHOLD:
+                return True
         except (TypeError, ValueError):
-            return False
-    if name == "human-annotation":
+            pass
+    return t.get("human_react") == "down"
+
+
+def _within_window(t, cutoff_iso):
+    if cutoff_iso is None:
         return True
-    return False
+    stamp = t.get("judge_scored_at") or t.get("human_reacted_at") or t.get("updated") or ""
+    return stamp >= cutoff_iso
 
 
-def summarize(data, limit=240):
-    if data is None:
-        return ""
-    if isinstance(data, (dict, list)):
-        return json.dumps(data, default=str)[:limit]
-    return str(data)[:limit]
+def build_digest(window_days=7, all_history=False, out_dir=None):
+    """Scan judged task frontmatter, cluster negative signal by step + worker.
+
+    Returns the payload dict and writes digest.json + digest.md to out_dir.
+    """
+    now = datetime.now(timezone.utc)
+    if all_history:
+        cutoff_iso, window_label = None, "all history"
+    else:
+        cutoff = now - timedelta(days=window_days)
+        cutoff_iso = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
+        window_label = f"last {window_days} days (since {cutoff.strftime('%Y-%m-%d')})"
+
+    out = Path(out_dir) if out_dir else (FEEDBACK_DIR / now.strftime("%Y-%m-%d"))
+
+    active = task_lib.list_tasks()
+    archived = task_lib.list_archived(limit=2000)
+    judged = [t for t in (active + archived)
+              if (t.get("judge_score") is not None or t.get("human_react"))]
+    judged = [t for t in judged if _within_window(t, cutoff_iso)]
+    flagged = [t for t in judged if _is_negative(t)]
+
+    by_step = defaultdict(lambda: {"flagged": 0, "comments": []})
+    by_worker = defaultdict(lambda: {"flagged": 0})
+    flagged_out = []
+    for t in flagged:
+        step = t.get("judge_kind") or "unknown"
+        group = t.get("task_type") or t.get("domain") or "uncategorized"
+        by_step[step]["flagged"] += 1
+        note = (t.get("human_react_note") or "").strip()
+        why = (t.get("judge_why") or "").strip()
+        for c in (note, why):
+            if c:
+                by_step[step]["comments"].append(c)
+        by_worker[group]["flagged"] += 1
+        flagged_out.append({
+            "trace_id": t["id"], "step": step, "session_id": t["id"],
+            "task": {"task_id": t["id"], "title": t.get("title", ""),
+                     "domain": t.get("domain", ""), "queue": t.get("queue", "")},
+            "worker": group, "timestamp": t.get("judge_scored_at", ""),
+            "negative_scores": [
+                {"name": "judge", "value": t.get("judge_score"), "comment": why},
+            ] + ([{"name": "human", "value": 0, "comment": note}] if t.get("human_react") == "down" else []),
+            "output_summary": (t.get("agent_output") or "")[:240],
+        })
+
+    flagged_out.sort(key=lambda r: r["timestamp"] or "", reverse=True)
+    payload = {
+        "generated": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "window": window_label,
+        "status": "ok" if flagged_out else "clean",
+        "totals": {"negative_scores": sum(len(r["negative_scores"]) for r in flagged_out),
+                   "flagged_traces": len(flagged_out)},
+        "by_step": dict(by_step), "by_worker": dict(by_worker), "flagged": flagged_out,
+    }
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "digest.json").write_text(json.dumps(payload, indent=2, default=str))
+    _write_markdown(out / "digest.md", payload)
+    return payload
 
 
 # ── Output ────────────────────────────────────────────────────────────────────
@@ -255,24 +188,21 @@ def _write_markdown(path, payload):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    ap = argparse.ArgumentParser(description="LangFuse negative-signal digest")
+    ap = argparse.ArgumentParser(description="Task-frontmatter negative-signal digest")
     ap.add_argument("--days", type=int, default=7, help="lookback window in days (default 7)")
     ap.add_argument("--all", action="store_true", help="full history (ignore --days)")
     ap.add_argument("--out", default=None,
                     help="output dir (default datasets/evals/feedback-loop/{date}[-backfill])")
     args = ap.parse_args()
 
-    load_env()
     now = datetime.now(timezone.utc)
     date_slug = now.strftime("%Y-%m-%d")
 
     if args.all:
-        from_ts = None
         window_label = "all history"
         default_out = FEEDBACK_DIR / f"{date_slug}-backfill"
     else:
         cutoff = now - timedelta(days=args.days)
-        from_ts = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
         window_label = f"last {args.days} days (since {cutoff.strftime('%Y-%m-%d')})"
         default_out = FEEDBACK_DIR / date_slug
 
@@ -280,89 +210,18 @@ def main():
     if not out_dir.is_absolute():
         out_dir = PROJECT_DIR / out_dir
 
-    if _auth_header() is None:
-        write_stub(out_dir, "LANGFUSE_SECRET_KEY not set", window_label)
-        return 0
-
     try:
-        scores = fetch_scores(from_ts)
+        payload = build_digest(window_days=args.days, all_history=args.all, out_dir=str(out_dir))
     except Exception as e:
-        write_stub(out_dir, f"LangFuse unreachable: {e}", window_label)
-        return 0
-    if scores is None:
-        write_stub(out_dir, "LangFuse unreachable", window_label)
+        write_stub(out_dir, f"digest build failed: {e}", window_label)
         return 0
 
-    # Group negative scores by trace
-    neg_by_trace = defaultdict(list)
-    for s in scores:
-        if is_negative(s):
-            neg_by_trace[s.get("traceId")].append({
-                "name": s.get("name"), "value": s.get("value"),
-                "comment": s.get("comment") or "", "data_type": s.get("dataType"),
-                "timestamp": s.get("timestamp"),
-            })
-
-    flagged = []
-    negative_scores = 0
-    by_step = defaultdict(lambda: {"flagged": 0, "comments": []})
-    by_worker = defaultdict(lambda: {"flagged": 0})
-
-    for trace_id, neg in neg_by_trace.items():
-        if not trace_id:
-            continue
-        negative_scores += len(neg)
-        t = fetch_trace(trace_id) or {}
-        step = t.get("name") or "unknown"
-        session_id = t.get("sessionId")
-        task = find_task(session_id)
-        metadata = t.get("metadata") or {}
-        worker = ""
-        if isinstance(metadata, dict):
-            worker = metadata.get("worker") or metadata.get("worker_name") or ""
-
-        flagged.append({
-            "trace_id": trace_id,
-            "step": step,
-            "session_id": session_id,
-            "task": task,
-            "worker": worker,
-            "timestamp": t.get("timestamp", ""),
-            "level": t.get("level", "DEFAULT"),
-            "input_summary": summarize(t.get("input")),
-            "output_summary": summarize(t.get("output")),
-            "negative_scores": neg,
-        })
-        by_step[step]["flagged"] += 1
-        for s in neg:
-            c = (s.get("comment") or "").strip()
-            if c:
-                by_step[step]["comments"].append(c)
-        group = worker or (task["domain"] if task and task.get("domain") else "") or step
-        by_worker[group]["flagged"] += 1
-
-    flagged.sort(key=lambda r: r["timestamp"], reverse=True)
-
-    payload = {
-        "generated": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "window": window_label,
-        "status": "ok" if flagged else "clean",
-        "totals": {"negative_scores": negative_scores, "flagged_traces": len(flagged)},
-        "by_step": dict(by_step),
-        "by_worker": dict(by_worker),
-        "flagged": flagged,
-    }
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "digest.json").write_text(json.dumps(payload, indent=2, default=str))
-    _write_markdown(out_dir / "digest.md", payload)
-
-    print(f"[eval_digest] window={window_label}")
-    print(f"[eval_digest] scanned {len(scores)} scores, "
-          f"flagged {len(flagged)} traces with {negative_scores} negative scores")
-    if by_step:
+    print(f"[eval_digest] window={payload['window']}")
+    print(f"[eval_digest] flagged {payload['totals']['flagged_traces']} tasks "
+          f"with {payload['totals']['negative_scores']} negative scores")
+    if payload["by_step"]:
         print("[eval_digest] by step:")
-        for step, d in sorted(by_step.items(), key=lambda kv: -kv[1]["flagged"]):
+        for step, d in sorted(payload["by_step"].items(), key=lambda kv: -kv[1]["flagged"]):
             print(f"    {step}: {d['flagged']}")
     print(f"[eval_digest] wrote {out_dir}/digest.json + digest.md")
     return 0

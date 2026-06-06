@@ -28,10 +28,13 @@ const _cardRegistryPromise = fetch('/cardtypes/registry.json')
   .then(reg => {
     _cardRegistry = reg;
     _cardRegistryReady = true;
-    // If tasks already rendered against the fallback, re-render now that the
-    // registry is authoritative. Harmless no-op if fetchTasks isn't defined yet.
+    // If tasks already rendered against the fallback, refresh the Now and Board
+    // views now that the registry is authoritative. A no-op today (fallback ≡
+    // registry for the only live `task` card type), but correct once non-task
+    // types ship. Each call is guarded so it's safe if the fn isn't present yet.
     if (typeof fetchTasks === 'function' && typeof allTasks !== 'undefined' && Array.isArray(allTasks) && allTasks.length) {
       if (typeof renderNow === 'function') renderNow();
+      if (typeof renderBoard === 'function') renderBoard();
     }
     return reg;
   })
@@ -221,7 +224,6 @@ function renderCardFromRegistry(task, queueName) {
   const slotOrder = reg.slotOrder || _FALLBACK_REGISTRY.slotOrder;
 
   const q = QUEUE_META[task.queue] || QUEUE_META[queueName] || QUEUE_META.human;
-  const prioClass = `prio-${task.priority || 'low'}`; // (unused; parity w/ board.js scope)
 
   const slots = {
     head:    () => _renderHead(task, q),

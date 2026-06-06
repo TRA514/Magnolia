@@ -26,7 +26,7 @@ MAX_HISTORY = 50
 
 VALID_QUEUES = ["human", "agent", "collab", "waiting"]
 VALID_PRIORITIES = ["critical", "high", "medium", "low"]
-VALID_DOMAINS = ["product", "strategy", "marketing", "recruiting", "metrics", "learning", "ops"]
+VALID_DOMAINS = ["product", "strategy", "marketing", "recruiting", "metrics", "learning", "ops", "onboarding"]
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────

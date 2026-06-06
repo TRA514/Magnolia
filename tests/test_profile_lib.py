@@ -96,3 +96,45 @@ def test_provider_handles_null_value(tmp_path):
     (tmp_path / "profile" / "integrations.yaml").write_text("project_management:\n")
     assert profile_lib.provider("project_management", root=str(tmp_path)) == "none"
     assert profile_lib.jira_config(root=str(tmp_path)) == {}
+
+
+def test_server_port_default(tmp_path):
+    (tmp_path / "profile").mkdir()
+    assert profile_lib.server_port(root=str(tmp_path)) == 8742
+
+
+def test_server_port_from_config(profile_root):
+    # profile_root fixture defines a server block with port 8755
+    assert profile_lib.server_port(root=profile_root) == 8755
+
+
+def test_transcript_config_defaults(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "integrations.yaml").write_text("transcript:\n  provider: otter\n")
+    tc = profile_lib.transcript_config(root=str(tmp_path))
+    assert tc["provider"] == "otter"
+    assert tc["target"] == "datasets/meetings/"  # default applied
+
+
+def test_transcript_dir_under_profile(tmp_path):
+    (tmp_path / "profile").mkdir()
+    d = profile_lib.transcript_state_dir(root=str(tmp_path))
+    assert d.endswith("/profile/transcript")
+
+
+def test_doc_sync_config_from_integrations(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "integrations.yaml").write_text(
+        "doc_sync:\n"
+        "  onedrive_root: \"~/Library/CloudStorage/OneDrive-Acme\"\n"
+        "  sharepoint_site: \"PM-OS\"\n"
+        "  enabled: true\n"
+    )
+    dc = profile_lib.doc_sync_config(root=str(tmp_path))
+    assert dc["sharepoint_site"] == "PM-OS"
+    assert dc["enabled"] is True
+
+
+def test_doc_sync_config_defaults_disabled(tmp_path):
+    (tmp_path / "profile").mkdir()
+    assert profile_lib.doc_sync_config(root=str(tmp_path))["enabled"] is False

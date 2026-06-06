@@ -5,8 +5,11 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 QMD=/opt/homebrew/bin/qmd
-PMDIR="$HOME/pm-os"
+PMDIR="$REPO"
 
 echo "Setting up QMD collections for PM-OS..."
 echo

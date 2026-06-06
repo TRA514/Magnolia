@@ -10,7 +10,8 @@
 # Loaded by ~/Library/LaunchAgents/com.jayjenkins.task-server.plist (KeepAlive).
 set -euo pipefail
 
-REPO="/Users/jayjenkins/pm-os"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO"
 
 # Ensure the claude binary and homebrew python are reachable under launchd.

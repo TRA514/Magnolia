@@ -40,7 +40,7 @@ ARCHIVE_DIR = os.path.join(TASKS_DIR, "_archive")
 QUEUES = ["human", "agent", "collab", "waiting"]
 STATUSES = ["open", "in-progress", "blocked", "done", "cancelled"]
 PRIORITIES = ["critical", "high", "medium", "low"]
-DOMAINS = ["product", "strategy", "marketing", "recruiting", "metrics", "learning", "ops"]
+DOMAINS = ["product", "strategy", "marketing", "recruiting", "metrics", "learning", "ops", "onboarding"]
 AGENT_STATUSES = ["queued", "running", "blocked", "needs-human", "complete", "failed"]
 
 PRIORITY_ORDER = {p: i for i, p in enumerate(PRIORITIES)}

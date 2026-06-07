@@ -55,3 +55,28 @@ def test_factory_skills_in_core_pack():
     core = packs["core"]["skills"]
     assert "meta-factory-core" in core
     assert "meta-create-worker" in core
+
+
+def test_meta_create_card_type_exists_and_frontmatter():
+    body = _read(".claude/skills/meta-create-card-type/SKILL.md")
+    assert body.startswith("---\n")
+    fm = body.split("---\n", 2)[1]
+    assert "name: meta-create-card-type" in fm
+    assert "Use when" in fm
+    assert "meta-factory-core" in body
+    assert "factory_lib" in body
+    assert "card_schema" in body
+    assert "registry.json" in body
+    # composition-only is explicit + the out-of-scope refusal is stated
+    assert "composition" in body.lower()
+    assert "zero new render code" in body or "no JS" in body or "no new JS" in body
+
+
+def test_meta_create_card_type_lists_only_existing_pieces():
+    """The skill must enumerate the real signals/actions/body-renderers so the
+    agent composes from them and doesn't invent new ones."""
+    body = _read(".claude/skills/meta-create-card-type/SKILL.md")
+    for renderer in ("diff", "preview", "agreement"):
+        assert renderer in body
+    for action in ("mark_done", "accept", "keep", "undo", "graduate"):
+        assert action in body

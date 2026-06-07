@@ -84,7 +84,7 @@ timeout: 600
 max_turns: 30
 ---
 
-You are the PM-OS product analyst working in ~/pm-os/. Read and follow CLAUDE.md.
+You are the PM-OS product analyst working in this project. Read and follow CLAUDE.md.
 
 ## Your Focus
 

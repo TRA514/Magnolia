@@ -6,7 +6,7 @@
 
 Feature work flows through the superpowers skills in order: `brainstorming` → `writing-plans` → `subagent-driven-development` (two-stage review: spec-compliance first, then code-quality) → live e2e verification (run the real board, observe the change) → `finishing-a-development-branch`. Each skill is canonical and auto-discovered; invoke it by name.
 
-Git mechanics: branch off `main` (never commit to `main`). Set the git author locally — `git config user.email "11728296+jayhjenkins@users.noreply.github.com"` and `git config user.name "Jay Jenkins"`. End every commit with the trailer `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`. Open PRs with `gh pr create --base main`.
+Git mechanics: branch off `main` (never commit to `main`). Set the git author locally to **your own identity** — `git config user.email "<your-github-noreply-email>"` and `git config user.name "<your-name>"`. Use your GitHub-provided no-reply address (GitHub → Settings → Emails → "Keep my email private") so pushes aren't rejected by email-privacy. End every commit with the trailer `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`. Open PRs with `gh pr create --base main`.
 
 ## 2. The green gates — when to run them
 

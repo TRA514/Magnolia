@@ -426,15 +426,15 @@ def _worker_packs(worker_skills, packs=None, root=None):
     return [pid for pid, spec in packs.items() if sk & set(spec.get("skills", []))]
 
 
-def workers_payload(root=None, posture=None):
+def workers_payload(posture=None):
     """Enriched, read-only worker list for GET /api/workers: file truth from
     scripts/workers/*.md plus Phase-7 tier, resolved model at the current cost
     posture, and pack membership. Degrades: missing tier -> resolve_model
     defaults to standard; missing packs.yaml -> packs == []."""
     from task_dispatch import load_workers
     if posture is None:
-        posture = (profile_lib.config(root).get("models") or {}).get("cost_posture") or "balanced"
-    packs = packs_lib.load_packs(root)
+        posture = profile_lib.cost_posture()
+    packs = packs_lib.load_packs()
     out = []
     for w in load_workers():
         tier = w.get("tier")

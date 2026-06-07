@@ -485,9 +485,13 @@ def match_worker(task, workers):
 
 
 def build_skills_catalog_filtered(skill_paths):
-    """Build skills catalog containing only the specified skill paths."""
+    """Build skills catalog containing only the specified skill paths.
+
+    A worker's explicit skill_paths are a tighter allowlist than packs, so this
+    path is intentionally NOT pack-gated. Note the two fallbacks below return the
+    (pack-gated) full catalog when the filter is empty or matches nothing."""
     if not skill_paths:
-        return build_skills_catalog()  # empty filter = full catalog
+        return build_skills_catalog()  # empty filter = full catalog (pack-gated)
 
     catalog_lines = []
     skills_dir = os.path.join(PM_OS_DIR, ".claude", "skills")
@@ -504,6 +508,7 @@ def build_skills_catalog_filtered(skill_paths):
                     catalog_lines.append(f"- **{name}**: {desc}")
                 break
 
+    # No matches (e.g. all skill_paths typo'd) -> fall back to the full pack-gated catalog.
     return "\n".join(catalog_lines) if catalog_lines else build_skills_catalog()
 
 

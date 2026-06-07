@@ -156,6 +156,99 @@ def test_apply_model_posture_validates_level(profile_root):
     assert task_server.apply_profile_model_posture({"level": "bogus"}, root=profile_root)[0] == 400
 
 
+# ─── Profile write WRAPPERS (Task 4.3 follow-up) ──────────────────────────────
+# The pure helpers above are well covered; the handle_profile_* HTTP wrappers
+# (body read + error emission) were not. These exercise that layer with a
+# minimal fake handler that satisfies _read_request_body (headers + rfile) and
+# captures what the wrapper emits via _json_response/_error_response.
+
+import io
+import json as _json
+
+
+class _FakeHandler:
+    """Minimal stand-in for BaseHTTPRequestHandler for wrapper tests.
+
+    Captures the status code and parsed JSON body the handler emits. Provides
+    headers + rfile so _read_request_body works, and the send_*/wfile surface
+    that _json_response writes through (so we also prove the connection wasn't
+    left hanging — a full response is written, headers ended, body flushed)."""
+
+    def __init__(self, raw_body: bytes):
+        self.headers = {"Content-Length": str(len(raw_body))}
+        self.rfile = io.BytesIO(raw_body)
+        self.wfile = io.BytesIO()
+        self.status = None
+        self._headers_ended = False
+
+    def send_response(self, code):
+        self.status = code
+
+    def send_header(self, *_a, **_k):
+        pass
+
+    def end_headers(self):
+        self._headers_ended = True
+
+    @property
+    def emitted_json(self):
+        return _json.loads(self.wfile.getvalue().decode("utf-8"))
+
+
+def _fake(payload):
+    return _FakeHandler(_json.dumps(payload).encode("utf-8"))
+
+
+def test_wrapper_malformed_json_returns_400():
+    # Garbage body -> _read_request_body raises JSONDecodeError -> 400, NOT 500.
+    import task_server
+    h = _FakeHandler(b"{not valid json")
+    task_server.handle_profile_identity(h)
+    assert h.status == 400
+    assert "Invalid JSON body" in h.emitted_json["error"]
+    assert h._headers_ended                       # response fully emitted, not hung
+
+
+def test_wrapper_persistence_failure_returns_clean_500(monkeypatch):
+    # A raise from the apply_* helper (e.g. disk/permission/YAML failure) must
+    # become a clean JSON 500 — not an uncaught exception / dropped connection.
+    import task_server
+
+    def boom(*_a, **_k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(task_server, "apply_profile_identity", boom)
+    h = _fake({"name": "Jay"})
+    task_server.handle_profile_identity(h)        # must NOT raise
+    assert h.status == 500
+    assert "Failed to update profile" in h.emitted_json["error"]
+    assert "disk full" in h.emitted_json["error"]
+    assert h._headers_ended                       # connection not left hanging
+
+
+def test_wrapper_validation_400_passthrough(monkeypatch):
+    # A 400 from the helper (no fields) is emitted as a 400, not swallowed/500'd.
+    import task_server
+    monkeypatch.setattr(task_server, "apply_profile_identity",
+                        lambda *_a, **_k: (400, {"error": "No identity fields provided"}))
+    h = _fake({})
+    task_server.handle_profile_identity(h)
+    assert h.status == 400
+    assert h.emitted_json["error"] == "No identity fields provided"
+
+
+def test_apply_packs_rejects_non_string_elements(profile_root):
+    # {"active": [{"x": 1}]} must be rejected (400) rather than persisting nested
+    # objects into config.yaml — consistent with the other helpers' validation.
+    import task_server, profile_lib
+    before = profile_lib.config(root=profile_root)["active_skill_packs"]
+    st, body = task_server.apply_profile_packs({"active": [{"x": 1}]}, root=profile_root)
+    assert st == 400
+    assert "error" in body
+    # nothing persisted — active packs unchanged
+    assert profile_lib.config(root=profile_root)["active_skill_packs"] == before
+
+
 def test_cut_endpoints_not_routed():
     # The approved Phase 6 design CUT POST /api/system/restart and
     # POST /api/doctor/fix/{capability}. They must remain unrouted (404).

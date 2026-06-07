@@ -456,7 +456,7 @@ def apply_profile_identity(payload, root=None):
 def apply_profile_voice(payload, root=None):
     """Write voice channel file(s). Channel keys validated against {teams, email}
     BEFORE any write (path-traversal guard); reject unknown -> 400, write nothing."""
-    channels = {k: v for k, v in payload.items()}
+    channels = payload
     if not channels:
         return 400, {"error": "No voice channels provided"}
     unknown = [k for k in channels if k not in _VOICE_CHANNELS]
@@ -486,6 +486,8 @@ def apply_profile_packs(payload, root=None):
     active = payload.get("active")
     if not isinstance(active, list):
         return 400, {"error": "'active' must be a list of pack ids"}
+    if not all(isinstance(p, str) for p in active):
+        return 400, {"error": "'active' must contain only pack id strings"}
     profile_lib.set_active_packs(active, root=root)
     return 200, {"ok": True, "active": list(active)}
 
@@ -499,9 +501,18 @@ def apply_profile_model_posture(payload, root=None):
     return 200, {"ok": True, "level": level}
 
 
-def _respond_apply(handler, result):
-    """Emit a (status, body) tuple from a pure apply_* helper."""
-    status, body = result
+def _respond_apply(handler, fn, *args):
+    """Run a pure apply_* helper inside try/except and emit its (status, body).
+
+    The helper writes to disk via profile_lib, so a permission error / disk-full /
+    YAML round-trip failure can raise. Catch it and emit a clean JSON 500 (matching
+    handle_update_description / handle_update_message) instead of letting the
+    exception propagate into a dropped connection + server traceback."""
+    try:
+        status, body = fn(*args)
+    except Exception as e:
+        _error_response(handler, f"Failed to update profile: {e}", status=500)
+        return
     if status != 200:
         _error_response(handler, body.get("error", "Bad request"), status=status)
     else:
@@ -523,7 +534,7 @@ def handle_profile_identity(handler):
     except (json.JSONDecodeError, ValueError) as e:
         _error_response(handler, f"Invalid JSON body: {e}", status=400)
         return
-    _respond_apply(handler, apply_profile_identity(body))
+    _respond_apply(handler, apply_profile_identity, body)
 
 
 def handle_profile_voice(handler):
@@ -533,7 +544,7 @@ def handle_profile_voice(handler):
     except (json.JSONDecodeError, ValueError) as e:
         _error_response(handler, f"Invalid JSON body: {e}", status=400)
         return
-    _respond_apply(handler, apply_profile_voice(body))
+    _respond_apply(handler, apply_profile_voice, body)
 
 
 def handle_profile_integration(handler, category):
@@ -543,7 +554,7 @@ def handle_profile_integration(handler, category):
     except (json.JSONDecodeError, ValueError) as e:
         _error_response(handler, f"Invalid JSON body: {e}", status=400)
         return
-    _respond_apply(handler, apply_profile_integration(category, body))
+    _respond_apply(handler, apply_profile_integration, category, body)
 
 
 def handle_profile_packs(handler):
@@ -553,7 +564,7 @@ def handle_profile_packs(handler):
     except (json.JSONDecodeError, ValueError) as e:
         _error_response(handler, f"Invalid JSON body: {e}", status=400)
         return
-    _respond_apply(handler, apply_profile_packs(body))
+    _respond_apply(handler, apply_profile_packs, body)
 
 
 def handle_profile_model_posture(handler):
@@ -563,7 +574,7 @@ def handle_profile_model_posture(handler):
     except (json.JSONDecodeError, ValueError) as e:
         _error_response(handler, f"Invalid JSON body: {e}", status=400)
         return
-    _respond_apply(handler, apply_profile_model_posture(body))
+    _respond_apply(handler, apply_profile_model_posture, body)
 
 
 def handle_quality(handler):

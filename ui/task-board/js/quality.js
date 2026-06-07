@@ -102,13 +102,12 @@ async function renderQuality() {
     return;
   }
 
-  const intro = `A quiet second opinion on agent work — observe-only, so nothing here touches your tasks.`;
+  const intro = ``;
 
   if (!data.total_judged) {
     view.innerHTML = `
       <div class="quality-head">
         <h3>Quality</h3>
-        <p class="quality-sub">${intro}</p>
       </div>
       <div class="quality-empty">Nothing judged yet — the judge quietly scores agent artifacts as they complete.</div>`;
     return;
@@ -117,21 +116,22 @@ async function renderQuality() {
   let html = `
     <div class="quality-head">
       <h3>Quality</h3>
-      <p class="quality-sub">${intro} <span class="quality-sub-dim">${data.total_judged} reviewed so far.</span></p>
+      <p class="quality-sub"><span class="quality-sub-dim">${data.total_judged} reviewed so far.</span></p>
     </div>
     <div class="quality-grid">`;
 
   data.groups.forEach(g => {
     const tone = _qTone(g.avg_score);
     // g.phase is the REAL ladder tier from build_quality: shadow / gated / autonomous.
-    // Map to a friendly label that's honest to the tier (no invented states).
-    const _PHASE_LABEL = { shadow: 'observe-only', gated: 'gated', autonomous: 'autonomous/trusted' };
-    const phase = _PHASE_LABEL[(g.phase || '').toLowerCase()] || (g.phase || 'observe-only');
+    // Render it as a calm trust badge with a friendly, honest label.
+    const tier = (g.phase || 'shadow').toLowerCase();
+    const _PHASE_LABEL = { shadow: 'observe-only', gated: 'gated', autonomous: 'autonomous' };
+    const phase = _PHASE_LABEL[tier] || tier;
     html += `
       <div class="card q-card ${tone}">
         <div class="q-card-head">
           <span class="q-name">${escapeHtml(g.task_type)}</span>
-          <span class="q-phase-txt">${phase}</span>
+          <span class="q-trust tier-${tier}">${phase}</span>
         </div>
         <div class="q-headline">
           <span class="q-score-num">${g.avg_score ?? '—'}<span class="q-score-of">/10</span></span>

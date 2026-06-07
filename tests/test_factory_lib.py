@@ -81,4 +81,14 @@ def test_validate_worker_accepts_good_and_flags_missing_fields(tmp_path):
     bad = tmp_path / "bad.md"
     bad.write_text("---\nname: sample\ndescription: Use when x\n---\n\nbody\n")
     problems = factory_lib.validate_worker(str(bad))
-    assert any("tier" in p for p in problems)
+    missing = {p.split(": ", 1)[1] for p in problems if p.startswith("missing required field")}
+    assert missing == {"priority", "tier", "match", "allowed_tools", "timeout", "max_turns"}
+
+
+def test_validate_worker_flags_empty_body(tmp_path):
+    import factory_lib
+    nobody = tmp_path / "nobody.md"
+    nobody.write_text(
+        "---\nname: s\ndescription: Use when x\npriority: 10\ntier: standard\n"
+        "match:\n  task_type: []\nallowed_tools:\n  - \"Bash(*)\"\ntimeout: 300\nmax_turns: 15\n---\n\n   \n")
+    assert "empty prompt body" in factory_lib.validate_worker(str(nobody))

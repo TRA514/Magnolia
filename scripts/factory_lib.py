@@ -67,19 +67,30 @@ def commit_and_emit_receipt(summary, files, kind, root=None):
 
 
 def validate_worker(path, root=None):
-    """Return a list of structural problems with a scaffolded worker .md ([] = ok)."""
-    import task_dispatch
-    problems = []
+    """Return a list of structural problems with a scaffolded worker .md ([] = ok).
+
+    Validates the RAW frontmatter block, not task_dispatch's coerced view (which
+    injects defaults for priority/timeout/max_turns/match and would mask a missing
+    key). A relative `path` is resolved against `root` (defaults to PM_OS_DIR)."""
+    import re
+    from ruamel.yaml import YAML
+    abspath = path if os.path.isabs(path) else os.path.join(root or PM_OS_DIR, path)
     try:
-        fm, body = task_dispatch._parse_worker_frontmatter(path)
+        text = open(abspath, encoding="utf-8").read()
+    except OSError as e:
+        return [f"could not read worker file: {e}"]
+    m = re.match(r"^---\s*\n(.*?)\n---\s*\n?(.*)", text, re.DOTALL)
+    if not m:
+        return ["missing or malformed YAML frontmatter"]
+    try:
+        fm = YAML(typ="safe").load(m.group(1)) or {}
     except Exception as e:
         return [f"frontmatter did not parse: {e}"]
-    if not fm:
-        return ["frontmatter did not parse"]
-    for field in _REQUIRED_WORKER_FIELDS:
-        if field not in fm:
-            problems.append(f"missing required field: {field}")
-    if not (body or "").strip():
+    if not isinstance(fm, dict):
+        return ["frontmatter is not a mapping"]
+    problems = [f"missing required field: {f}"
+                for f in _REQUIRED_WORKER_FIELDS if f not in fm]
+    if not (m.group(2) or "").strip():
         problems.append("empty prompt body")
     return problems
 

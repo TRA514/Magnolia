@@ -267,19 +267,19 @@ def register_judge_rubric(langfuse, dry_run=False):
 
 
 def register_voice(langfuse, dry_run=False):
-    """Register Jay's voice guide (judge-voice-jay) from datasets/reference/jay-voice.md.
+    """Register the operator's voice guide (judge-voice) from profile/voice.
 
-    The on-disk file is the editable source of truth; this pushes its body to
-    LangFuse so the judge can fetch a versioned copy (composed into the message rubric).
+    Reads the operator's profile voice (profile/voice/teams.md + profile/voice/email.md,
+    concatenated) and pushes it to LangFuse so the judge can fetch a versioned copy
+    (composed into the message rubric).
     """
-    from judge import VOICE_FILE
+    import profile_lib
 
-    name = "judge-voice-jay"
-    if not os.path.isfile(VOICE_FILE):
-        print(f"  Skipping {name}: {VOICE_FILE} not found")
+    name = "judge-voice"
+    text = profile_lib.voice_text()
+    if not text:
+        print(f"  Skipping {name}: no profile voice found")
         return
-    with open(VOICE_FILE, "r", encoding="utf-8") as f:
-        text = f.read()
 
     print(f"  {'[DRY-RUN] ' if dry_run else ''}Registering: {name}")
     if dry_run:
@@ -289,7 +289,7 @@ def register_voice(langfuse, dry_run=False):
         langfuse.create_prompt(
             name=name,
             prompt=text,
-            config={"source": "datasets/reference/jay-voice.md"},
+            config={"source": "profile/voice/teams.md + profile/voice/email.md"},
             labels=["production"],
             type="text",
         )

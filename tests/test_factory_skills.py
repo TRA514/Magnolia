@@ -47,3 +47,11 @@ def test_meta_create_worker_skeleton_is_denylist_clean():
     body = _read(".claude/skills/meta-create-worker/SKILL.md")
     for pat in (r"\bjay\b", r"board 1096", r"/Users/", r"~/pm-os"):
         assert not re.search(pat, body, re.IGNORECASE), f"skeleton leaks /{pat}/"
+
+
+def test_factory_skills_in_core_pack():
+    from ruamel.yaml import YAML
+    packs = YAML(typ="safe").load((REPO / ".claude/packs.yaml").read_text())
+    core = packs["core"]["skills"]
+    assert "meta-factory-core" in core
+    assert "meta-create-worker" in core

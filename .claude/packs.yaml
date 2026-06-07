@@ -31,6 +31,8 @@ core:
     - meta-using-skills
     - meta-skill-discovery
     - meta-create-skill
+    - meta-factory-core
+    - meta-create-worker
     - meta-refine-workflow
     - workflow-doctor
     - workflow-schedule-meeting

@@ -88,5 +88,7 @@ datasets/reference/*
 /profile/
 
 # Docs folder: exclude scratch/implementation notes, but track design plans
+# and the durable reference layer (invariants, conventions, architecture).
 docs/*
 !docs/plans/
+!docs/reference/

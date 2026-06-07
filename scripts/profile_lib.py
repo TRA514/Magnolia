@@ -266,6 +266,29 @@ def set_integration_conventions(category, text, provider=None, root=None):
     _update_yaml("integrations.yaml", mutate, root)
 
 
+def set_integration_confirmed(category, confirmed, provider=None, root=None):
+    """Set the Tier-2 consent flag integrations.yaml[category][provider]['confirmed'].
+
+    'confirmed' records that the operator okayed this integration to write to the
+    OUTSIDE WORLD. With provider given, nests under <category>.<provider>.confirmed
+    (creating the sub-block if absent); otherwise <category>.confirmed. Siblings +
+    comments are preserved."""
+    def mutate(doc):
+        cat = doc.get(category)
+        if not isinstance(cat, dict):
+            cat = {}
+            doc[category] = cat
+        target = cat
+        if provider:
+            sub = cat.get(provider)
+            if not isinstance(sub, dict):
+                sub = {}
+                cat[provider] = sub
+            target = sub
+        target["confirmed"] = bool(confirmed)
+    _update_yaml("integrations.yaml", mutate, root)
+
+
 def set_active_packs(packs, root=None):
     """Set config.yaml['active_skill_packs'] to the given list."""
     def mutate(doc):

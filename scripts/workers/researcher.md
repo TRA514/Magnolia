@@ -36,14 +36,14 @@ allowed_tools:
   - "mcp__claude_ai_Pendo__*"
   - "mcp__claude_ai_VantacaDatabricks__*"
 skills:
-  - context-assembly/research-gathering
-  - context-assembly/meeting-synthesis
-  - context-assembly/pendo-analytics
-  - context-assembly/databricks-analytics
-  - context-assembly/context-search
-  - context-assembly/source-normalization
-  - quality-gates/source-integrity
-  - quality-gates/citation-compliance
+  - context-research-gathering
+  - context-meeting-synthesis
+  - context-pendo-analytics
+  - context-databricks-analytics
+  - context-search
+  - context-source-normalization
+  - quality-source-integrity
+  - quality-citation-compliance
 langfuse_prompt: "worker-researcher"
 timeout: 600
 max_turns: 30

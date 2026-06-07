@@ -55,6 +55,7 @@ def test_factory_skills_in_core_pack():
     core = packs["core"]["skills"]
     assert "meta-factory-core" in core
     assert "meta-create-worker" in core
+    assert "meta-create-card-type" in core
 
 
 def test_meta_create_card_type_exists_and_frontmatter():

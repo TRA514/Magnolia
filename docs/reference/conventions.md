@@ -4,7 +4,7 @@
 
 ## 1. The development loop
 
-Feature work flows through the superpowers skills in order: `brainstorming` → `writing-plans` → `subagent-driven-development` — and the subagent stage uses **two-stage review: spec-compliance first, then code-quality** — → live e2e verification (run the real board, observe the change) → `finishing-a-development-branch`. Each skill is canonical and auto-discovered; invoke it by name.
+Feature work flows through the superpowers skills in order: `brainstorming` → `writing-plans` → `subagent-driven-development` (two-stage review: spec-compliance first, then code-quality) → live e2e verification (run the real board, observe the change) → `finishing-a-development-branch`. Each skill is canonical and auto-discovered; invoke it by name.
 
 Git mechanics: branch off `main` (never commit to `main`). Set the git author locally — `git config user.email "11728296+jayhjenkins@users.noreply.github.com"` and `git config user.name "Jay Jenkins"`. End every commit with the trailer `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`. Open PRs with `gh pr create --base main`.
 
@@ -14,7 +14,7 @@ Run the three gates **before every commit that touches code**. The commands and 
 
 ## 3. Capture-to-profile, not the artifact
 
-Team or person nuance goes to `profile/` via `profile_lib.set_integration_conventions(...)`; the generated artifact stays denylist-clean. This is invariant #4 in [`invariants.md`](./invariants.md), realized as the capture step of the factory — see `meta-factory-core`. Capture nuance to the profile as you go; never bake it into the output.
+Capture team or person nuance to `profile/` as you go — via `profile_lib.set_integration_conventions(...)` — never bake it into the generated artifact, which must stay denylist-clean. This is invariant #4 in [`invariants.md`](./invariants.md), realized as the capture step of the factory — see `meta-factory-core`.
 
 ## 4. Capability tiers
 

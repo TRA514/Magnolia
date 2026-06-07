@@ -25,6 +25,8 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import task_lib
+import packs_lib
+import profile_lib
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -189,24 +191,23 @@ def parse_skill_frontmatter(path):
     return name, desc
 
 
-def build_skills_catalog():
+def build_skills_catalog(root=None):
     """Walk .claude/skills/ and return a concise catalog of available skills,
     gated to the operator's active skill packs (packs_lib). Skills in no pack
     stay visible; a missing/empty manifest disables gating (all skills shown)."""
-    import packs_lib
-    import profile_lib
+    root = root or PM_OS_DIR
     catalog_lines = []
-    skills_dir = os.path.join(PM_OS_DIR, ".claude", "skills")
+    skills_dir = os.path.join(root, ".claude", "skills")
     if not os.path.isdir(skills_dir):
         return "(no skills directory found)"
-    active_packs = profile_lib.config().get("active_skill_packs") or []
-    visible = packs_lib.active_skill_folders(active_packs)
-    for root, dirs, files in os.walk(skills_dir):
+    active_packs = profile_lib.config(root).get("active_skill_packs") or []
+    visible = packs_lib.active_skill_folders(active_packs, root=root)
+    for dirpath, dirs, files in os.walk(skills_dir):
         if "SKILL.md" in files:
-            folder = os.path.basename(root)
+            folder = os.path.basename(dirpath)
             if folder not in visible:
                 continue
-            name, desc = parse_skill_frontmatter(os.path.join(root, "SKILL.md"))
+            name, desc = parse_skill_frontmatter(os.path.join(dirpath, "SKILL.md"))
             if name and desc:
                 catalog_lines.append(f"- **{name}**: {desc}")
     return "\n".join(catalog_lines) if catalog_lines else "(no skills found)"

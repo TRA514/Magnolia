@@ -781,3 +781,5 @@ The factory (`meta-create-*`, step 8); UI skill-authoring; pack-contents in the 
 downshift suggestions; ladder-tier dispatch enforcement; task→transcript join;
 `description_patterns` matcher; `ladder.json` concurrency; `receipt_summary` backend; commit
 scoping. All remain out of scope.
+
+- build_skills_catalog_filtered (a worker's explicitly-declared skills:) is intentionally NOT pack-gated — a worker's skill list is already a tighter allowlist than packs, and worker skill lists use legacy nested paths (e.g. workflows/vision-clarifier) while the gate keys on flat folder basenames. Reconciling those addressing schemes is out of scope.

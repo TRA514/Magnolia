@@ -116,7 +116,7 @@ qmd search "integration gaps missing connections" -c meetings_product --json -n 
 **Process results:**
 - Extract `file` paths from each result's JSON (`hits[].file` or top-level `file`)
 - Strip the `qmd://meetings_product/` prefix to get the relative path
-- Resolve to absolute path: `~/pm-os/datasets/meetings/product/<relative_path>`
+- Resolve to a path relative to the project root: `datasets/meetings/product/<relative_path>`
 - Collect as `qmd_candidate_files` set (union across all three queries)
 
 **Fallback:** If `qmd` exits non-zero or is not found (`which qmd` fails), log

@@ -32,9 +32,9 @@ Activate automatically when:
 
 **Examples:**
 ```
-/Users/jay/llm/datasets/meetings/Customers/PrettyBoy/2025/10-15_sales_discovery-call.md
+datasets/meetings/Customers/<Company>/2025/10-15_sales_discovery-call.md
 datasets/research/competitive-analysis/**/*.md
-~/Workspace/llm/datasets/research/competitive-analysis/klaviyo-pricing.md
+datasets/research/competitive-analysis/klaviyo-pricing.md
 ```
 
 **Normalization:**

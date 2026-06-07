@@ -60,6 +60,20 @@ def test_build_profile_status_ok_normalizes_to_ok(profile_root):
     assert jira["status"] in _FRONTEND_STATUS_VOCAB
 
 
+def test_build_profile_transcript_status_from_category_capability(profile_root):
+    # The Doctor keys the transcripts capability by CATEGORY ("transcript"), not provider id.
+    import task_server, profile_lib
+    # profile_root's integrations.yaml has transcript provider = granola (active)
+    profile_lib.write_capabilities({"capabilities": {"transcript": {"status": "needs_reauth",
+                                                                      "detail": "session expired"}}},
+                                    root=profile_root)
+    p = task_server.build_profile(root=profile_root)
+    opts = p["integrations"]["transcripts"]["options"]
+    active = next(o for o in opts if o["id"] == p["integrations"]["transcripts"]["active"])
+    assert active["status"] == "reauth"          # normalized from needs_reauth via the category key
+    assert "session expired" in (active.get("detail") or "")
+
+
 def test_build_profile_active_provider_status_ok_without_capability(profile_root):
     # With no capability entry: the active provider (jira) reads "ok" and a
     # non-active known adapter (asana) reads "available".

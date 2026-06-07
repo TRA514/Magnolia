@@ -388,7 +388,14 @@ def build_profile(root=None):
         active = (integ.get(src_key) or {}).get("provider") or "none"
         opts = []
         for opt_id, opt_label in options:
+            # Resolve the capability entry. Per-provider key first (covers
+            # jira/m365 and any future per-provider key). If absent AND this is
+            # the active provider, fall back to the category-keyed entry — the
+            # Doctor keys some capabilities (e.g. transcripts) by category name
+            # and only probes the active provider (see doctor.py probe_transcript).
             cap = caps.get(opt_id)
+            if not cap and opt_id == active:
+                cap = caps.get(src_key)
             if cap and cap.get("status"):
                 status = _CAP_STATUS_TO_FRONTEND.get(cap["status"], "unset")
             elif opt_id == active:

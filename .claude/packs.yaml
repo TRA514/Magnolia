@@ -33,6 +33,7 @@ core:
     - meta-create-skill
     - meta-factory-core
     - meta-create-worker
+    - meta-create-card-type
     - meta-refine-workflow
     - workflow-doctor
     - workflow-schedule-meeting

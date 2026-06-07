@@ -254,7 +254,7 @@
   transition: filter var(--ease);
 }
 .pf-fix:hover { filter: brightness(1.06); }
-.pf-fix, .profile-view .btn, .pf-server, .pf-worker-name, .pf-active-tag, .pf-locked-fix { white-space: nowrap; }
+.pf-fix, .profile-view .btn, .pf-worker-name, .pf-active-tag, .pf-locked-fix { white-space: nowrap; }
 .pf-fix.reauth { color: var(--warning); border-color: color-mix(in oklab, var(--warning) 45%, var(--border)); background: var(--warning-soft); }
 .pf-fix.unset { color: var(--text-muted); border-color: var(--border); background: var(--surface-hover); }
 .pf-fix.available { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 40%, var(--border)); background: var(--accent-soft); }
@@ -274,6 +274,11 @@
 .pf-locked-text b { color: var(--text); font-weight: 600; }
 .pf-locked-fix { font-size: 12px; color: var(--warning); background: none; border: none; cursor: pointer; font-weight: 600; font-family: inherit; white-space: nowrap; }
 .pf-locked-fix:hover { text-decoration: underline; }
+
+/* Doctor guidance note — dropped near a Fix/Connect control. No endpoint;
+   it points the user to run the conversational Doctor in Claude Code. */
+.pf-fix-note { margin-top: 8px; font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.pf-fix-note code { font-family: var(--mono); font-size: 11.5px; color: var(--accent); background: var(--accent-soft); padding: 1px 6px; border-radius: var(--r-btn); }
 
 /* Voice — one editor, generous room for a long voice doc */
 .pf-voice-intro { font-size: 12.5px; color: var(--text-muted); line-height: 1.55; margin-bottom: 13px; max-width: 66ch; text-wrap: pretty; }
@@ -333,22 +338,6 @@
 .pf-tier { font-size: 10.5px; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: var(--surface-hover); color: var(--text-muted); text-transform: capitalize; }
 .pf-tier.high { color: var(--accent); background: var(--accent-soft); }
 .pf-tier.low { color: var(--text-dim); }
-
-/* System status */
-.pf-sys-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
-.pf-server { display: inline-flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--text); font-weight: 500; }
-.pf-server-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
-.pf-server-dot.off { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
-.pf-port { color: var(--accent); text-decoration: none; font-size: 12.5px; font-family: var(--mono); }
-.pf-port:hover { text-decoration: underline; }
-.pf-restart { margin-left: auto; }
-.pf-health { display: flex; flex-direction: column; }
-.pf-health-row { display: flex; align-items: center; gap: 11px; padding: 10px 0; border-top: 1px solid var(--border-soft); }
-.pf-health-row:first-child { border-top: none; }
-.pf-health-name { font-size: 13px; color: var(--text); min-width: 168px; display: flex; align-items: center; gap: 9px; }
-.pf-health-detail { font-size: 11.5px; color: var(--text-muted); flex: 1 1 auto; line-height: 1.4; }
-.pf-health-row.status-reauth .pf-health-detail,
-.pf-health-row.status-degraded .pf-health-detail { color: var(--warning); }
 
 /* ═══════════════════════════════════════════════════════════════════════
    9 · QUALITY — trust badge (the friendly ladder tier)

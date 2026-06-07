@@ -11,6 +11,21 @@ function switchTab(tabName) {
   if (tabName === 'schedules') fetchCronJobs();
 }
 
+// ─── Engine sub-nav (Profile · Workers & prompts) ───────────────────
+// Toggles the two Engine sub-panes and their sub-tab buttons, loading the
+// pane's data on demand. The Engine tab defaults to the prompts pane (marked
+// active in index.html); switchTab('engine') keeps fetching prompts as before.
+function switchEngine(which) {
+  document.querySelectorAll('.engine-pane').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.engine-subtab').forEach(el => el.classList.remove('active'));
+  const paneEl = document.getElementById(`engine-${which}`);
+  const tabEl = document.querySelector(`.engine-subtab[data-eng="${which}"]`);
+  if (paneEl) paneEl.classList.add('active');
+  if (tabEl) tabEl.classList.add('active');
+  if (which === 'profile') renderProfile();
+  if (which === 'prompts') fetchPrompts();
+}
+
 // Close modal on overlay click
 document.getElementById('modal-overlay').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closeModal();

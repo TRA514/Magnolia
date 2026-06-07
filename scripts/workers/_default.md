@@ -2,6 +2,7 @@
 name: default
 description: General-purpose worker — catch-all for tasks that don't match a specialized worker
 priority: 0
+tier: standard
 match:
   task_type: []
   domains: []

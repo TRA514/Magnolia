@@ -2,6 +2,7 @@
 name: eval-analyst
 description: Weekly feedback-loop / self-improvement pass — reads the frontmatter-sourced feedback digest, clusters failures by deliverable kind, and proposes fixes at the right altitude. Read-only on the world; writes a local report and drops one machine-applicable .patch + recommendation card per clustered change. Never applies changes.
 priority: 6
+tier: deep
 match:
   task_type: []
   domains:

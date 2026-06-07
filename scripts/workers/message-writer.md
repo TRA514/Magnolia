@@ -2,6 +2,7 @@
 name: message-writer
 description: Drafts Teams + email messages in Jay's personal voice for send-message tasks — produces a review-ready draft, never sends
 priority: 20
+tier: standard
 match:
   task_type:
     - send-message

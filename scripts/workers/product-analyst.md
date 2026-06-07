@@ -2,6 +2,7 @@
 name: product-analyst
 description: Product documentation, PRDs, strategy, metrics, business cases — full /ship-it pipeline with data access
 priority: 10
+tier: deep
 match:
   task_type: []
   domains:

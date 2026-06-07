@@ -156,3 +156,59 @@ def test_databricks_config_defaults_empty(profile_root):
     cfg = profile_lib.databricks_config(root=profile_root)
     assert cfg["catalog"] == ""
     assert cfg["sources"] == {}
+
+
+# --- Write helpers (Phase 6, Task 4.1) ---
+
+
+def test_write_identity_roundtrips(profile_root):
+    profile_lib.write_identity({"display_name": "Jay", "email": "jay@v.com",
+                                "company": "Vantaca", "timezone": "America/Chicago"},
+                               root=profile_root)
+    p = profile_lib.profile(root=profile_root)
+    assert p["display_name"] == "Jay" and p["company"] == "Vantaca"
+    assert p["timezone"] == "America/Chicago"
+    assert p["persona"] == "pm"           # untouched field preserved
+
+
+def test_write_voice_per_channel(profile_root):
+    profile_lib.write_voice("teams", "tight and lowercase", root=profile_root)
+    assert "tight and lowercase" in profile_lib.voice_text("teams", root=profile_root)
+    assert "Warm" in profile_lib.voice_text("email", root=profile_root)   # other channel untouched
+
+
+def test_set_integration_provider(profile_root):
+    profile_lib.set_integration_provider("transcript", "otter", root=profile_root)
+    assert profile_lib.provider("transcript", root=profile_root) == "otter"
+    # other categories untouched
+    assert profile_lib.provider("project_management", root=profile_root) == "jira"
+
+
+def test_set_active_packs(profile_root):
+    profile_lib.set_active_packs(["core", "exec"], root=profile_root)
+    assert profile_lib.config(root=profile_root)["active_skill_packs"] == ["core", "exec"]
+
+
+def test_set_cost_posture(profile_root):
+    profile_lib.set_cost_posture("high", root=profile_root)
+    assert profile_lib.config(root=profile_root)["models"]["cost_posture"] == "high"
+    # sibling model keys preserved
+    assert profile_lib.config(root=profile_root)["models"]["judge"] == "claude-opus-4-8"
+
+
+def test_write_preserves_yaml_comments(profile_root):
+    # round-trip writer must keep the helpful comments in the file.
+    # The fixture's config.yaml has no comment, so seed one first, then prove
+    # it survives an unrelated write (set_cost_posture mutates a different key).
+    cfg_path = os.path.join(profile_lib.profile_dir(root=profile_root), "config.yaml")
+    with open(cfg_path) as f:
+        original = f.read()
+    with open(cfg_path, "w") as f:
+        f.write("# cost_posture controls model spend\n" + original)
+
+    profile_lib.set_cost_posture("low", root=profile_root)
+
+    with open(cfg_path) as f:
+        text = f.read()
+    assert "# cost_posture controls model spend" in text  # comment survived the write
+    assert "#" in text   # at least one comment survived the write

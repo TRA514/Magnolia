@@ -272,6 +272,311 @@ def build_quality(ladder_path=None):
             "total_judged": len(judged), "langfuse": _get_langfuse() is not None}
 
 
+# ─── Profile / Config room (GET /api/profile) ──────────────────────────────────
+
+# Module-level catalog of installable skill packs. Static metadata for the
+# Skill-packs section of the Profile room; "active" comes from config.yaml.
+PACK_CATALOG = [
+    {"id": "core", "label": "Core",
+     "description": "Baseline PM-OS skills: tasks, search, meeting synthesis."},
+    {"id": "pm", "label": "Product Management",
+     "description": "PRDs, roadmaps, strategy, metrics, and prioritization."},
+    {"id": "exec", "label": "Executive",
+     "description": "Strategy memos, goal-setting, and leadership-facing synthesis."},
+    {"id": "eng", "label": "Engineering",
+     "description": "Tech-spec review, velocity estimation, and ticket drafting."},
+    {"id": "recruiting", "label": "Recruiting",
+     "description": "Candidate synthesis and hiring-loop support."},
+]
+
+# Known adapters per integration category, keyed by the output category name.
+# Labels are human-readable; ids match provider strings in integrations.yaml.
+_INTEGRATION_OPTIONS = {
+    "transcripts": ("Transcripts", [("otter", "Otter.ai"), ("granola", "Granola")]),
+    "project_management": ("Project Management",
+                           [("jira", "Jira"), ("asana", "Asana"), ("linear", "Linear")]),
+    "calendar": ("Calendar", [("m365", "Microsoft 365"), ("google", "Google Calendar")]),
+}
+
+# Doctor capability-status vocabulary -> Profile room frontend vocabulary.
+# The Doctor writes a rich set of statuses; the frontend (profile.js) only
+# keys its dots/buttons/degraded-lock off {ok, reauth, available, unset}.
+# build_profile owns the /api/profile contract, so it normalizes here.
+# Any unrecognized value falls back to "unset" (safe default).
+_CAP_STATUS_TO_FRONTEND = {
+    "ok": "ok",
+    "running": "ok",
+    "needs_reauth": "reauth",   # works-but-needs-attention -> surface re-auth nudge
+    "degraded": "reauth",
+    "missing": "unset",
+    "down": "unset",
+    "not_expected": "unset",
+    "unknown": "unset",
+}
+
+# Output category -> integrations.yaml key (transcripts is singular on disk).
+_INTEGRATION_SOURCE_KEY = {
+    "transcripts": "transcript",
+    "project_management": "project_management",
+    "calendar": "calendar",
+}
+
+
+def _profile_workers(root=None):
+    """Read scripts/workers/*.md frontmatter; surface any that declare a
+    model/tier. Returns [] when none do — never fabricates a tier."""
+    workers = []
+    workers_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workers")
+    if not os.path.isdir(workers_dir):
+        return workers
+    for fname in sorted(os.listdir(workers_dir)):
+        if not fname.endswith(".md"):
+            continue
+        path = os.path.join(workers_dir, fname)
+        try:
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+        except OSError:
+            continue
+        if not text.startswith("---"):
+            continue
+        end = text.find("\n---", 3)
+        if end == -1:
+            continue
+        fm = text[3:end]
+        name = None
+        tier = None
+        for line in fm.splitlines():
+            m = re.match(r"\s*(name|model|tier)\s*:\s*(.+?)\s*$", line)
+            if not m:
+                continue
+            key, val = m.group(1), m.group(2).strip().strip('"').strip("'")
+            if key == "name":
+                name = val
+            elif key in ("model", "tier"):
+                tier = val
+        if tier is not None:
+            workers.append({"name": name or os.path.splitext(fname)[0], "tier": tier})
+    return workers
+
+
+def build_profile(root=None):
+    """Pure assembler for the Profile/Config room (GET /api/profile).
+
+    FIVE sections, no system-status section: identity, integrations, voice
+    (two channels), skill packs, model posture. Reads everything through
+    profile_lib; integration option status derives from the Doctor's
+    capabilities.json when present (normalized to the frontend vocabulary
+    {ok, reauth, available, unset} via _CAP_STATUS_TO_FRONTEND), else "ok"
+    for the active provider and "available" for the rest. Read-only.
+    """
+    prof = profile_lib.profile(root)
+    cfg = profile_lib.config(root)
+    integ = profile_lib.integrations(root)
+    caps = (profile_lib.read_capabilities(root) or {}).get("capabilities", {}) or {}
+
+    identity = {
+        "name": prof.get("display_name") or "Operator",
+        "email": prof.get("email", ""),
+        "company": prof.get("company", ""),
+        "timezone": prof.get("timezone", ""),
+    }
+
+    integrations = {}
+    for out_key, (label, options) in _INTEGRATION_OPTIONS.items():
+        src_key = _INTEGRATION_SOURCE_KEY[out_key]
+        active = (integ.get(src_key) or {}).get("provider") or "none"
+        opts = []
+        for opt_id, opt_label in options:
+            # Resolve the capability entry. Per-provider key first (covers
+            # jira/m365 and any future per-provider key). If absent AND this is
+            # the active provider, fall back to the category-keyed entry — the
+            # Doctor keys some capabilities (e.g. transcripts) by category name
+            # and only probes the active provider (see doctor.py probe_transcript).
+            cap = caps.get(opt_id)
+            if not cap and opt_id == active:
+                cap = caps.get(src_key)
+            if cap and cap.get("status"):
+                status = _CAP_STATUS_TO_FRONTEND.get(cap["status"], "unset")
+            elif opt_id == active:
+                status = "ok"
+            else:
+                status = "available"
+            opts.append({"id": opt_id, "label": opt_label,
+                         "status": status, "detail": (cap or {}).get("detail", "")})
+        integrations[out_key] = {"label": label, "active": active, "options": opts}
+
+    voice = {
+        "teams": profile_lib.voice_text("teams", root),
+        "email": profile_lib.voice_text("email", root),
+    }
+
+    packs = {
+        "active": cfg.get("active_skill_packs") or [],
+        "available": PACK_CATALOG,
+    }
+
+    model_posture = {
+        "level": (cfg.get("models") or {}).get("cost_posture") or "balanced",
+        "workers": _profile_workers(root),
+    }
+
+    return {
+        "identity": identity,
+        "integrations": integrations,
+        "voice": voice,
+        "packs": packs,
+        "model_posture": model_posture,
+    }
+
+
+# ─── Profile write endpoints (pure helpers + HTTP wrappers) ────────────────────
+# The pure helpers take the parsed payload + root and return (status_code, body).
+# They own validation (path-traversal guards against the un-sanitizing profile_lib
+# setters) BEFORE persisting. The thin handle_* wrappers read the body and emit.
+
+_VOICE_CHANNELS = {"teams", "email"}
+_INTEGRATION_CATEGORIES = set(_INTEGRATION_SOURCE_KEY)   # transcripts/project_management/calendar
+_MODEL_POSTURE_LEVELS = {"low", "balanced", "high"}
+
+
+def apply_profile_identity(payload, root=None):
+    """Write the four known identity fields to profile.yaml. Unknown keys dropped."""
+    data = {}
+    for out_key, disk_key in (("name", "display_name"), ("email", "email"),
+                              ("company", "company"), ("timezone", "timezone")):
+        if out_key in payload:
+            data[disk_key] = payload[out_key]
+    if not data:
+        return 400, {"error": "No identity fields provided"}
+    profile_lib.write_identity(data, root=root)
+    return 200, {"ok": True, "identity": data}
+
+
+def apply_profile_voice(payload, root=None):
+    """Write voice channel file(s). Channel keys validated against {teams, email}
+    BEFORE any write (path-traversal guard); reject unknown -> 400, write nothing."""
+    channels = payload
+    if not channels:
+        return 400, {"error": "No voice channels provided"}
+    unknown = [k for k in channels if k not in _VOICE_CHANNELS]
+    if unknown:
+        return 400, {"error": f"Unknown voice channel(s): {', '.join(sorted(unknown))}"}
+    for channel, text in channels.items():
+        profile_lib.write_voice(channel, text if text is not None else "", root=root)
+    return 200, {"ok": True, "channels": sorted(channels)}
+
+
+def apply_profile_integration(category, payload, root=None):
+    """Set the provider for an integration category. The category is validated
+    against the known output keys BEFORE mapping to the on-disk key (transcripts
+    -> transcript) and calling the un-sanitizing setter."""
+    if category not in _INTEGRATION_CATEGORIES:
+        return 400, {"error": f"Unknown integration category: {category}"}
+    active = payload.get("active")
+    if not active or not isinstance(active, str):
+        return 400, {"error": "Missing 'active' provider id"}
+    disk_key = _INTEGRATION_SOURCE_KEY[category]
+    profile_lib.set_integration_provider(disk_key, active, root=root)
+    return 200, {"ok": True, "category": category, "active": active}
+
+
+def apply_profile_packs(payload, root=None):
+    """Set the active skill packs list."""
+    active = payload.get("active")
+    if not isinstance(active, list):
+        return 400, {"error": "'active' must be a list of pack ids"}
+    if not all(isinstance(p, str) for p in active):
+        return 400, {"error": "'active' must contain only pack id strings"}
+    profile_lib.set_active_packs(active, root=root)
+    return 200, {"ok": True, "active": list(active)}
+
+
+def apply_profile_model_posture(payload, root=None):
+    """Set the model cost posture. Level validated against {low, balanced, high}."""
+    level = payload.get("level")
+    if level not in _MODEL_POSTURE_LEVELS:
+        return 400, {"error": f"Invalid model posture level: {level!r}"}
+    profile_lib.set_cost_posture(level, root=root)
+    return 200, {"ok": True, "level": level}
+
+
+def _respond_apply(handler, fn, *args):
+    """Run a pure apply_* helper inside try/except and emit its (status, body).
+
+    The helper writes to disk via profile_lib, so a permission error / disk-full /
+    YAML round-trip failure can raise. Catch it and emit a clean JSON 500 (matching
+    handle_update_description / handle_update_message) instead of letting the
+    exception propagate into a dropped connection + server traceback."""
+    try:
+        status, body = fn(*args)
+    except Exception as e:
+        _error_response(handler, f"Failed to update profile: {e}", status=500)
+        return
+    if status != 200:
+        _error_response(handler, body.get("error", "Bad request"), status=status)
+    else:
+        _json_response(handler, body)
+
+
+def handle_get_profile(handler):
+    """GET /api/profile — the build_profile() payload."""
+    try:
+        _json_response(handler, build_profile())
+    except Exception as e:
+        _error_response(handler, f"Failed to build profile: {e}", status=500)
+
+
+def handle_profile_identity(handler):
+    """PUT /api/profile/identity — body {name,email,company,timezone}."""
+    try:
+        body = _read_request_body(handler)
+    except (json.JSONDecodeError, ValueError) as e:
+        _error_response(handler, f"Invalid JSON body: {e}", status=400)
+        return
+    _respond_apply(handler, apply_profile_identity, body)
+
+
+def handle_profile_voice(handler):
+    """PUT /api/profile/voice — body {teams?, email?}."""
+    try:
+        body = _read_request_body(handler)
+    except (json.JSONDecodeError, ValueError) as e:
+        _error_response(handler, f"Invalid JSON body: {e}", status=400)
+        return
+    _respond_apply(handler, apply_profile_voice, body)
+
+
+def handle_profile_integration(handler, category):
+    """POST /api/profile/integrations/{category} — body {active}."""
+    try:
+        body = _read_request_body(handler)
+    except (json.JSONDecodeError, ValueError) as e:
+        _error_response(handler, f"Invalid JSON body: {e}", status=400)
+        return
+    _respond_apply(handler, apply_profile_integration, category, body)
+
+
+def handle_profile_packs(handler):
+    """POST /api/profile/packs — body {active:[...]}."""
+    try:
+        body = _read_request_body(handler)
+    except (json.JSONDecodeError, ValueError) as e:
+        _error_response(handler, f"Invalid JSON body: {e}", status=400)
+        return
+    _respond_apply(handler, apply_profile_packs, body)
+
+
+def handle_profile_model_posture(handler):
+    """PUT /api/profile/model-posture — body {level}."""
+    try:
+        body = _read_request_body(handler)
+    except (json.JSONDecodeError, ValueError) as e:
+        _error_response(handler, f"Invalid JSON body: {e}", status=400)
+        return
+    _respond_apply(handler, apply_profile_model_posture, body)
+
+
 def handle_quality(handler):
     """GET /api/quality — read-only shadow-judge scoreboard, frontmatter-sourced."""
     try:
@@ -1649,6 +1954,32 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
             handle_open_file(self, query_params)
             return True
 
+        # ─── Profile / Config API routes ───────────────────────────────
+        if path == "/api/profile" and method == "GET":
+            handle_get_profile(self)
+            return True
+
+        if path == "/api/profile/identity" and method == "PUT":
+            handle_profile_identity(self)
+            return True
+
+        if path == "/api/profile/voice" and method == "PUT":
+            handle_profile_voice(self)
+            return True
+
+        if path == "/api/profile/model-posture" and method == "PUT":
+            handle_profile_model_posture(self)
+            return True
+
+        if path == "/api/profile/packs" and method == "POST":
+            handle_profile_packs(self)
+            return True
+
+        match = re.match(r"^/api/profile/integrations/([^/]+)$", path)
+        if match and method == "POST":
+            handle_profile_integration(self, match.group(1))
+            return True
+
         # Catch-all for unrecognized /api/ routes
         if path.startswith("/api/"):
             _error_response(self, f"Unknown API endpoint: {method} {path}", status=404)
@@ -1682,6 +2013,12 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
         if self._route_request("POST"):
             return
         _error_response(self, "POST not allowed for this path", status=405)
+
+    def do_PUT(self):
+        """Handle PUT requests (API only)."""
+        if self._route_request("PUT"):
+            return
+        _error_response(self, "PUT not allowed for this path", status=405)
 
     def end_headers(self):
         """Inject CORS header into all responses (including static files)."""

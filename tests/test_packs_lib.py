@@ -87,3 +87,35 @@ def test_load_packs_label_defaults_to_titlecase(tmp_path):
     packs = packs_lib.load_packs(root=str(tmp_path))
     assert packs["pm"]["label"] == "Pm"
     assert packs["pm"]["description"] == ""
+
+
+def test_active_skill_folders_unions_core_and_active(tmp_path):
+    packs = {
+        "core": {"label": "", "description": "", "skills": ["task-create"]},
+        "pm":   {"label": "", "description": "", "skills": ["workflow-prd-creation"]},
+        "eng":  {"label": "", "description": "", "skills": ["workflow-jira-home"]},
+    }
+    on_disk = {"task-create", "workflow-prd-creation", "workflow-jira-home"}
+    got = packs_lib.active_skill_folders(["pm"], packs=packs, on_disk=on_disk)
+    assert got == {"task-create", "workflow-prd-creation"}   # core + pm, not eng
+
+
+def test_active_skill_folders_core_always_on(tmp_path):
+    packs = {"core": {"label": "", "description": "", "skills": ["task-create"]},
+             "pm": {"label": "", "description": "", "skills": ["workflow-prd-creation"]}}
+    on_disk = {"task-create", "workflow-prd-creation"}
+    got = packs_lib.active_skill_folders([], packs=packs, on_disk=on_disk)
+    assert "task-create" in got and "workflow-prd-creation" not in got
+
+
+def test_active_skill_folders_unlisted_stays_visible(tmp_path):
+    packs = {"core": {"label": "", "description": "", "skills": ["task-create"]},
+             "pm": {"label": "", "description": "", "skills": ["workflow-prd-creation"]}}
+    on_disk = {"task-create", "workflow-prd-creation", "quality-content-style"}
+    got = packs_lib.active_skill_folders(["pm"], packs=packs, on_disk=on_disk)
+    assert "quality-content-style" in got   # in no pack -> always available
+
+
+def test_active_skill_folders_no_manifest_returns_all(tmp_path):
+    on_disk = {"a", "b", "c"}
+    assert packs_lib.active_skill_folders(["pm"], packs={}, on_disk=on_disk) == on_disk

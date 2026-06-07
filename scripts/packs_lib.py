@@ -51,3 +51,32 @@ def pack_catalog(root=None):
     """[{id, label, description}] for the Profile room. Empty when no manifest."""
     return [{"id": pid, "label": spec["label"], "description": spec["description"]}
             for pid, spec in load_packs(root).items()]
+
+
+def _on_disk_skill_folders(root=None):
+    skills_dir = os.path.join(root or PM_OS_DIR, ".claude", "skills")
+    if not os.path.isdir(skills_dir):
+        return set()
+    return {name for name in os.listdir(skills_dir)
+            if os.path.isfile(os.path.join(skills_dir, name, "SKILL.md"))
+            or os.path.isfile(os.path.join(skills_dir, name, "skill.md"))}
+
+
+def active_skill_folders(active_packs, packs=None, on_disk=None, root=None):
+    """Resolve the set of skill folders gating keeps visible.
+
+    core (ALWAYS_ON) is always included; union each active pack's skills; any
+    on-disk folder in NO pack stays visible. With no manifest (packs == {}),
+    returns every on-disk folder (no gating)."""
+    if packs is None:
+        packs = load_packs(root)
+    if on_disk is None:
+        on_disk = _on_disk_skill_folders(root)
+    if not packs:
+        return set(on_disk)
+    listed = {s for spec in packs.values() for s in spec["skills"]}
+    keep = set(packs.get(ALWAYS_ON, {}).get("skills", []))
+    for pid in active_packs:
+        keep |= set(packs.get(pid, {}).get("skills", []))
+    keep |= {f for f in on_disk if f not in listed}   # unlisted = always-available
+    return keep & set(on_disk)                          # never surface a phantom

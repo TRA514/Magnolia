@@ -117,6 +117,31 @@ def validate_worker(path, root=None):
     return problems
 
 
+def validate_card_type(name, registry_path=None):
+    """Return a list of problems with a card type in the registry ([] = ok).
+
+    Runs the full card-schema gate — token-only AND every referenced signal /
+    action / body-renderer must already exist. That existence check is exactly
+    what enforces 'registry-composition-only': a card type referencing a NEW
+    signal/action/renderer (which would need JS) fails here. Also confirms the
+    named type is present."""
+    import json
+    import card_schema
+    path = registry_path or card_schema.REGISTRY
+    try:
+        with open(path, encoding="utf-8") as f:
+            reg = json.load(f)
+    except OSError as e:
+        return [f"could not read registry: {e}"]
+    except json.JSONDecodeError as e:
+        return [f"registry is not valid JSON: {e}"]
+    errs = card_schema.validate_doc(
+        reg, card_schema._declared_signal_ids(), card_schema._theme_tokens())
+    if name not in reg.get("cardTypes", {}):
+        errs.append(f"card type '{name}' not found in the registry")
+    return errs
+
+
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser()
@@ -127,11 +152,18 @@ if __name__ == "__main__":
     c.add_argument("files", nargs="+")
     v = sub.add_parser("validate-worker")
     v.add_argument("path")
+    vc = sub.add_parser("validate-card-type")
+    vc.add_argument("name")
     args = ap.parse_args()
     if args.cmd == "commit-and-receipt":
         print(commit_and_emit_receipt(args.summary, args.files, args.kind))
     elif args.cmd == "validate-worker":
         probs = validate_worker(args.path)
+        if probs:
+            print("\n".join(probs)); sys.exit(1)
+        print("ok")
+    elif args.cmd == "validate-card-type":
+        probs = validate_card_type(args.name)
         if probs:
             print("\n".join(probs)); sys.exit(1)
         print("ok")

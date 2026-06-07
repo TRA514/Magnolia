@@ -1,6 +1,6 @@
 # .claude/ Configuration Reference
 
-Tooling reference for the `.claude/` directory. For project-level guidance, see `/pm-os/CLAUDE.md`.
+Tooling reference for the `.claude/` directory — SKILL.md format, slash commands, hooks, settings. For the system as a whole start at the repo-root [`CLAUDE.md`](../CLAUDE.md) router; architecture lives in [`docs/reference/architecture.md`](../docs/reference/architecture.md), the laws in [`docs/reference/invariants.md`](../docs/reference/invariants.md).
 
 ## Modes
 
@@ -51,7 +51,9 @@ Keep `description` action-oriented and trigger-led ("Use when…") so the skill 
 
 ### Skill packs
 
-`.claude/packs.yaml` groups skill folders into packs (`core`/`pm`/`exec`/`eng`/`recruiting`/`ops`). The active list lives in `profile/config.yaml` `active_skill_packs`; `core` is always active. Packs gate the **background-worker dispatch catalog** and the Profile UI — not your interactive session (native auto-discovery there is unchanged). To add a skill to a pack: drop the folder in `.claude/skills/` (auto-discovered), then add its folder name to a pack's `skills:` in `packs.yaml`. A skill in no pack stays always-available.
+`.claude/packs.yaml` defines the packs (`core`/`pm`/`exec`/`eng`/`recruiting`/`ops`) as named sets of skill folders. To add a skill to a pack: drop the folder in `.claude/skills/` (auto-discovered), then add its folder name to a pack's `skills:` in `packs.yaml`. A skill in no pack stays always-available.
+
+What packs gate (the background-worker dispatch catalog + Profile UI, not your interactive session) and the active-list mechanism (`profile/config.yaml` `active_skill_packs`, with `core` always active) live in [`docs/reference/architecture.md`](../docs/reference/architecture.md) §2.
 
 ## Slash Commands (`.claude/commands/`)
 

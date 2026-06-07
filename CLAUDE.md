@@ -1,8 +1,31 @@
-# CLAUDE.md
+# CLAUDE.md — repo router
 
-Guidance for Claude Code working in this PM-OS repository.
+This is the team-portable **PM-OS engine**: a calm chief-of-staff system built from markdown + git + simple Python + a headless-Claude harness. Workflows are decomposed into auto-discovered skills under `.claude/skills/`. This file is a router — it leads with the invariants and points you at the canonical reference docs. Read the relevant doc before acting.
 
-This is an AI-driven automation workspace for product management: meeting-driven roadmap updates, marketing content, strategic decisions, and task orchestration. Workflows are decomposed into auto-discovered skills under `.claude/skills/` (flat layout — see `.claude/CLAUDE.md` for conventions).
+## ⚠️ Invariants (read first)
+
+1. The engine never hardcodes person/team identity — it reads from `profile/` via `scripts/profile_lib.py`.
+2. Gates stay green before any commit (`pytest`, `card_schema.py`, `test_engine_no_jay.py`).
+3. Card definitions reference theme tokens ONLY — never a hardcoded color, radius, or transition.
+4. Capture team/person nuance to the PROFILE, never into a generated artifact.
+5. Anything that writes to the outside world is Tier-2: exactly one plain-language confirm before its first external action.
+6. Never delete generated artifacts — append a version suffix (`v1`, `v2`).
+7. Dev board is `localhost:8743`; production board is `localhost:8742`. Never operate the prod board or `~/pm-os` from engine work.
+
+Full laws + enforcing commands: [`docs/reference/invariants.md`](docs/reference/invariants.md) — read before acting on the engine.
+
+## Where to look (question → source)
+
+| If you need to… | Read |
+|---|---|
+| Know the rules that must never break | [`docs/reference/invariants.md`](docs/reference/invariants.md) |
+| Understand how the system fits together | [`docs/reference/architecture.md`](docs/reference/architecture.md) |
+| Work the right way (the loop, git mechanics, timing) | [`docs/reference/conventions.md`](docs/reference/conventions.md) |
+| Add or change a card type / theme (the rules) | [`docs/reference/design-system.md`](docs/reference/design-system.md) |
+| `.claude/` config (skills, packs, commands, hooks) | [`.claude/CLAUDE.md`](.claude/CLAUDE.md) |
+| Board UI internals (server, routes, JS, Moods) | [`ui/task-board/CLAUDE.md`](ui/task-board/CLAUDE.md) |
+| Profile schema & API | [`profile/README.md`](profile/README.md) |
+| Project history / past design decisions | [`docs/plans/`](docs/plans/) (archive) |
 
 ## Workspace Layout
 
@@ -13,7 +36,6 @@ This is an AI-driven automation workspace for product management: meeting-driven
 - `datasets/meetings/` — Meeting transcripts (Customers/, Internal/) with YAML frontmatter
 - `datasets/tasks/` — Unified task queues (human, agent, collab, waiting)
 - `datasets/cron/` — Recurring job definitions
-- `langfuse/` — Local LangFuse Docker stack
 - `scripts/workers/` — Worker definitions for agent task dispatch
 - `logs/` — Automation execution logs
 
@@ -67,108 +89,30 @@ Run meeting-to-backlog automation directly:
 
 Headless env vars: `CLAUDE_CODE_AUTO_APPROVE_FILE_READS=true`, `CLAUDE_CODE_AUTO_APPROVE_FILE_WRITES=true`, `CLAUDE_CODE_HEADLESS=true`. Logs land in `logs/meetings-to-backlog-YYYYMMDD_HHMMSS.log`.
 
-## Task Management
+## Task system, cron, observability
 
-A unified task system at `datasets/tasks/` with four queues: human, agent, collab (supervised agent actions requiring human approval), waiting.
+- **Task system, queues, and the agent-dispatch pipeline:** see [`docs/reference/architecture.md`](docs/reference/architecture.md) §9 + §3.
+- **Cron (recurring agent tasks):** see [`docs/reference/architecture.md`](docs/reference/architecture.md) §8.
+- **LangFuse:** a power-user opt-in for prompt versioning/tracing, not the system of record — see [`docs/reference/architecture.md`](docs/reference/architecture.md) §7.
 
-```bash
-./scripts/task.sh add "Title" -q queue -p priority -d domain
-./scripts/task.sh list [--queue Q] [--status S] [--json]
-./scripts/task.sh show TASK-NNNN
-./scripts/task.sh update TASK-NNNN --status/--priority/--queue/--comment
-./scripts/task.sh done TASK-NNNN [--output path]
-./scripts/task.sh inbox
-```
-
-**Awareness in interactive sessions**: The task system exists, but do NOT auto-pick tasks. The human is here to do something specific. Reference and update tasks during work if relevant.
-
-### Agent queue execution (headless only)
-
-Agent tasks are dispatched by `scripts/task_dispatch.py`. Each task is matched to a worker (`scripts/workers/*.md`) that defines prompt, tools, skills, and timeout. Workers scope; skills instruct.
-
-| Worker | Matches | Tools |
-|---|---|---|
-| `_default.md` | Catch-all | All tools |
-| `researcher.md` | "research", "analyze"; product/strategy/metrics domain | Pendo, Databricks, WebSearch, qmd |
-| `product-analyst.md` | "draft", "PRD", "ship-it", "strategy", "metrics" | Pendo, Databricks, WebSearch, qmd, full ship-it pipeline skills |
-| `scheduler.md` | task_type: schedule-meeting | M365 |
-| `ticket-creator.md` | "jira", "ticket", "bug" | qmd (drafts only — no Jira MCP; human publishes via UI) |
-
-When you receive a headless task assignment:
-- `./scripts/task.sh show TASK-NNNN` → read the full task
-- `./scripts/task.sh agent:start TASK-NNNN` → mark in-progress
-- Do the work using existing skills
-- Need a human decision: `./scripts/task.sh agent:ask TASK-NNNN "question"` and STOP
-- Done: `./scripts/task.sh agent:complete TASK-NNNN --output "datasets/product/agent-output/your-output.md"`
-- Failed: `./scripts/task.sh agent:fail TASK-NNNN --error "what happened"`
-
-Default output location: `datasets/product/agent-output/` (auto-synced to Word/SharePoint).
-
-### Task creation
-
-When work needs doing during any workflow, create a task with the right queue:
-- Human decisions, meetings, approvals → `human`
-- Autonomous research, drafting, analysis → `agent`
-- Agent acts on external systems but needs approval → `collab`
-- Owed by another person/team → `waiting`
-
-### Web UI
-
-```bash
-cd ~/pm-os && python3 scripts/task_server.py   # http://localhost:8742
-```
-
-## LangFuse (Prompt Management & Observability)
-
-Local Docker stack for prompt versioning and tracing. All LLM calls in the task system are instrumented.
-
-```bash
-cd langfuse && ./start.sh                  # http://localhost:3000
-source ~/pm-os/.env.langfuse               # repo root, NOT langfuse/ — exports LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST
-```
-
-Login: `jay@pm-os.local` / `changeme123`.
-
-**Traced**: `parse_task_input.py` (auto via langfuse.openai wrapper, trace name `task-parser`). `task_dispatch.py` (`worker-match` and `worker-execution` per dispatch). All use `session_id=task_id`.
-
-**Prompts in LangFuse**: `task-parser`, `worker-*` (one per worker), `cron-parser`, `cron-execution`. Skills are read from disk at runtime, not fetched from LangFuse.
-
-```bash
-python3 scripts/langfuse_setup.py            # register/update all prompts
-python3 scripts/langfuse_setup.py --dry-run
-```
-
-**Scoring**: Task board Agents tab → open completed task → Pipeline section → thumbs up/down per step lands on the LangFuse trace.
-
-**Graceful degradation**: If LangFuse is not running or `LANGFUSE_SECRET_KEY` is unset, everything falls back to inline prompts and untraced execution.
-
-## Cron System (Recurring Agent Tasks)
-
-Cron jobs auto-create tasks on a schedule that flow through the existing dispatch pipeline.
-
-- UI: Cron tab on the task board (paste text → Claude Haiku parses → review → save)
-- Storage: `datasets/cron/jobs.json`, atomic counter at `datasets/cron/_counter`
-- Scheduler: daemon thread in `task_server.py`, 30s tick
-- Template vars in titles/descriptions: `{date}`, `{week}`, `{month}`, `{year}` resolved at execution
-
-Key files: `scripts/cron_lib.py`, `scripts/cron_scheduler.py`, `scripts/parse_cron_input.py`.
+> In interactive sessions the task system exists but do NOT auto-pick tasks — the human is here to do something specific. Reference and update tasks during work if relevant.
 
 ## Output Conventions
 
-- Never delete generated artifacts — append version suffixes (`v1`, `v2`)
-- Maintain `status.json` for processing state, `progress.md` for human notes
-- Historical snapshots for roadmaps and decisions
-- Default to markdown with clear headings; `*-draft.md` if unsure
+- Never delete generated artifacts — append version suffixes (`v1`, `v2`) (invariant #6).
+- Maintain `status.json` for processing state, `progress.md` for human notes.
+- Historical snapshots for roadmaps and decisions.
+- Default to markdown with clear headings; `*-draft.md` if unsure.
 
 ## Tools & Permissions
 
-- Allowed: file read/write, dir listing, diffs, local shell ops in safe paths
-- Ask first: MCP tools that modify external systems (Asana, HubSpot, Jira publish), file deletion
-- Prefer create/append over overwrite
+- Allowed: file read/write, dir listing, diffs, local shell ops in safe paths.
+- Ask first: file deletion, and anything that writes to the outside world — that's Tier-2 (invariant #5).
+- Prefer create/append over overwrite.
 
 ## Safety Rails
 
-- Operate within `~/pm-os/` unless explicitly instructed otherwise
-- Never overwrite large files without confirmation
-- When unsure of a path, list directories first
-- For batch operations, show a plan and await approval
+- Operate within the engine repo unless explicitly instructed otherwise; never touch the prod board or `~/pm-os` from engine work (invariant #7).
+- Never overwrite large files without confirmation.
+- When unsure of a path, list directories first.
+- For batch operations, show a plan and await approval.

@@ -1,0 +1,57 @@
+# Architecture — the engine map
+
+The current-state map of the Magnolia engine: the spine, its subsystems, and the seams between them. This is a map, not a spec — the canonical truth for each subsystem lives in code or a skill, which every section links under **Canonical source:**. The laws that hold it together live in [`invariants.md`](./invariants.md) (linked, not restated). History and rationale live in [`docs/plans/`](../plans/). When a section and the code disagree, the code wins.
+
+## 1. The spine — engine / profile / content
+
+Three layers, one rule. The **engine** (skills, scripts, card registry, UI) is shared and de-personalized: you improve it, teammates pull it. **`profile/`** (gitignored, per-person) is the *only* place identity and integration choices live — who you are, which providers you use, your conventions. **`datasets/`** is per-person content (meetings, products, tasks, research). The rule: the engine reads identity only through `profile/`, never a literal (invariant #1).
+
+**Canonical source:** `profile/README.md`; `docs/plans/2026-06-05-pm-os-portability-design.md` §1.
+
+## 2. Skills + packs + auto-discovery
+
+Skills auto-discover from `.claude/skills/<name>/SKILL.md` (flat — one level deep, no manifest). A **pack** (`.claude/packs.yaml`) is a named set of skill folders; `core` is always active; the active list is per-person in `profile/config.yaml` `active_skill_packs`. Packs gate the **background-worker dispatch catalog and the Profile UI only — NOT your interactive Claude Code session**, where native auto-discovery is unchanged. A skill in no pack stays always-available.
+
+**Canonical source:** `.claude/CLAUDE.md`; `.claude/packs.yaml`.
+
+## 3. Worker dispatch — workers scope, skills instruct
+
+`scripts/task_dispatch.py` matches an agent-queue task to exactly one `scripts/workers/*.md` worker (`_default`, `researcher`, `product-analyst`, `scheduler`, `ticket-creator`, plus eval/grad/message workers). The worker declares tools, skills, tier, and timeout — that's *scope*; the skills it names supply the *how*. The model is resolved per task by `profile_lib.resolve_model(worker_tier, posture, task_override)` and passed as `--model` to `claude -p`.
+
+**Canonical source:** `scripts/workers/_default.md`; `scripts/task_dispatch.py`.
+
+## 4. The adapter seam + Tier-2 gate
+
+External integrations are pluggable families behind structural Protocols in each family's `_contract.py`. Live families: `project_management` and `transcript`; future families (`calendar`, `doc_sync`) follow the same contract shape. The seam: the profile picks the provider, the loader (`adapters/__init__.py`) dynamic-imports it, a missing or `"none"` provider degrades gracefully, and the gated `publish(family, draft)` raises `NeedsConfirmation` on the first external write until the Tier-2 confirm is given (invariant #5).
+
+**Canonical source:** `scripts/adapters/__init__.py`; `scripts/adapters/*/_contract.py`.
+
+## 5. Profile + instruct-to-read-profile de-personalization
+
+All identity and integration values flow through `scripts/profile_lib.py` — getters (`provider`, `jira_config`, `pendo_config`, `resolve_model`), writers (`set_integration_provider`, `set_integration_conventions`, `set_integration_confirmed`), and CLI flags (e.g. `--pendo-subid`). This API surface is what makes invariant #1 true: skills, workers, and adapters read from the profile here rather than embedding literals. The denylist test enforces it.
+
+**Canonical source:** `profile/README.md`; `scripts/profile_lib.py`; `tests/test_engine_no_jay.py`.
+
+## 6. The factory (self-extension)
+
+The engine extends itself through a shared lifecycle in `meta-factory-core`: scaffold → capture-to-profile → gate-green → commit → Keep/Undo receipt. Three siblings specialize it — `meta-create-worker`, `meta-create-card-type`, `meta-create-adapter` (each opens by reading `meta-factory-core` first). `scripts/factory_lib.py` supplies `commit-and-receipt` plus `validate-worker` / `validate-card-type` / `validate-adapter`. Adapters are Tier-2 (they write externally); workers and card-types are Tier-1. Git stays invisible — every change is presented as Keep/Undo.
+
+**Canonical source:** `.claude/skills/meta-factory-core/SKILL.md` and the three `meta-create-*` skills.
+
+## 7. Eval substrate
+
+The default eval stack is native files + git + board: prompts live in files (git is their version history), traces in the Claude Code session JSONL, scores in task-markdown frontmatter, and the UI is the board's Quality tab. **LangFuse is a silent power-user opt-in** — set `LANGFUSE_SECRET_KEY` and the existing graceful-degradation wiring lights up — *not* the system of record.
+
+**Canonical source:** `docs/plans/2026-06-06-phase-4-eval-substrate-design.md`.
+
+## 8. Cron
+
+Recurring jobs live in `datasets/cron/jobs.json` with an atomic counter at `datasets/cron/_counter`. A daemon thread in `task_server.py` ticks them; created tasks flow through the normal dispatch pipeline. Title/description template vars (`{date}`, `{week}`, `{month}`, `{year}`) resolve at execution time.
+
+**Canonical source:** `scripts/cron_lib.py`; `scripts/cron_scheduler.py`.
+
+## 9. Task system (quick reference)
+
+A unified task system with four queues. Route work by who acts and whether approval is needed: **human** (decisions, meetings, approvals), **agent** (autonomous research, drafting, analysis), **collab** (an agent acts on an external system but needs human approval first), **waiting** (owed by another person or team). CLI: `./scripts/task.sh add|list|show|update|done|inbox`. Agent-queue subcommands: `agent:start`, `agent:complete --output`, `agent:fail --error`, `agent:ask`. Web UI: `python3 scripts/task_server.py`.
+
+**Canonical source:** `scripts/task.sh`.

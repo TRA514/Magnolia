@@ -421,16 +421,85 @@ async function reactTask(id, react) {
 }
 
 // ─── Card actions (accept / reject / graduate / keep / undo) ─────────
-// Thin POST to /api/tasks/{id}/{action}; a board refresh is the confirmation
-// (toast() suppresses non-error messages by design, so we only toast failures).
+// The board updating IS the confirmation — we suppress success toasts. On a
+// 409 (operator-actionable), we surface the backend's plain message CALMLY
+// and INLINE on the card, and leave the card in place so it can be read and
+// acted on. On success, a gentle "settle" beat plays, then the refresh drops
+// the card from its lane.
+function _cardEl(id, ev) {
+  if (ev && ev.target && ev.target.closest) { const c = ev.target.closest('.card'); if (c) return c; }
+  return document.querySelector(`.card[data-task-id="${id}"]`);
+}
+// Inline notices must survive the board's 15s auto-refresh (which re-renders the
+// whole lane), so the user can read a 409 and act on it calmly. We remember
+// them by task id and re-apply after every render.
+window._pendingNotices = window._pendingNotices || {};
+function clearCardNotice(card) {
+  if (!card) return;
+  const id = card.getAttribute('data-task-id');
+  if (id) delete window._pendingNotices[id];
+  const n = card.querySelector('.card-notice');
+  if (n) n.remove();
+  card.classList.remove('has-notice');
+}
+function _injectNotice(card, msg, tone) {
+  const existing = card.querySelector('.card-notice');
+  if (existing) existing.remove();
+  const note = document.createElement('div');
+  note.className = `card-notice ${tone === 'error' ? 'is-error' : 'is-warn'}`;
+  note.innerHTML = `<span class="card-notice-mark">${svgIcon(tone === 'error' ? 'failed' : 'needsHuman')}</span>` +
+    `<span class="card-notice-text"></span>` +
+    `<button class="card-notice-x" title="Dismiss" aria-label="Dismiss">${svgIcon('failed')}</button>`;
+  note.querySelector('.card-notice-text').textContent = msg;
+  note.querySelector('.card-notice-x').onclick = (e) => { e.stopPropagation(); clearCardNotice(card); };
+  card.appendChild(note);
+  card.classList.add('has-notice');
+  card.querySelectorAll('.card-action').forEach(b => { b.disabled = false; });
+}
+function showCardNotice(card, msg, tone) {
+  if (!card) { toast(msg); return; }
+  const id = card.getAttribute('data-task-id');
+  if (id) window._pendingNotices[id] = { msg, tone };
+  _injectNotice(card, msg, tone);
+}
+// Re-apply remembered notices after a lane re-render (called from renderNow).
+function reapplyCardNotices() {
+  for (const [id, n] of Object.entries(window._pendingNotices)) {
+    const card = document.querySelector(`.card[data-task-id="${id}"]`);
+    if (card) _injectNotice(card, n.msg, n.tone);
+    else delete window._pendingNotices[id]; // card gone — drop the stale notice
+  }
+}
+function settleCard(card, done) {
+  if (!card) { if (done) done(); return; }
+  card.classList.add('is-settling');
+  setTimeout(() => { if (done) done(); }, 460);
+}
+
 async function cardAction(id, action, ev) {
   if (ev) ev.stopPropagation();
+  const card = _cardEl(id, ev);
+  clearCardNotice(card);
+  if (card) card.querySelectorAll('.card-action').forEach(b => { b.disabled = true; });
   try {
     const res = await fetch(`${API}/tasks/${id}/${action}`, { method: 'POST' });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    fetchTasks(); // refresh the board — this is the user-visible confirmation
-  } catch (e) { toast(`${action} failed: ${e.message}`); }
+    if (res.status === 409) { showCardNotice(card, data.error || 'That couldn’t be applied automatically.', 'warn'); return; }
+    if (!res.ok) { showCardNotice(card, data.error || `Something went wrong (${res.status}).`, 'error'); return; }
+    // success — settle gently, then let the refresh remove the card from its lane
+    settleCard(card, () => fetchTasks());
+  } catch (e) {
+    showCardNotice(card, 'Couldn’t reach the server — try again in a moment.', 'error');
+  }
+}
+
+// "Not yet" on a graduation: a quiet, local dismiss (no server verb wired yet).
+// Settles the card out for the session without touching the backend.
+function cardDismiss(id, ev) {
+  if (ev) ev.stopPropagation();
+  const card = _cardEl(id, ev);
+  if (!card) return;
+  settleCard(card, () => { if (card && card.parentNode) card.parentNode.removeChild(card); });
 }
 
 // ─── Start Agent ─────────────────────────────────────────────────────

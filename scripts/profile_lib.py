@@ -241,6 +241,31 @@ def set_integration_provider(category, provider_id, root=None):
     _update_yaml("integrations.yaml", mutate, root)
 
 
+def set_integration_conventions(category, text, provider=None, root=None):
+    """Write free-form team conventions into integrations.yaml.
+
+    Conventions are fuzzy team nuance that has no structured field (e.g. "always
+    set the Sprint field", "bug titles prefixed [Area]"). They live in the PROFILE,
+    never in a generated artifact, so the artifact stays denylist-clean and the
+    nuance stays editable. With provider set, nests under
+    <category>.<provider>.conventions (so jira_config()['conventions'] surfaces it);
+    otherwise <category>.conventions. Siblings + comments are preserved."""
+    def mutate(doc):
+        cat = doc.get(category)
+        if not isinstance(cat, dict):
+            cat = {}
+            doc[category] = cat
+        target = cat
+        if provider:
+            sub = cat.get(provider)
+            if not isinstance(sub, dict):
+                sub = {}
+                cat[provider] = sub
+            target = sub
+        target["conventions"] = text
+    _update_yaml("integrations.yaml", mutate, root)
+
+
 def set_active_packs(packs, root=None):
     """Set config.yaml['active_skill_packs'] to the given list."""
     def mutate(doc):

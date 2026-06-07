@@ -119,3 +119,18 @@ def test_active_skill_folders_unlisted_stays_visible(tmp_path):
 def test_active_skill_folders_no_manifest_returns_all(tmp_path):
     on_disk = {"a", "b", "c"}
     assert packs_lib.active_skill_folders(["pm"], packs={}, on_disk=on_disk) == on_disk
+
+
+def test_on_disk_skill_folders_detects_skill_manifests(tmp_path):
+    skills = tmp_path / ".claude" / "skills"
+    (skills / "foo").mkdir(parents=True)
+    (skills / "foo" / "SKILL.md").write_text("---\nname: foo\n---\n")
+    (skills / "bar").mkdir(parents=True)
+    (skills / "bar" / "skill.md").write_text("---\nname: bar\n---\n")
+    (skills / "empty").mkdir(parents=True)   # no manifest -> ignored
+    got = packs_lib._on_disk_skill_folders(root=str(tmp_path))
+    assert got == {"foo", "bar"}
+
+
+def test_on_disk_skill_folders_missing_dir_returns_empty(tmp_path):
+    assert packs_lib._on_disk_skill_folders(root=str(tmp_path)) == set()

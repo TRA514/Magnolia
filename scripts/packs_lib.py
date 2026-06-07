@@ -74,7 +74,7 @@ def active_skill_folders(active_packs, packs=None, on_disk=None, root=None):
         on_disk = _on_disk_skill_folders(root)
     if not packs:
         return set(on_disk)
-    listed = {s for spec in packs.values() for s in spec["skills"]}
+    listed = {s for spec in packs.values() for s in spec.get("skills", [])}
     keep = set(packs.get(ALWAYS_ON, {}).get("skills", []))
     for pid in active_packs:
         keep |= set(packs.get(pid, {}).get("skills", []))

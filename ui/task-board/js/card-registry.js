@@ -148,6 +148,9 @@ const KIND_META = {
   recommendation: { label: 'suggestion', icon: 'spark', cls: 'kind-recommendation' },
   receipt:        { label: 'handled',    icon: 'receipt', cls: 'kind-receipt' },
   graduation:     { label: 'trust',      icon: 'ladder', cls: 'kind-graduation' },
+  // icon 'jira' is provisional: confirm is a general Tier-2 gate that will serve
+  // other families (calendar/doc_sync) later, so this PM-specific glyph is a placeholder.
+  confirm:        { label: 'confirm',    icon: 'jira',   cls: 'kind-confirm' },
 };
 const _TIER_WORD = { shadow: 'observe-only', gated: 'gated', autonomous: 'autonomous' };
 function _tierWord(t) { return _TIER_WORD[(t || '').toLowerCase()] || (t || 'observe-only'); }
@@ -255,6 +258,8 @@ function _renderActions(task, actionIds) {
       parts.push(`<button class="card-action primary" onclick="cardAction('${task.id}','keep',event)">${svgIcon('done')}Keep</button>`);
     } else if (id === 'undo') {
       parts.push(`<button class="card-action" onclick="cardAction('${task.id}','undo',event)">Undo</button>`);
+    } else if (id === 'confirm') {
+      parts.push(`<button class="card-action primary" onclick="cardAction('${task.id}','confirm',event)">${svgIcon('done')}Confirm</button>`);
     }
   }
   return parts.length ? `<div class="card-actions">${parts.join('')}</div>` : '';

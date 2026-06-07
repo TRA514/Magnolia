@@ -34,6 +34,7 @@ core:
     - meta-factory-core
     - meta-create-worker
     - meta-create-card-type
+    - meta-create-adapter
     - meta-refine-workflow
     - workflow-doctor
     - workflow-schedule-meeting

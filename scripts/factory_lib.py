@@ -142,6 +142,69 @@ def validate_card_type(name, registry_path=None):
     return errs
 
 
+def _protocols_in(contract_module):
+    """Return the typing.Protocol subclasses defined in a family's _contract module.
+
+    Restricted to Protocols whose __module__ is the contract module itself, so
+    imported Protocol bases don't leak in. The contract is the single source of
+    truth — validate_adapter requires exactly one, so an ambiguous contract
+    (zero or multiple Protocols) is a hard error rather than a silent pick."""
+    import inspect
+    return [obj for _, obj in inspect.getmembers(contract_module, inspect.isclass)
+            if getattr(obj, "_is_protocol", False)
+            and obj.__module__ == contract_module.__name__]
+
+
+def _conformance_problems(mod, proto):
+    """Return a list of ways `mod` fails to satisfy Protocol `proto` ([] = ok).
+
+    Pure interface check: every public Protocol method must be present, callable,
+    and expose the Protocol's parameter names. Never invokes the methods."""
+    import inspect
+    problems = []
+    for name, _ in inspect.getmembers(proto, callable):
+        if name.startswith("_"):
+            continue
+        fn = getattr(mod, name, None)
+        if not callable(fn):
+            problems.append(f"missing or non-callable method: {name}")
+            continue
+        # Intentionally a name-subset check — not verifying order/arity/kind (YAGNI).
+        want = [p for p in inspect.signature(getattr(proto, name)).parameters if p != "self"]
+        have = list(inspect.signature(fn).parameters)
+        for p in want:
+            if p not in have:
+                problems.append(f"{name}() missing expected parameter '{p}'")
+    return problems
+
+
+def validate_adapter(family, provider, root=None):
+    """Return a list of conformance problems for a scaffolded adapter ([] = ok).
+
+    Imports the family's _contract Protocol and the scaffolded module and checks
+    interface conformance. Import-only — does NOT call publish()/sync(), so no
+    external creds are needed. The import itself is part of the gate (syntax +
+    resolvable imports)."""
+    import importlib
+    scripts_dir = os.path.join(root, "scripts") if root else SCRIPT_DIR
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    try:
+        contract = importlib.import_module(f"adapters.{family}._contract")
+    except Exception as e:
+        return [f"could not import contract for family '{family}': {e}"]
+    protos = _protocols_in(contract)
+    if len(protos) != 1:
+        return [f"expected exactly one Protocol in adapters.{family}._contract, "
+                f"found {len(protos)}"]
+    proto = protos[0]
+    try:
+        mod = importlib.import_module(f"adapters.{family}.{provider}")
+    except Exception as e:
+        return [f"adapter import failed: {e}"]
+    return _conformance_problems(mod, proto)
+
+
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser()
@@ -154,6 +217,9 @@ if __name__ == "__main__":
     v.add_argument("path")
     vc = sub.add_parser("validate-card-type")
     vc.add_argument("name")
+    va = sub.add_parser("validate-adapter")
+    va.add_argument("family")
+    va.add_argument("provider")
     args = ap.parse_args()
     if args.cmd == "commit-and-receipt":
         print(commit_and_emit_receipt(args.summary, args.files, args.kind))
@@ -164,6 +230,11 @@ if __name__ == "__main__":
         print("ok")
     elif args.cmd == "validate-card-type":
         probs = validate_card_type(args.name)
+        if probs:
+            print("\n".join(probs)); sys.exit(1)
+        print("ok")
+    elif args.cmd == "validate-adapter":
+        probs = validate_adapter(args.family, args.provider)
         if probs:
             print("\n".join(probs)); sys.exit(1)
         print("ok")

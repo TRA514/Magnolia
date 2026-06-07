@@ -1,0 +1,371 @@
+/* ════════════════════════════════════════════════════════════════════════
+   Magnolia · Phase 6 surfaces — TOKEN-ONLY styling
+   Card kinds (Recommendation / Receipt / Graduation), the card-shell states,
+   the Profile / Config room, and Quality trust accents.
+
+   HARD RULE: every value here references a theme token (§2) or color-mixes
+   one. No literal colors, radii, or transition timings — so all five moods
+   (and any future one) inherit correctly, light or dark.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── shared: a mono stack for file paths (falls back cleanly) ─────────── */
+:root { --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   1 · CARD-KIND HEAD LABELS
+   The head reads as the KIND (in plain language) for the new card types.
+   ═══════════════════════════════════════════════════════════════════════ */
+.card-kind-label.kind-recommendation { color: var(--accent); }
+.card-kind-label.kind-receipt        { color: var(--text-dim); }
+.card-kind-label.kind-graduation     { color: var(--accent); }
+.card-kind-label svg { width: 13px; height: 13px; }
+
+/* Graduation carries a touch more weight — a faint accent seam at the top.
+   (Decorative pseudo only; never touches border/bg so proximity warmth still
+   animates freely.) */
+.card.kind-graduation::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px; z-index: 1;
+  background: linear-gradient(90deg, transparent 6%,
+    color-mix(in oklab, var(--accent) 55%, transparent), transparent 94%);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   2 · RECOMMENDATION body (diff) — what change is proposed, glanceable
+   ═══════════════════════════════════════════════════════════════════════ */
+.card-kind-body { margin-top: 11px; }
+.rec-change {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 11px; border-radius: calc(var(--r-card) - 5px);
+  background: color-mix(in oklab, var(--accent) 6%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent) 18%, var(--border-soft));
+}
+.rec-change-icon { color: var(--accent); display: flex; flex: 0 0 auto; }
+.rec-change-icon svg { width: 15px; height: 15px; }
+.rec-change-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.rec-change-label { font-size: 11px; color: var(--text-muted); letter-spacing: 0.2px; }
+.rec-change-label .rec-manual { color: var(--text-dim); }
+.rec-change-file {
+  font-family: var(--mono); font-size: 12px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   3 · RECEIPT body (preview) — what it did · how well · it's reversible
+   Quiet by design: the default state is "fine," the user skims and moves on.
+   ═══════════════════════════════════════════════════════════════════════ */
+.receipt-body { display: flex; flex-direction: column; gap: 7px; }
+.receipt-did { font-size: 12.5px; color: var(--text); line-height: 1.5; text-wrap: pretty; }
+.receipt-how { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.receipt-score {
+  display: inline-flex; align-items: baseline;
+  font-size: 11px; font-weight: 700; line-height: 1; letter-spacing: 0.2px;
+  padding: 3px 7px 3.5px; border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  background: var(--tone-soft); color: var(--tone);
+}
+.receipt-score .card-score-of { font-size: 9px; font-weight: 600; opacity: 0.62; }
+.receipt-score.good { --tone: var(--success); --tone-soft: var(--success-soft); }
+.receipt-score.mid  { --tone: var(--warning); --tone-soft: var(--warning-soft); }
+.receipt-score.low  { --tone: var(--danger);  --tone-soft: var(--danger-soft); }
+.receipt-why { font-size: 11.5px; color: var(--text-muted); line-height: 1.45; flex: 1 1 12ch; }
+.receipt-revert {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: var(--text-dim);
+}
+.receipt-revert svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.receipt-revert b { color: var(--text-muted); font-weight: 600; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   4 · GRADUATION body (agreement) — the evidence, reassuringly
+   ═══════════════════════════════════════════════════════════════════════ */
+.grad-body { display: flex; flex-direction: column; gap: 12px; }
+.grad-ladder { display: flex; align-items: center; gap: 9px; }
+.grad-tier { font-size: 12px; font-weight: 600; padding: 3px 11px; border-radius: 999px; white-space: nowrap; }
+.grad-tier.is-from { color: var(--text-muted); background: var(--surface-hover); }
+.grad-tier.is-to   { color: var(--accent-ink); background: var(--accent); }
+.grad-arrow { color: var(--text-dim); display: flex; }
+.grad-arrow svg { width: 14px; height: 14px; }
+.grad-stats { display: flex; gap: 8px; }
+.grad-stat {
+  flex: 1 1 0; display: flex; flex-direction: column; gap: 3px;
+  padding: 10px 11px; border-radius: calc(var(--r-card) - 5px);
+  background: color-mix(in oklab, var(--accent) 6%, transparent);
+  border: 1px solid var(--border-soft);
+}
+.grad-stat-num { font-family: var(--font-serif); font-size: 21px; font-weight: 500; color: var(--text); line-height: 1; letter-spacing: -0.01em; }
+.grad-stat-lbl { font-size: 10.5px; color: var(--text-dim); letter-spacing: 0.2px; }
+.grad-note { font-size: 12px; color: var(--text-muted); line-height: 1.55; text-wrap: pretty; }
+.grad-examples { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 11.5px; }
+.grad-ex-lbl { color: var(--text-dim); }
+.grad-ex { color: var(--accent); text-decoration: none; padding: 1px 7px; border-radius: var(--r-badge); background: var(--accent-soft); font-variant-numeric: tabular-nums; cursor: pointer; }
+.grad-ex:hover { text-decoration: underline; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   5 · CARD-SHELL STATES
+   ═══════════════════════════════════════════════════════════════════════ */
+/* quiet secondary action (e.g. graduation "Not yet") */
+.card-action.card-action-quiet { color: var(--text-dim); }
+.card-action.card-action-quiet:hover { color: var(--text-muted); background: var(--surface); border-color: var(--border); }
+
+/* 8 · Error / degraded — a plain-language inline message, no stack traces.
+   Stays on the card so it can be read and acted on. */
+.card-notice {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin-top: 11px; padding: 9px 11px;
+  border-radius: calc(var(--r-card) - 5px);
+  font-size: 12px; line-height: 1.5; text-wrap: pretty;
+  opacity: 1;
+}
+.card-notice.is-warn  { background: var(--warning-soft); border: 1px solid color-mix(in oklab, var(--warning) 30%, transparent); color: var(--text); }
+.card-notice.is-error { background: var(--danger-soft);  border: 1px solid color-mix(in oklab, var(--danger) 30%, transparent);  color: var(--text); }
+.card-notice-mark { flex: 0 0 auto; display: flex; margin-top: 1px; }
+.card-notice-mark svg { width: 14px; height: 14px; }
+.card-notice.is-warn  .card-notice-mark { color: var(--warning); }
+.card-notice.is-error .card-notice-mark { color: var(--danger); }
+.card-notice-text { flex: 1 1 auto; }
+.card-notice-x { flex: 0 0 auto; background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 0; display: flex; opacity: 0.65; }
+.card-notice-x svg { width: 12px; height: 12px; }
+.card-notice-x:hover { opacity: 1; color: var(--text); }
+
+/* 9 · Success-after-action — a gentle "done" beat, then it settles and the
+   next refresh drops it from the lane. No toast: the board updating IS the
+   confirmation. */
+.card.is-settling { animation: card-settle 0.46s cubic-bezier(0.4, 0, 0.2, 1) forwards; pointer-events: none; }
+.card.is-settling::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle at 50% 45%, color-mix(in oklab, var(--success) 18%, transparent), transparent 72%);
+  animation: settle-wash 0.46s ease forwards;
+}
+@keyframes card-settle {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  30%  { opacity: 1; transform: translateY(-1px) scale(1); }
+  100% { opacity: 0; transform: translateY(-3px) scale(0.985); }
+}
+@keyframes settle-wash { 0% { opacity: 0; } 28% { opacity: 1; } 100% { opacity: 0; } }
+
+/* 4 · Agent-running — a whisper-soft ambient on the resting card, in addition
+   to the existing pulse dot. Just enough to read as "working," never busy. */
+.card:has(.mark-running) {
+  border-color: color-mix(in oklab, var(--accent) calc(14% + var(--prox) * 30%), var(--border-soft));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card.is-settling, .card.is-settling::after, .card-notice { animation: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   6 · NOW — new section headers + the all-clear empty state
+   ═══════════════════════════════════════════════════════════════════════ */
+.now-section-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.now-section-name { white-space: nowrap; }
+.now-section-sub { font-size: 11.5px; font-weight: 400; letter-spacing: 0; color: var(--text-dim); text-wrap: pretty; }
+/* keep the collapsible Agent-queue label left-aligned despite the chevron */
+.now-agent-queue > summary .now-section-title { flex: 1 1 auto; }
+
+/* card-face action labels never wrap to two lines */
+.card-actions .card-action { white-space: nowrap; }
+
+/* The healthiest, most-common state: quietly affirming, never empty-error. */
+.now-allclear { display: flex; align-items: center; gap: 15px; padding: 16px 6px; }
+.allclear-mark {
+  display: flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border-radius: 50%; flex: 0 0 auto;
+  background: var(--accent-soft); color: var(--accent);
+}
+.allclear-mark svg { width: 20px; height: 20px; }
+.allclear-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.allclear-title { font-family: var(--font-serif); font-size: 15px; font-weight: 500; color: var(--text); }
+.allclear-sub { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; max-width: 46ch; text-wrap: pretty; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   7 · ENGINE sub-nav (Profile · Workers & prompts)
+   ═══════════════════════════════════════════════════════════════════════ */
+.engine-subnav { display: flex; gap: 4px; max-width: 1200px; margin: 0 auto; padding: 16px 24px 0; }
+.engine-subtab {
+  background: none; border: none; color: var(--text-muted);
+  padding: 7px 14px; border-radius: var(--r-btn); cursor: pointer;
+  font-size: 13px; font-family: inherit;
+  transition: background var(--ease), color var(--ease);
+}
+.engine-subtab:hover { background: var(--surface-hover); color: var(--text); }
+.engine-subtab.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.engine-pane { display: none; }
+.engine-pane.active { display: block; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   8 · PROFILE / CONFIG ROOM — settings for a chief of staff, form-light
+   ═══════════════════════════════════════════════════════════════════════ */
+.profile-view { max-width: 720px; margin: 0 auto; padding: 24px 24px 64px; }
+.profile-head { margin-bottom: 22px; }
+.profile-head h3 { font-family: var(--font-serif); font-size: 22px; font-weight: 500; color: var(--text); margin: 0 0 6px; }
+.profile-sub { font-size: 13px; color: var(--text-muted); line-height: 1.55; max-width: 60ch; }
+
+.pf-section {
+  background: color-mix(in oklab, var(--surface) 70%, transparent);
+  border: 1px solid var(--border-soft); border-radius: var(--r-lane);
+  padding: 20px 22px; margin-bottom: 16px;
+}
+.pf-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.pf-section-title { font-family: var(--font-serif); font-size: 16px; font-weight: 500; color: var(--text); }
+.pf-section-hint { font-size: 12px; color: var(--text-dim); text-align: right; }
+.pf-saved { font-size: 12px; color: var(--success); opacity: 0; transition: opacity var(--ease); }
+.pf-saved.show { opacity: 1; }
+
+/* Identity */
+.pf-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
+.pf-field { display: flex; flex-direction: column; gap: 5px; }
+.pf-field.full { grid-column: 1 / -1; }
+.pf-field label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); }
+.pf-input, .pf-select {
+  font-size: 13px; font-family: inherit; padding: 8px 11px;
+  border: 1px solid var(--border); border-radius: var(--r-card);
+  background: var(--bg); color: var(--text); width: 100%; box-sizing: border-box;
+}
+.pf-input:focus, .pf-select:focus { outline: none; border-color: var(--accent); }
+.pf-actions { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+
+/* Integrations */
+.pf-int-cat { margin-bottom: 18px; }
+.pf-int-cat:last-child { margin-bottom: 0; }
+.pf-int-cat-head { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 9px; }
+.pf-providers { display: flex; flex-direction: column; gap: 8px; }
+.pf-provider {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 14px; border-radius: var(--r-card);
+  border: 1px solid var(--border-soft); background: var(--surface);
+  cursor: pointer; transition: border-color var(--ease), background var(--ease);
+}
+.pf-provider:hover { border-color: var(--border); }
+.pf-provider.active { border-color: color-mix(in oklab, var(--accent) 40%, transparent); background: var(--accent-soft); }
+.pf-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.pf-dot.ok     { background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
+.pf-dot.reauth { background: var(--warning); box-shadow: 0 0 0 3px var(--warning-soft); }
+.pf-dot.unset, .pf-dot.available  { background: var(--text-dim); opacity: 0.5; }
+.pf-provider-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pf-provider-name { font-size: 13.5px; color: var(--text); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.pf-active-tag { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent); background: var(--accent-soft); padding: 1px 7px; border-radius: 999px; font-weight: 700; }
+.pf-provider-detail { font-size: 11.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-provider.status-reauth .pf-provider-detail { color: var(--warning); }
+.pf-fix {
+  flex: 0 0 auto; font-size: 12px; font-weight: 600;
+  padding: 6px 12px; border-radius: var(--r-btn);
+  border: 1px solid; cursor: pointer; font-family: inherit;
+  transition: filter var(--ease);
+}
+.pf-fix:hover { filter: brightness(1.06); }
+.pf-fix, .profile-view .btn, .pf-server, .pf-worker-name, .pf-active-tag, .pf-locked-fix { white-space: nowrap; }
+.pf-fix.reauth { color: var(--warning); border-color: color-mix(in oklab, var(--warning) 45%, var(--border)); background: var(--warning-soft); }
+.pf-fix.unset { color: var(--text-muted); border-color: var(--border); background: var(--surface-hover); }
+.pf-fix.available { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 40%, var(--border)); background: var(--accent-soft); }
+.pf-fix.busy { opacity: 0.6; cursor: default; }
+
+/* Degraded-feature pattern — present but quietly disabled, with a one-line
+   "why + fix". Reusable across Integrations and any dependent control. */
+.pf-locked {
+  display: flex; align-items: center; gap: 11px;
+  margin-top: 10px; padding: 11px 13px;
+  border-radius: var(--r-card); border: 1px dashed color-mix(in oklab, var(--warning) 40%, var(--border));
+  background: color-mix(in oklab, var(--warning) 6%, transparent);
+}
+.pf-locked-icon { color: var(--warning); display: flex; flex: 0 0 auto; }
+.pf-locked-icon svg { width: 15px; height: 15px; }
+.pf-locked-text { font-size: 12px; color: var(--text-muted); flex: 1 1 auto; line-height: 1.45; }
+.pf-locked-text b { color: var(--text); font-weight: 600; }
+.pf-locked-fix { font-size: 12px; color: var(--warning); background: none; border: none; cursor: pointer; font-weight: 600; font-family: inherit; white-space: nowrap; }
+.pf-locked-fix:hover { text-decoration: underline; }
+
+/* Voice — one editor, generous room for a long voice doc */
+.pf-voice-intro { font-size: 12.5px; color: var(--text-muted); line-height: 1.55; margin-bottom: 13px; max-width: 66ch; text-wrap: pretty; }
+.pf-textarea {
+  width: 100%; min-height: 130px; box-sizing: border-box;
+  padding: 13px 15px; border-radius: var(--r-card);
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  font-size: 13.5px; font-family: inherit; line-height: 1.65; resize: vertical;
+}
+.pf-textarea:focus { outline: none; border-color: var(--accent); }
+.pf-voice-text { min-height: 360px; }
+.pf-regen {
+  align-self: flex-start; font-size: 11.5px; color: var(--text-muted);
+  background: var(--surface-hover); border: 1px solid var(--border-soft);
+  border-radius: var(--r-btn); padding: 5px 11px; cursor: pointer; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.pf-regen:hover { border-color: var(--accent); color: var(--accent); }
+.pf-regen svg { width: 12px; height: 12px; }
+
+/* Skill packs */
+.pf-packs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pf-pack { display: inline-flex; align-items: center; gap: 7px; padding: 6px 13px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12.5px; font-weight: 600; }
+.pf-pack-add {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: 999px;
+  border: 1px dashed var(--border); background: transparent; color: var(--text-muted);
+  font-size: 12.5px; font-family: inherit; cursor: pointer;
+}
+.pf-pack-add:hover { border-color: var(--accent); color: var(--accent); }
+.pf-pack-picker { margin-top: 13px; display: flex; flex-direction: column; gap: 8px; }
+.pf-pack-option {
+  display: flex; align-items: center; gap: 12px; padding: 11px 14px;
+  border-radius: var(--r-card); border: 1px solid var(--border-soft); background: var(--surface);
+  cursor: pointer; transition: border-color var(--ease), background var(--ease);
+}
+.pf-pack-option:hover { border-color: var(--border); background: var(--surface-hover); }
+.pf-pack-option.active { border-color: color-mix(in oklab, var(--accent) 40%, transparent); background: var(--accent-soft); }
+.pf-pack-option-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pf-pack-option-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.pf-pack-option-desc { font-size: 11.5px; color: var(--text-muted); line-height: 1.4; }
+.pf-pack-check { color: var(--accent); display: flex; flex: 0 0 auto; opacity: 0; }
+.pf-pack-option.active .pf-pack-check { opacity: 1; }
+.pf-pack-check svg { width: 16px; height: 16px; }
+
+/* Model posture */
+.pf-posture { display: flex; flex-direction: column; gap: 14px; }
+.pf-seg { display: inline-flex; align-self: flex-start; background: var(--surface-hover); border: 1px solid var(--border-soft); border-radius: var(--r-btn); padding: 3px; gap: 3px; }
+.pf-seg button { background: none; border: none; padding: 7px 18px; border-radius: calc(var(--r-btn) - 2px); color: var(--text-muted); font-size: 12.5px; font-family: inherit; cursor: pointer; transition: background var(--ease), color var(--ease); }
+.pf-seg button:hover { color: var(--text); }
+.pf-seg button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.pf-posture-explain { font-size: 12.5px; color: var(--text-muted); line-height: 1.55; text-wrap: pretty; }
+.pf-workers-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+.pf-workers { display: flex; flex-direction: column; }
+.pf-worker { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-top: 1px solid var(--border-soft); font-size: 13px; }
+.pf-worker:first-child { border-top: none; }
+.pf-worker-name { color: var(--text); }
+.pf-tier { font-size: 10.5px; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: var(--surface-hover); color: var(--text-muted); text-transform: capitalize; }
+.pf-tier.high { color: var(--accent); background: var(--accent-soft); }
+.pf-tier.low { color: var(--text-dim); }
+
+/* System status */
+.pf-sys-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+.pf-server { display: inline-flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--text); font-weight: 500; }
+.pf-server-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
+.pf-server-dot.off { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+.pf-port { color: var(--accent); text-decoration: none; font-size: 12.5px; font-family: var(--mono); }
+.pf-port:hover { text-decoration: underline; }
+.pf-restart { margin-left: auto; }
+.pf-health { display: flex; flex-direction: column; }
+.pf-health-row { display: flex; align-items: center; gap: 11px; padding: 10px 0; border-top: 1px solid var(--border-soft); }
+.pf-health-row:first-child { border-top: none; }
+.pf-health-name { font-size: 13px; color: var(--text); min-width: 168px; display: flex; align-items: center; gap: 9px; }
+.pf-health-detail { font-size: 11.5px; color: var(--text-muted); flex: 1 1 auto; line-height: 1.4; }
+.pf-health-row.status-reauth .pf-health-detail,
+.pf-health-row.status-degraded .pf-health-detail { color: var(--warning); }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   9 · QUALITY — trust badge (the friendly ladder tier)
+   ═══════════════════════════════════════════════════════════════════════ */
+.q-trust {
+  flex: 0 0 auto; font-size: 9.5px; font-weight: 700; letter-spacing: 0.6px;
+  text-transform: uppercase; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+}
+.q-trust.tier-shadow     { color: var(--text-muted); background: var(--surface-hover); }
+.q-trust.tier-gated      { color: var(--warning); background: var(--warning-soft); }
+.q-trust.tier-autonomous { color: var(--success); background: var(--success-soft); }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   responsive — stack the two-up grids on narrow viewports
+   ═══════════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .pf-fields { grid-template-columns: 1fr; }
+  .grad-stats { flex-wrap: wrap; }
+  .grad-stat { flex-basis: calc(50% - 4px); }
+}

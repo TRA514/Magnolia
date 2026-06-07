@@ -141,27 +141,78 @@ function _renderSignals(task, signalsSpec) {
   return parts.length ? `<div class="card-signals">${parts.join('')}</div>` : '';
 }
 
+// ─── Card-kind metadata (head label + glyph for the new kinds) ───────────────
+// The head slot shows a queue glyph+label for plain tasks; for the new kinds it
+// reads as the KIND, in plain language, so the card announces what it is.
+const KIND_META = {
+  recommendation: { label: 'suggestion', icon: 'spark', cls: 'kind-recommendation' },
+  receipt:        { label: 'handled',    icon: 'receipt', cls: 'kind-receipt' },
+  graduation:     { label: 'trust',      icon: 'ladder', cls: 'kind-graduation' },
+};
+const _TIER_WORD = { shadow: 'observe-only', gated: 'gated', autonomous: 'autonomous' };
+function _tierWord(t) { return _TIER_WORD[(t || '').toLowerCase()] || (t || 'observe-only'); }
+function _gradNote(proposed, type) {
+  const ty = type || 'this task-type';
+  if ((proposed || '').toLowerCase() === 'gated')
+    return `Gated means ${ty} runs on its own but waits for your yes before anything leaves. If quality slips, it returns to observe-only automatically.`;
+  if ((proposed || '').toLowerCase() === 'autonomous')
+    return `Autonomous means ${ty} completes and ships without waiting — you can still review anything. It steps back down if quality drops.`;
+  return `If quality later drops, ${ty} steps back down on its own.`;
+}
+
 // ─── Body renderers ──────────────────────────────────────────────────────────
-// diff / preview / agreement card faces. IMPORTANT: card faces render from the
-// list PROJECTION (list_tasks), which has NO `body` — so these use ONLY projected
-// fields (patch_path, grad_*). Full detail lives in the modal (openTask fetches
-// the full task). Minimal by design; Phase 6 restyles. The `task` card type has
-// body:null → _renderBody returns '' and no slot emits.
+// diff / preview / agreement card faces. Faces render from the list PROJECTION
+// (no `body`), so these use ONLY projected fields. Full detail lives in the modal.
 const bodyRenderers = {
+  // Recommendation — what change is being proposed, glanceable.
   diff(task) {
-    return `<div class="card-body card-body-diff" data-card-body="diff">
-      <div class="rec-line">Proposed change${task.patch_path ? ` · <span class="rec-patch">${escapeHtml(task.patch_path.split('/').pop())}</span>` : ' (manual)'}</div>
+    const hasPatch = !!task.patch_path;
+    const file = hasPatch ? escapeHtml(task.patch_path.split('/').pop()) : 'No file — apply by hand';
+    return `<div class="card-body card-kind-body rec-body" data-card-body="diff">
+      <div class="rec-change">
+        <span class="rec-change-icon">${svgIcon(hasPatch ? 'patch' : 'spark')}</span>
+        <span class="rec-change-main">
+          <span class="rec-change-label">Proposed change${hasPatch ? '' : ' <span class="rec-manual">(manual)</span>'}</span>
+          <span class="rec-change-file">${file}</span>
+        </span>
+      </div>
     </div>`;
   },
+  // Receipt — what it did · how well · that it's reversible. Three things, no more.
   preview(task) {
-    return `<div class="card-body card-body-preview" data-card-body="preview">
-      <div class="receipt-line">Applied — Undo reverts this change.</div>
+    const did = escapeHtml(task.receipt_summary || String(task.title || '').replace(/^Applied:\s*/i, ''));
+    let how = '';
+    if (task.judge_score != null) {
+      const band = task.judge_score >= 8 ? 'good' : (task.judge_score >= 5 ? 'mid' : 'low');
+      how = `<div class="receipt-how"><span class="receipt-score ${band}">${task.judge_score}<span class="card-score-of">/10</span></span>${task.judge_why ? `<span class="receipt-why">${escapeHtml(task.judge_why)}</span>` : ''}</div>`;
+    }
+    return `<div class="card-body card-kind-body receipt-body" data-card-body="preview">
+      <div class="receipt-did">${did}</div>
+      ${how}
+      <div class="receipt-revert">${svgIcon('undo')}<span>Applied — <b>Undo</b> reverts this change.</span></div>
     </div>`;
   },
+  // Graduation — the evidence, reassuringly: tier move · three numbers · what changes.
   agreement(task) {
-    return `<div class="card-body card-body-agreement" data-card-body="agreement">
-      <div class="grad-stat"><b>${escapeHtml(task.grad_task_type || '')}</b>: ${escapeHtml(task.grad_current_tier || 'shadow')} → ${escapeHtml(task.grad_proposed_tier || '')}</div>
-      <div class="grad-stat">approval ${task.grad_approval_pct ?? '—'}% · agreement ${task.grad_agreement_pct ?? '—'}% · n=${task.grad_n ?? '—'}</div>
+    const from = _tierWord(task.grad_current_tier), to = _tierWord(task.grad_proposed_tier);
+    const ex = Array.isArray(task.grad_examples) ? task.grad_examples : [];
+    const exHtml = ex.length
+      ? `<div class="grad-examples"><span class="grad-ex-lbl">Recent runs</span>${ex.map(id => `<a class="grad-ex" onclick="event.stopPropagation();openTask('${id}')">${escapeHtml(id)}</a>`).join('')}</div>`
+      : '';
+    const num = v => (v == null ? '—' : v + '%');
+    return `<div class="card-body card-kind-body grad-body" data-card-body="agreement">
+      <div class="grad-ladder">
+        <span class="grad-tier is-from">${escapeHtml(from)}</span>
+        <span class="grad-arrow">${svgIcon('arrowRight')}</span>
+        <span class="grad-tier is-to">${escapeHtml(to)}</span>
+      </div>
+      <div class="grad-stats">
+        <div class="grad-stat"><span class="grad-stat-num">${num(task.grad_approval_pct)}</span><span class="grad-stat-lbl">you approve</span></div>
+        <div class="grad-stat"><span class="grad-stat-num">${num(task.grad_agreement_pct)}</span><span class="grad-stat-lbl">judge agrees</span></div>
+        <div class="grad-stat"><span class="grad-stat-num">${task.grad_n ?? '—'}</span><span class="grad-stat-lbl">recent runs</span></div>
+      </div>
+      <div class="grad-note">${escapeHtml(_gradNote(task.grad_proposed_tier, task.grad_task_type))}</div>
+      ${exHtml}
     </div>`;
   },
 };
@@ -198,6 +249,8 @@ function _renderActions(task, actionIds) {
       parts.push(`<button class="card-action" onclick="cardAction('${task.id}','reject',event)">Reject</button>`);
     } else if (id === 'graduate') {
       parts.push(`<button class="card-action primary" onclick="cardAction('${task.id}','graduate',event)">${svgIcon('done')}Graduate</button>`);
+      // "Not yet" — a quiet dismiss; not wired server-side yet, so it just settles locally.
+      parts.push(`<button class="card-action card-action-quiet" onclick="cardDismiss('${task.id}',event)">Not yet</button>`);
     } else if (id === 'keep') {
       parts.push(`<button class="card-action primary" onclick="cardAction('${task.id}','keep',event)">${svgIcon('done')}Keep</button>`);
     } else if (id === 'undo') {
@@ -210,8 +263,13 @@ function _renderActions(task, actionIds) {
 // ─── Slot builders (head / title / context) ─────────────────────────────────
 // These reproduce board.js's head/title/context markup verbatim.
 function _renderHead(task, q) {
+  const kind = KIND_META[task.card_type];
   let head = `<div class="card-head">`;
-  head += `<span class="card-queue">${svgIcon(q.icon)}${q.label}</span>`;
+  if (kind) {
+    head += `<span class="card-queue card-kind-label ${kind.cls}">${svgIcon(kind.icon)}${kind.label}</span>`;
+  } else {
+    head += `<span class="card-queue">${svgIcon(q.icon)}${q.label}</span>`;
+  }
   head += `<span class="card-head-right">${judgeScoreBadge(task)}${statusMark(task)}<span class="card-id">${task.id}</span></span>`;
   head += `</div>`;
   return head;
@@ -266,5 +324,7 @@ function renderCardFromRegistry(task, queueName) {
     if (build) inner += build();
   }
 
-  return `<div class="card ${q.cls}" onclick="openTask('${task.id}')">${inner}</div>`;
+  const kind = KIND_META[typeName];
+  const kindCls = kind ? ` card-kind ${kind.cls}` : '';
+  return `<div class="card ${q.cls}${kindCls}" data-task-id="${task.id}" onclick="openTask('${task.id}')">${inner}</div>`;
 }

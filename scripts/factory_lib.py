@@ -142,13 +142,17 @@ def validate_card_type(name, registry_path=None):
     return errs
 
 
-def _protocol_in(contract_module):
-    """Return the typing.Protocol subclass defined in a family's _contract module."""
+def _protocols_in(contract_module):
+    """Return the typing.Protocol subclasses defined in a family's _contract module.
+
+    Restricted to Protocols whose __module__ is the contract module itself, so
+    imported Protocol bases don't leak in. The contract is the single source of
+    truth — validate_adapter requires exactly one, so an ambiguous contract
+    (zero or multiple Protocols) is a hard error rather than a silent pick."""
     import inspect
-    for _, obj in inspect.getmembers(contract_module, inspect.isclass):
-        if getattr(obj, "_is_protocol", False) and obj.__module__ == contract_module.__name__:
-            return obj
-    return None
+    return [obj for _, obj in inspect.getmembers(contract_module, inspect.isclass)
+            if getattr(obj, "_is_protocol", False)
+            and obj.__module__ == contract_module.__name__]
 
 
 def _conformance_problems(mod, proto):
@@ -165,6 +169,7 @@ def _conformance_problems(mod, proto):
         if not callable(fn):
             problems.append(f"missing or non-callable method: {name}")
             continue
+        # Intentionally a name-subset check — not verifying order/arity/kind (YAGNI).
         want = [p for p in inspect.signature(getattr(proto, name)).parameters if p != "self"]
         have = list(inspect.signature(fn).parameters)
         for p in want:
@@ -188,9 +193,11 @@ def validate_adapter(family, provider, root=None):
         contract = importlib.import_module(f"adapters.{family}._contract")
     except Exception as e:
         return [f"could not import contract for family '{family}': {e}"]
-    proto = _protocol_in(contract)
-    if proto is None:
-        return [f"no Protocol found in adapters.{family}._contract"]
+    protos = _protocols_in(contract)
+    if len(protos) != 1:
+        return [f"expected exactly one Protocol in adapters.{family}._contract, "
+                f"found {len(protos)}"]
+    proto = protos[0]
     try:
         mod = importlib.import_module(f"adapters.{family}.{provider}")
     except Exception as e:

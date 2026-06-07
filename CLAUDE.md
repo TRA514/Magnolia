@@ -20,10 +20,10 @@ Full laws + enforcing commands: [`docs/reference/invariants.md`](docs/reference/
 |---|---|
 | Know the rules that must never break | [`docs/reference/invariants.md`](docs/reference/invariants.md) |
 | Understand how the system fits together | [`docs/reference/architecture.md`](docs/reference/architecture.md) |
-| Work the right way (process, gates, safety) | [`docs/reference/conventions.md`](docs/reference/conventions.md) |
-| Touch the board / cards / themes | [`docs/reference/design-system.md`](docs/reference/design-system.md) |
+| Work the right way (the loop, git mechanics, timing) | [`docs/reference/conventions.md`](docs/reference/conventions.md) |
+| Add or change a card type / theme (the rules) | [`docs/reference/design-system.md`](docs/reference/design-system.md) |
 | `.claude/` config (skills, packs, commands, hooks) | [`.claude/CLAUDE.md`](.claude/CLAUDE.md) |
-| Board UI internals | [`ui/task-board/CLAUDE.md`](ui/task-board/CLAUDE.md) |
+| Board UI internals (server, routes, JS, Moods) | [`ui/task-board/CLAUDE.md`](ui/task-board/CLAUDE.md) |
 | Profile schema & API | [`profile/README.md`](profile/README.md) |
 | Project history / past design decisions | [`docs/plans/`](docs/plans/) (archive) |
 

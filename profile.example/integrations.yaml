@@ -9,6 +9,7 @@ project_management:
     default_assignee: "" # Jira accountId
     board_id: ""         # e.g. 1096 — the team's Jira board id
     product_area: ""     # e.g. Home AI DLC — the team's product-area / swim-lane label
+    conventions: ""      # free-form team nuance the factory captures (e.g. "always set Sprint")
 transcript:
   provider: "none"       # otter | granola | none
   target: "datasets/meetings/"

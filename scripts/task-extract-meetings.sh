@@ -84,7 +84,7 @@ This gives you all existing open tasks. For EACH potential new task, check if a 
 
 Only create a new task if no existing task covers the same work.
 
-Use the task-extract-from-meeting skill at .claude/skills/task-management/task-extract-from-meeting/SKILL.md to identify action items and create tasks. For each action item, use ./scripts/task.sh add with appropriate --queue, --priority, --domain, --source-meeting flags. Apply the auto-queue rules: human decisions -> human queue, autonomous work -> agent queue, joint work -> collab queue, delegated to others -> waiting queue." \
+Use the task-extract-from-meeting skill at .claude/skills/task-extract-from-meeting/SKILL.md to identify action items and create tasks. For each action item, use ./scripts/task.sh add with appropriate --queue, --priority, --domain, --source-meeting flags. Apply the auto-queue rules: human decisions -> human queue, autonomous work -> agent queue, joint work -> collab queue, delegated to others -> waiting queue." \
     --allowedTools "Bash(*),Read(*),Write(*)" \
     --max-turns 20 2>"$tmpstderr"; then
     # claude exited 0, but check stderr for nested-session false positive

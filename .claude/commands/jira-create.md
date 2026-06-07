@@ -1,12 +1,12 @@
 ## MANDATORY: Use the workflow-jira-home Skill
 
 Before doing anything else:
-1. Announce: "Using the **workflow-jira-home** skill to create an issue on the Vantaca Home AI DLC board (VNT, board 1096)."
+1. Announce: "Using the **workflow-jira-home** skill to create an issue on the Vantaca Home AI DLC board (VNT, the team's board — profile `board_id`)."
 2. Read and follow `.claude/skills/workflow-jira-home/SKILL.md` exactly.
 
 ## Purpose
 
-Create Jira issues for Vantaca Home (project `VNT`) via the Jira MCP. Most issues (Bugs, Units, Regression Defects) land on the Home AI DLC board's backlog and kanban (board `1096`). Features and Epics live on the roadmap boards (not on the AI DLC kanban) and carry `home_aidlc` as an initiative tag. Labels follow the Swim Lane Rule defined in `workflow-jira-home/SKILL.md` — the command does not invent topical labels.
+Create Jira issues for Vantaca Home (project `VNT`) via the Jira MCP. Most issues (Bugs, Units, Regression Defects) land on the Home AI DLC board's backlog and kanban (the team's board — profile `board_id`). Features and Epics live on the roadmap boards (not on the AI DLC kanban) and carry `home_aidlc` as an initiative tag. Labels follow the Swim Lane Rule defined in `workflow-jira-home/SKILL.md` — the command does not invent topical labels.
 
 ## Arguments
 
@@ -27,7 +27,7 @@ Other:
 
 **All issues:**
 - Component set to `Vantaca HXP` (id `10011`)
-- Labels follow the Swim Lane Rule: Features/Epics get `home_aidlc` (AI DLC automated lane); Bugs, Units, and other one-offs get no labels (lands in "everything else" column on board 1096)
+- Labels follow the Swim Lane Rule: Features/Epics get `home_aidlc` (AI DLC automated lane); Bugs, Units, and other one-offs get no labels (lands in "everything else" column on the team's board — profile `board_id`)
 - Defaults to the standard new-issue status for the type (typically Refinement or Backlog)
 - Optionally sets priority and release notes. Additional labels are only added when the user explicitly names one in their prompt — the command never invents topical tags.
 
@@ -39,7 +39,7 @@ Other:
 - Prompts for **Spec Reference** (the PRD/spec Word URL — Sam's 2026-05-22 process refresh; downstream Teams comms read this field)
 - Prompts for **GTM Date** and **EA Date** — either can be left blank or `TBD` to fill in later in the Jira UI
 - Prompts for Client Commitment flag (CAI / Vision)
-- **Assignee defaults to Jay Jenkins** (`712020:aeec48b7-3829-433b-9125-c8c2a4c84e6f`) unless a different person is specified
+- **Assignee** defaults to the `default_assignee` from `profile/integrations.yaml` if set, else empty — unless a different person is specified
 
 ## Examples
 

@@ -20,9 +20,11 @@ head → title → context → signals → body → actions
 - **actions** — buttons mapped to handlers. Available ids: `mark_done`, `open_output`, `publish_jira`, `accept`, `reject`, `keep`, `undo`, `graduate`, `confirm`.
 - **body** — one of the `BODY_RENDERERS` (`diff`, `preview`, `agreement`) or `null` for no card face.
 
+`head`, `title`, and `context` are framework-owned slots rendered automatically from the task — they are not part of the `{ signals, actions, body }` an author fills in.
+
 Current card types: `task`, `recommendation`, `receipt`, `graduation`, `confirm`. See `registry.json` for the field-by-field shape.
 
-## 3. The composition-only boundary
+## 3. The composition boundary
 
 This is the rule an agent most needs before adding a card type:
 

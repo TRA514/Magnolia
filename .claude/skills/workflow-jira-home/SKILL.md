@@ -1,6 +1,6 @@
 ---
 name: workflow-jira-home
-description: Create Jira issues (Features, Units, Bugs, Regression Defects, etc.) on the Vantaca Home AI DLC board (VNT, board 1096) via the Jira MCP. Use when the user wants to log a bug, file a feature request, draft a unit, or create a PRD-linked Feature for the Home product area.
+description: Create Jira issues (Features, Units, Bugs, Regression Defects, etc.) on the team's Vantaca Home board (VNT) via the Jira MCP. Use when the user wants to log a bug, file a feature request, draft a unit, or create a PRD-linked Feature for the Home product area.
 triggers:
   - jira
   - create ticket
@@ -11,13 +11,12 @@ triggers:
   - feature request
   - Vantaca Home AI DLC
   - VNT board
-  - board 1096
   - HXP
 ---
 
 # Jira Home Issue Creation
 
-Create issues on the Vantaca Home AI DLC board (project `VNT`, board `1096`) using the Jira MCP.
+Create issues on the team's Vantaca Home board (project `VNT`, `board_id` from `profile/integrations.yaml`) using the Jira MCP.
 
 ## When to Use
 
@@ -81,7 +80,7 @@ Full description with context...
 - `JIRA_EA_DATE`: `YYYY-MM-DD`, or empty / `TBD` to leave blank (Feature / Epic only). Early-access date — typically before GTM. Sam's process accepts incomplete dates so long as the field can be filled in later in the Jira UI.
 - `JIRA_SPEC_REFERENCE`: absolute URL to the spec/PRD (Feature / Epic only). For PM-OS-driven Features this is the Word/SharePoint URL of `PRD_{slug}.md`. The URL goes in the Jira field, not in the description body — keep the description lean.
 - `JIRA_CLIENT_COMMITMENT`: `CAI`, `Vision`, or empty (Feature / Epic only)
-- `JIRA_ASSIGNEE`: Jira account ID string (e.g., `712020:aeec48b7-3829-433b-9125-c8c2a4c84e6f`). **For Features, defaults to Jay Jenkins (`712020:aeec48b7-3829-433b-9125-c8c2a4c84e6f`) unless the user specifies someone else.** Leave empty for non-Feature types unless the user explicitly sets it.
+- `JIRA_ASSIGNEE`: Jira account ID string. **Interactive mode:** read `default_assignee` from `profile/integrations.yaml` (`project_management.jira`) and set it for Features (override only if the user names someone else); leave empty for non-Feature types. **Draft mode:** leave `<!-- JIRA_ASSIGNEE: -->` empty — `jira_publish.py` applies the profile `default_assignee` at publish time, so the drafting agent does NOT do the lookup. Never invent an assignee; if the profile has none, leave it blank.
 
 **Description hygiene (applies to both draft mode and direct-publish mode):**
 
@@ -95,32 +94,36 @@ Cross-link via Jira-native references instead (`VNT-NNNNN` keys, Confluence URLs
 
 ## Jira Configuration
 
-All values below are hardcoded from the Vantaca Jira instance. The migration to board 1096 over the weekend of 2026-05-10 did not change project-level identifiers; only the issue type hierarchy and the board filter changed.
+All values below are hardcoded from the Vantaca Jira instance. The migration to the team's Home board over the weekend of 2026-05-10 did not change project-level identifiers; only the issue type hierarchy and the board filter changed.
 
 | Setting | Value |
 |---------|-------|
 | Cloud ID | `vantaca.atlassian.net` |
 | Project Key | `VNT` |
 | Project ID | `10032` |
-| Default Board | `1096` (Vantaca Home AI DLC) |
+| Default Board | from profile `board_id` (e.g. the Home AI DLC board) |
 | Default Component | `Vantaca HXP` (id `10011`) |
-| Default Label | **None.** `home_aidlc` is a *swim lane assignment* — apply it only to Features and Epics (which flow through the AI DLC automated lane). Bugs, Units, and other one-off types get no labels and land in the "everything else" column on board 1096. See the Swim Lane Rule below. |
+| Default Label | **None.** `home_aidlc` is a *swim lane assignment* — apply it only to Features and Epics (which flow through the AI DLC automated lane). Bugs, Units, and other one-off types get no labels and land in the "everything else" column on the team's Home board. See the Swim Lane Rule below. |
+
+**Per-team values from profile.** The board and default assignee are not hardcoded — read them from `profile/integrations.yaml` under `project_management.jira`:
+- `board_id` — the team's Home board id. Use it wherever a board id is needed.
+- `default_assignee` — the Jira accountId that Features default to. If empty/unset, leave the assignee field blank rather than inventing one.
 
 ### Issue Types
 
 | Type | ID | Hierarchy | Use Case | Where it appears |
 |------|-----|-----------|----------|------------------|
 | Feature | `10446` | 1 | **Larger net-new product capability (PRD-scale).** Product-owned, contains Units as children. Replaces Epic. | Roadmap boards only — does **not** appear on the Home AI DLC kanban. |
-| Unit | `10314` | 0 | **Small enhancement, improvement, or single engineering change.** Independently buildable, testable, deployable. Default for most engineering work. Replaces Story. | Home AI DLC board (1096) — backlog + kanban. |
-| Bug | `10033` | 0 | **Client-reported problem or error.** Default for `--bug`. | Home AI DLC board (1096) — backlog + kanban. |
-| Regression Defect | `10165` | 0 | **Internally-found regression** (QA, internal testing). Use when bug source is internal, not customer. | Home AI DLC board (1096) — backlog + kanban. |
-| Spike | `10281` | 0 | Time-boxed investigation. | Home AI DLC board (1096). |
-| Hotfix | `10076` | 0 | Emergency fix. | Home AI DLC board (1096). |
-| Work Item Defect | `10164` | 0 | Internally-reported problem blocking a work item. | Home AI DLC board (1096). |
-| Performance Defect | `10213` | 0 | Performance-class defect. | Home AI DLC board (1096). |
-| Security Defect | `10214` | 0 | Security-class defect. | Home AI DLC board (1096). |
+| Unit | `10314` | 0 | **Small enhancement, improvement, or single engineering change.** Independently buildable, testable, deployable. Default for most engineering work. Replaces Story. | the team's Home board — backlog + kanban. |
+| Bug | `10033` | 0 | **Client-reported problem or error.** Default for `--bug`. | the team's Home board — backlog + kanban. |
+| Regression Defect | `10165` | 0 | **Internally-found regression** (QA, internal testing). Use when bug source is internal, not customer. | the team's Home board — backlog + kanban. |
+| Spike | `10281` | 0 | Time-boxed investigation. | the team's Home board. |
+| Hotfix | `10076` | 0 | Emergency fix. | the team's Home board. |
+| Work Item Defect | `10164` | 0 | Internally-reported problem blocking a work item. | the team's Home board. |
+| Performance Defect | `10213` | 0 | Performance-class defect. | the team's Home board. |
+| Security Defect | `10214` | 0 | Security-class defect. | the team's Home board. |
 | Epic | `10000` | 1 | Legacy / cross-team grouping. Use Feature instead for new work. | Roadmap boards (mirrors Feature). |
-| Story | `10009` | 0 | Legacy / non-Home flows. Use Unit instead for Home engineering work. | Home AI DLC board (1096). |
+| Story | `10009` | 0 | Legacy / non-Home flows. Use Unit instead for Home engineering work. | the team's Home board. |
 
 ### Custom Field Reference
 
@@ -136,15 +139,15 @@ All values below are hardcoded from the Vantaca Jira instance. The migration to 
 | Priority | `priority` | priority | Standard Jira priorities |
 | Labels | `labels` | array of string | Swim lane assignment. `home_aidlc` → AI DLC automated lane (Features/Epics only). Empty → "everything else" column (bugs, ad-hoc work). No auto-prepend; the draft's labels are submitted as-is. |
 | Parent | `parent` | issue link | Top-level field on Unit/Sub-task — value is `{"key": "VNT-XXXXX"}` |
-| Assignee | `assignee` | account object | `{"accountId": "..."}`. **Features default to Jay Jenkins (`712020:aeec48b7-3829-433b-9125-c8c2a4c84e6f`) unless overridden.** Other types: leave unset unless user specifies. |
+| Assignee | `assignee` | account object | `{"accountId": "..."}`. **Interactive mode:** Features get the profile `default_assignee` (`project_management.jira`) unless overridden; leave empty if unset. **Draft mode:** leave the draft assignee blank — `jira_publish.py` fills the profile `default_assignee` at publish time. Non-Feature types: leave unset unless the user specifies. |
 
 ### Swim Lane Rule
 
 The `home_aidlc` label plays two different roles depending on the issue type:
 
-**For Features and Epics** — it's an *initiative tag*. Features and Epics live on roadmap boards (not on board 1096's kanban), but the label identifies them as part of the AI DLC initiative. PM-OS defaults Features and Epics to `["home_aidlc"]` for this reason.
+**For Features and Epics** — it's an *initiative tag*. Features and Epics live on roadmap boards (not on the team's Home board kanban), but the label identifies them as part of the AI DLC initiative. PM-OS defaults Features and Epics to `["home_aidlc"]` for this reason.
 
-**For Units, Bugs, and other backlog-tier types** — it's a *swim lane assignment* on the Home AI DLC board (1096):
+**For Units, Bugs, and other backlog-tier types** — it's a *swim lane assignment* on the team's Home board:
 
 - **With `home_aidlc`** → AI DLC swim lane (agent-driven, automated work the team consumes through pipelines).
 - **Without any labels** → "everything else" column (manual kanban for ad-hoc Bugs, Regression Defects, Units, Spikes, Hotfixes, and other one-off work).
@@ -168,7 +171,7 @@ PM-OS defaults these types to `[]`. A Unit that's a child of an AI DLC Feature s
 - New issues default to **Refinement** status (some types — Unit, Feature — may default to Backlog; let Jira pick the initial transition)
 - To transition out of Refinement to "To Do", these fields must be filled in Jira: Release Notes, Regression Area, Components
 - The `Vantaca HXP` component makes the issue eligible for Home team boards
-- The `home_aidlc` label has dual roles — initiative tag for Features/Epics (they live on roadmap boards), or swim lane assignment for Units/Bugs/etc. on board 1096. Defaults to applied for Features/Epics, omitted for everything else. See the Swim Lane Rule above.
+- The `home_aidlc` label has dual roles — initiative tag for Features/Epics (they live on roadmap boards), or swim lane assignment for Units/Bugs/etc. on the team's Home board. Defaults to applied for Features/Epics, omitted for everything else. See the Swim Lane Rule above.
 - A `Unit` should be parented to a `Feature` (preferred) or `Epic` (legacy). Jira may reject Unit parents of other types — surface the error and let the user pick a valid parent.
 
 ---
@@ -215,7 +218,7 @@ Ask if the user wants to set any of these now (they can always be added later in
 
 - **Priority**: Highest / High / Medium / Low / Lowest
 - **Release Notes**: None / Internal Only / External
-- **Labels**: usually skip. Bugs default to no labels — they land in the "everything else" column on board 1096. Only ask if the user has already mentioned a specific label in their prompt. Do NOT volunteer topical tags. See the Swim Lane Rule above.
+- **Labels**: usually skip. Bugs default to no labels — they land in the "everything else" column on the team's Home board. Only ask if the user has already mentioned a specific label in their prompt. Do NOT volunteer topical tags. See the Swim Lane Rule above.
 
 Do NOT ask about Regression Area — it has 260+ options and is better set in the Jira UI.
 
@@ -275,7 +278,7 @@ Ask each in turn (skip any already provided via arguments). For dates, accept `T
    - `CAI` — committed for CAI conference
    - `Vision` — committed for Vision conference
    - None — not event-committed (skip field)
-5. **Assignee** (optional): Defaults to **Jay Jenkins** (`712020:aeec48b7-3829-433b-9125-c8c2a4c84e6f`) unless the user specifies someone else. Only ask if the user has already named a different person.
+5. **Assignee** (optional): This is interactive mode, so read `default_assignee` from `profile/integrations.yaml` (`project_management.jira`) and use it; leave empty if unset, unless the user specifies someone else. Only ask if the user has already named a different person. (In draft mode this field stays blank — `jira_publish.py` fills it at publish time.)
 
 ### Step 3.3: Create the Feature
 
@@ -296,8 +299,8 @@ mcp__claude_ai_Jira__createJiraIssue(
     "customfield_10683": "<YYYY-MM-DD ea date>",
     "customfield_10783": "<absolute spec reference url>",
     "customfield_10298": ["<commitment flag>"],
-    // Assignee: defaults to Jay Jenkins; override only if user specified someone else
-    "assignee": {"accountId": "<accountId — default: 712020:aeec48b7-3829-433b-9125-c8c2a4c84e6f>"}
+    // Assignee (interactive mode): read default_assignee from profile/integrations.yaml; override only if user named someone else. Omit if profile has none.
+    "assignee": {"accountId": "<default_assignee from profile/integrations.yaml, if set>"}
   }
 )
 ```
@@ -379,7 +382,7 @@ The flow is identical to Phase 3 (Epic mirrors Feature) and Phase 4 (Story mirro
 
 ## Error Handling
 
-- **MCP unavailable**: "The Jira MCP is not connected. Make sure you're running inside ~/pm-os/ with MCP integrations enabled."
+- **MCP unavailable**: "The Jira MCP is not connected. Make sure you're running inside this project with MCP integrations enabled."
 - **Permission denied**: "You don't have permission to create issues in VNT. Check your Jira access."
 - **Field validation error**: Display the error from Jira and suggest corrections.
 - **Component not found**: Fall back to using the component name instead of ID: `[{"name": "Vantaca HXP"}]`

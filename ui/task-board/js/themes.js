@@ -31,9 +31,17 @@ const MOODS = [
     // Spectral + Mulish are already linked in index.html <head> — no fontHref needed.
   },
   {
+    id: 'sugarmagnolia',
+    label: 'Sunshine Daydream',
+    blurb: 'Walking in the tall trees',
+    fontHref: 'https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Yeseva+One&display=swap',
+    // browser-tab icon: a red/blue split lightning bolt on magnolia cream
+    favicon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Crect width='32' height='32' rx='7' fill='%23faf3e4'/%3E%3Cdefs%3E%3ClinearGradient id='b' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0.5' stop-color='%23da291c'/%3E%3Cstop offset='0.5' stop-color='%232b4fb0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpolygon points='19,3 4,19 12,19 9,30 28,13 19,13 25,3' fill='url(%23b)'/%3E%3C/svg%3E",
+  },
+  {
     id: 'modafinil',
-    label: 'Modafinil',
-    blurb: 'Vaporwave · digital sunset',
+    label: 'Synthwave',
+    blurb: 'The Grid · digital sunset',
     fontHref: 'https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500;600;700;800&display=swap',
   },
   {
@@ -53,7 +61,7 @@ const MOODS = [
     label: 'Vantacan',
     blurb: 'Powered by HOAi',
     fontHref: 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap',
-    favicon: '/assets/vantaca-v.png',   // swaps the browser-tab icon to the Vantaca "V"
+    favicon: 'assets/vantaca-v.png',   // swaps the browser-tab icon to the Vantaca "V"
   },
   // ── add more moods here ──
 ];

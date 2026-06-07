@@ -1,4 +1,5 @@
 import os
+import pytest
 import profile_lib
 
 
@@ -212,3 +213,37 @@ def test_write_preserves_yaml_comments(profile_root):
         text = f.read()
     assert "# cost_posture controls model spend" in text  # comment survived the write
     assert "#" in text   # at least one comment survived the write
+
+
+@pytest.mark.parametrize("tier,posture,expected", [
+    ("light",    "low",      "claude-haiku-4-5"),
+    ("light",    "balanced", "claude-haiku-4-5"),
+    ("light",    "high",     "claude-sonnet-4-6"),
+    ("standard", "low",      "claude-haiku-4-5"),
+    ("standard", "balanced", "claude-sonnet-4-6"),
+    ("standard", "high",     "claude-opus-4-8"),
+    ("deep",     "low",      "claude-sonnet-4-6"),
+    ("deep",     "balanced", "claude-opus-4-8"),
+    ("deep",     "high",     "claude-opus-4-8"),
+])
+def test_resolve_model_matrix(tier, posture, expected):
+    assert profile_lib.resolve_model(tier, posture=posture) == expected
+
+
+def test_resolve_model_override_by_model_id_wins():
+    assert profile_lib.resolve_model("light", posture="low",
+                                     task_override="claude-opus-4-8") == "claude-opus-4-8"
+
+
+def test_resolve_model_override_by_tier_name_wins():
+    assert profile_lib.resolve_model("light", posture="low", task_override="deep") == "claude-opus-4-8"
+
+
+def test_resolve_model_defaults_tier_standard_and_posture_balanced():
+    assert profile_lib.resolve_model(None) == "claude-sonnet-4-6"
+    assert profile_lib.resolve_model("bogus", posture="bogus") == "claude-sonnet-4-6"
+
+
+def test_resolve_model_reads_posture_from_config(profile_root):
+    # profile_root config has cost_posture: balanced -> deep worker => opus
+    assert profile_lib.resolve_model("deep", root=profile_root) == "claude-opus-4-8"

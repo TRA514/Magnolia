@@ -18,6 +18,7 @@ Full laws + enforcing commands: [`docs/reference/invariants.md`](docs/reference/
 
 | If you need to… | Read |
 |---|---|
+| Build a new feature or epic | run **`/magnolia-build`** — loads the operating context and runs the brainstorm→plan→build→ship loop |
 | Know the rules that must never break | [`docs/reference/invariants.md`](docs/reference/invariants.md) |
 | Understand how the system fits together | [`docs/reference/architecture.md`](docs/reference/architecture.md) |
 | Work the right way (the loop, git mechanics, timing) | [`docs/reference/conventions.md`](docs/reference/conventions.md) |

@@ -36,6 +36,7 @@ core:
     - meta-create-card-type
     - meta-create-adapter
     - meta-refine-workflow
+    - workflow-magnolia-build
     - workflow-doctor
     - workflow-schedule-meeting
     - workflow-doc-sync

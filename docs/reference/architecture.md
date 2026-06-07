@@ -22,13 +22,13 @@ Skills auto-discover from `.claude/skills/<name>/SKILL.md` (flat — one level d
 
 ## 4. The adapter seam + Tier-2 gate
 
-External integrations are pluggable families behind structural Protocols in each family's `_contract.py`. Live families: `project_management` and `transcript` (`calendar` and `doc_sync` generalize to the same shape when their turn comes). The loader `adapters/__init__.py` `get(family)` reads the profile's chosen provider via `profile_lib.provider(family)` and dynamic-imports `adapters.<family>.<provider>`; it returns `None` when the provider is `"none"` or the module is missing (graceful degrade). The gated `publish(family, draft)` raises `NeedsConfirmation` when the integration is configured-but-unconfirmed — the Tier-2 law of one plain-language confirm before the first external write (invariant #5).
+External integrations are pluggable families behind structural Protocols in each family's `_contract.py`. Live families: `project_management` and `transcript`; future families (`calendar`, `doc_sync`) follow the same contract shape. The seam: the profile picks the provider, the loader (`adapters/__init__.py`) dynamic-imports it, a missing or `"none"` provider degrades gracefully, and the gated `publish(family, draft)` raises `NeedsConfirmation` on the first external write until the Tier-2 confirm is given (invariant #5).
 
 **Canonical source:** `scripts/adapters/__init__.py`; `scripts/adapters/*/_contract.py`.
 
 ## 5. Profile + instruct-to-read-profile de-personalization
 
-All identity and integration values flow through `scripts/profile_lib.py` — getters (`provider`, `jira_config`, `pendo_config`, `resolve_model`), writers (`set_integration_provider`, `set_integration_conventions`, `set_integration_confirmed`), and CLI flags (e.g. `--pendo-subid`). Skills, workers, and adapters reference the profile, never a literal. The denylist test enforces it (invariant #1).
+All identity and integration values flow through `scripts/profile_lib.py` — getters (`provider`, `jira_config`, `pendo_config`, `resolve_model`), writers (`set_integration_provider`, `set_integration_conventions`, `set_integration_confirmed`), and CLI flags (e.g. `--pendo-subid`). This API surface is what makes invariant #1 true: skills, workers, and adapters read from the profile here rather than embedding literals. The denylist test enforces it.
 
 **Canonical source:** `profile/README.md`; `scripts/profile_lib.py`; `tests/test_engine_no_jay.py`.
 

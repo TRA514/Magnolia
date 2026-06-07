@@ -430,6 +430,142 @@ def build_profile(root=None):
     }
 
 
+# ─── Profile write endpoints (pure helpers + HTTP wrappers) ────────────────────
+# The pure helpers take the parsed payload + root and return (status_code, body).
+# They own validation (path-traversal guards against the un-sanitizing profile_lib
+# setters) BEFORE persisting. The thin handle_* wrappers read the body and emit.
+
+_VOICE_CHANNELS = {"teams", "email"}
+_INTEGRATION_CATEGORIES = set(_INTEGRATION_SOURCE_KEY)   # transcripts/project_management/calendar
+_MODEL_POSTURE_LEVELS = {"low", "balanced", "high"}
+
+
+def apply_profile_identity(payload, root=None):
+    """Write the four known identity fields to profile.yaml. Unknown keys dropped."""
+    data = {}
+    for out_key, disk_key in (("name", "display_name"), ("email", "email"),
+                              ("company", "company"), ("timezone", "timezone")):
+        if out_key in payload:
+            data[disk_key] = payload[out_key]
+    if not data:
+        return 400, {"error": "No identity fields provided"}
+    profile_lib.write_identity(data, root=root)
+    return 200, {"ok": True, "identity": data}
+
+
+def apply_profile_voice(payload, root=None):
+    """Write voice channel file(s). Channel keys validated against {teams, email}
+    BEFORE any write (path-traversal guard); reject unknown -> 400, write nothing."""
+    channels = {k: v for k, v in payload.items()}
+    if not channels:
+        return 400, {"error": "No voice channels provided"}
+    unknown = [k for k in channels if k not in _VOICE_CHANNELS]
+    if unknown:
+        return 400, {"error": f"Unknown voice channel(s): {', '.join(sorted(unknown))}"}
+    for channel, text in channels.items():
+        profile_lib.write_voice(channel, text if text is not None else "", root=root)
+    return 200, {"ok": True, "channels": sorted(channels)}
+
+
+def apply_profile_integration(category, payload, root=None):
+    """Set the provider for an integration category. The category is validated
+    against the known output keys BEFORE mapping to the on-disk key (transcripts
+    -> transcript) and calling the un-sanitizing setter."""
+    if category not in _INTEGRATION_CATEGORIES:
+        return 400, {"error": f"Unknown integration category: {category}"}
+    active = payload.get("active")
+    if not active or not isinstance(active, str):
+        return 400, {"error": "Missing 'active' provider id"}
+    disk_key = _INTEGRATION_SOURCE_KEY[category]
+    profile_lib.set_integration_provider(disk_key, active, root=root)
+    return 200, {"ok": True, "category": category, "active": active}
+
+
+def apply_profile_packs(payload, root=None):
+    """Set the active skill packs list."""
+    active = payload.get("active")
+    if not isinstance(active, list):
+        return 400, {"error": "'active' must be a list of pack ids"}
+    profile_lib.set_active_packs(active, root=root)
+    return 200, {"ok": True, "active": list(active)}
+
+
+def apply_profile_model_posture(payload, root=None):
+    """Set the model cost posture. Level validated against {low, balanced, high}."""
+    level = payload.get("level")
+    if level not in _MODEL_POSTURE_LEVELS:
+        return 400, {"error": f"Invalid model posture level: {level!r}"}
+    profile_lib.set_cost_posture(level, root=root)
+    return 200, {"ok": True, "level": level}
+
+
+def _respond_apply(handler, result):
+    """Emit a (status, body) tuple from a pure apply_* helper."""
+    status, body = result
+    if status != 200:
+        _error_response(handler, body.get("error", "Bad request"), status=status)
+    else:
+        _json_response(handler, body)
+
+
+def handle_get_profile(handler):
+    """GET /api/profile — the build_profile() payload."""
+    try:
+        _json_response(handler, build_profile())
+    except Exception as e:
+        _error_response(handler, f"Failed to build profile: {e}", status=500)
+
+
+def handle_profile_identity(handler):
+    """PUT /api/profile/identity — body {name,email,company,timezone}."""
+    try:
+        body = _read_request_body(handler)
+    except (json.JSONDecodeError, ValueError) as e:
+        _error_response(handler, f"Invalid JSON body: {e}", status=400)
+        return
+    _respond_apply(handler, apply_profile_identity(body))
+
+
+def handle_profile_voice(handler):
+    """PUT /api/profile/voice — body {teams?, email?}."""
+    try:
+        body = _read_request_body(handler)
+    except (json.JSONDecodeError, ValueError) as e:
+        _error_response(handler, f"Invalid JSON body: {e}", status=400)
+        return
+    _respond_apply(handler, apply_profile_voice(body))
+
+
+def handle_profile_integration(handler, category):
+    """POST /api/profile/integrations/{category} — body {active}."""
+    try:
+        body = _read_request_body(handler)
+    except (json.JSONDecodeError, ValueError) as e:
+        _error_response(handler, f"Invalid JSON body: {e}", status=400)
+        return
+    _respond_apply(handler, apply_profile_integration(category, body))
+
+
+def handle_profile_packs(handler):
+    """POST /api/profile/packs — body {active:[...]}."""
+    try:
+        body = _read_request_body(handler)
+    except (json.JSONDecodeError, ValueError) as e:
+        _error_response(handler, f"Invalid JSON body: {e}", status=400)
+        return
+    _respond_apply(handler, apply_profile_packs(body))
+
+
+def handle_profile_model_posture(handler):
+    """PUT /api/profile/model-posture — body {level}."""
+    try:
+        body = _read_request_body(handler)
+    except (json.JSONDecodeError, ValueError) as e:
+        _error_response(handler, f"Invalid JSON body: {e}", status=400)
+        return
+    _respond_apply(handler, apply_profile_model_posture(body))
+
+
 def handle_quality(handler):
     """GET /api/quality — read-only shadow-judge scoreboard, frontmatter-sourced."""
     try:
@@ -1807,6 +1943,32 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
             handle_open_file(self, query_params)
             return True
 
+        # ─── Profile / Config API routes ───────────────────────────────
+        if path == "/api/profile" and method == "GET":
+            handle_get_profile(self)
+            return True
+
+        if path == "/api/profile/identity" and method == "PUT":
+            handle_profile_identity(self)
+            return True
+
+        if path == "/api/profile/voice" and method == "PUT":
+            handle_profile_voice(self)
+            return True
+
+        if path == "/api/profile/model-posture" and method == "PUT":
+            handle_profile_model_posture(self)
+            return True
+
+        if path == "/api/profile/packs" and method == "POST":
+            handle_profile_packs(self)
+            return True
+
+        match = re.match(r"^/api/profile/integrations/([^/]+)$", path)
+        if match and method == "POST":
+            handle_profile_integration(self, match.group(1))
+            return True
+
         # Catch-all for unrecognized /api/ routes
         if path.startswith("/api/"):
             _error_response(self, f"Unknown API endpoint: {method} {path}", status=404)
@@ -1840,6 +2002,12 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
         if self._route_request("POST"):
             return
         _error_response(self, "POST not allowed for this path", status=405)
+
+    def do_PUT(self):
+        """Handle PUT requests (API only)."""
+        if self._route_request("PUT"):
+            return
+        _error_response(self, "PUT not allowed for this path", status=405)
 
     def end_headers(self):
         """Inject CORS header into all responses (including static files)."""

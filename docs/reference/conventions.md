@@ -1,0 +1,33 @@
+# Conventions — the working rhythm
+
+> How work gets done here: the timing and the process. The laws this rhythm must respect live in [`invariants.md`](./invariants.md) — this doc references them by number rather than restating them. For subsystems, see [`architecture.md`](./architecture.md).
+
+## 1. The development loop
+
+Feature work flows through the superpowers skills in order: `brainstorming` → `writing-plans` → `subagent-driven-development` — and the subagent stage uses **two-stage review: spec-compliance first, then code-quality** — → live e2e verification (run the real board, observe the change) → `finishing-a-development-branch`. Each skill is canonical and auto-discovered; invoke it by name.
+
+Git mechanics: branch off `main` (never commit to `main`). Set the git author locally — `git config user.email "11728296+jayhjenkins@users.noreply.github.com"` and `git config user.name "Jay Jenkins"`. End every commit with the trailer `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`. Open PRs with `gh pr create --base main`.
+
+## 2. The green gates — when to run them
+
+Run the three gates **before every commit that touches code**. The commands and the law are invariant #2 in [`invariants.md`](./invariants.md) — don't restate them; run them. Doc-only changes under `docs/` are not scanned by the denylist gate, but they still must not break the other gates.
+
+## 3. Capture-to-profile, not the artifact
+
+Team or person nuance goes to `profile/` via `profile_lib.set_integration_conventions(...)`; the generated artifact stays denylist-clean. This is invariant #4 in [`invariants.md`](./invariants.md), realized as the capture step of the factory — see `meta-factory-core`. Capture nuance to the profile as you go; never bake it into the output.
+
+## 4. Capability tiers
+
+Tier-1 work — workers and card-types — performs no external writes. Tier-2 work — adapters, or anything that writes to the outside world — gets **exactly one plain-language confirm before its first external action**, per invariant #5 in [`invariants.md`](./invariants.md). Decide the tier before you build, so the confirm is armed at the right moment.
+
+## 5. The factory spine
+
+When extending the system — a new worker, card-type, or adapter — use the matching `meta-create-*` skill rather than hand-rolling. It runs scaffold → capture → gate-green → commit → Keep/Undo receipt. Git stays invisible to the user: changes are presented as **Keep / Undo**, never as commits or reverts. See `meta-factory-core` and [`architecture.md`](./architecture.md) §6.
+
+## 6. Output conventions
+
+Never delete generated artifacts — append a version suffix (`v1`, `v2`); that's invariant #6 in [`invariants.md`](./invariants.md). Default to markdown with clear headings, and use a `*-draft.md` suffix when you're unsure the artifact is final. Maintain `status.json` for processing state and `progress.md` for human notes.
+
+## 7. Dev vs prod safety
+
+The dev board runs on `localhost:8743`. The separate production install (`~/pm-os`) runs on `localhost:8742`. From engine work, never operate the prod board and never touch `~/pm-os` — that's invariant #7 in [`invariants.md`](./invariants.md).

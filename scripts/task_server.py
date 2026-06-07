@@ -298,6 +298,22 @@ _INTEGRATION_OPTIONS = {
     "calendar": ("Calendar", [("m365", "Microsoft 365"), ("google", "Google Calendar")]),
 }
 
+# Doctor capability-status vocabulary -> Profile room frontend vocabulary.
+# The Doctor writes a rich set of statuses; the frontend (profile.js) only
+# keys its dots/buttons/degraded-lock off {ok, reauth, available, unset}.
+# build_profile owns the /api/profile contract, so it normalizes here.
+# Any unrecognized value falls back to "unset" (safe default).
+_CAP_STATUS_TO_FRONTEND = {
+    "ok": "ok",
+    "running": "ok",
+    "needs_reauth": "reauth",   # works-but-needs-attention -> surface re-auth nudge
+    "degraded": "reauth",
+    "missing": "unset",
+    "down": "unset",
+    "not_expected": "unset",
+    "unknown": "unset",
+}
+
 # Output category -> integrations.yaml key (transcripts is singular on disk).
 _INTEGRATION_SOURCE_KEY = {
     "transcripts": "transcript",
@@ -350,8 +366,9 @@ def build_profile(root=None):
     FIVE sections, no system-status section: identity, integrations, voice
     (two channels), skill packs, model posture. Reads everything through
     profile_lib; integration option status derives from the Doctor's
-    capabilities.json when present, else "ok" for the active provider and
-    "available" for the rest. Read-only.
+    capabilities.json when present (normalized to the frontend vocabulary
+    {ok, reauth, available, unset} via _CAP_STATUS_TO_FRONTEND), else "ok"
+    for the active provider and "available" for the rest. Read-only.
     """
     prof = profile_lib.profile(root)
     cfg = profile_lib.config(root)
@@ -373,7 +390,7 @@ def build_profile(root=None):
         for opt_id, opt_label in options:
             cap = caps.get(opt_id)
             if cap and cap.get("status"):
-                status = cap["status"]
+                status = _CAP_STATUS_TO_FRONTEND.get(cap["status"], "unset")
             elif opt_id == active:
                 status = "ok"
             else:

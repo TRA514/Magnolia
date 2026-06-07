@@ -1169,13 +1169,24 @@ def _attempt_publish(task_id, draft):
     """Shared publish core for the publish-jira and confirm handlers.
 
     Returns (status, payload):
-      ("needs_confirm", None)             — Tier-2 gate fired; no external call made
+      ("needs_confirm",      None)        — Tier-2 gate fired; no external call made
+      ("already_published",  None)        — task already done; no external call made
       ("unconfigured", (400, msg))        — no provider configured
       ("error",       (code, msg))        — NotConfigured -> 400, RuntimeError -> 500
       ("ok",          (issue_key, url))   — published; task marked done + traced
     Records the outcome (task comment + LangFuse trace) for every terminal status."""
     if draft is None:
         return ("error", (400, "No JIRA_DRAFT block found in task body"))
+    # Guard against re-publishing a task that already produced a ticket (double-confirm,
+    # retry, separate tab). A JIRA_DRAFT task is marked done only by a successful publish
+    # below, so status == "done" means it was already published — never publish twice.
+    # Tolerant of a missing/virtual task id (e.g. unit tests that pass a synthetic id).
+    try:
+        existing = task_lib.read_task(task_id)
+        if (existing.get("frontmatter") or {}).get("status") == "done":
+            return ("already_published", None)
+    except FileNotFoundError:
+        pass
     try:
         result = adapters.publish("project_management", draft)
     except NeedsConfirmation:
@@ -1218,7 +1229,7 @@ def _emit_confirm_card(family, source_task):
     task_lib.update_task(cid, changes={
         "confirm_family": family,
         "confirm_source_task": source_task,
-        "receipt_summary": summary,   # the `preview` body renderer reads this
+        "receipt_summary": summary,   # shown on the task detail view; the card-list face falls back to the title
     })
     return cid
 
@@ -1239,6 +1250,9 @@ def handle_publish_jira(handler, task_id):
             "confirm_task": cid,
             "message": "First external write needs a one-time confirm — see the collab queue.",
         })
+        return
+    if status == "already_published":
+        _json_response(handler, {"status": "ok", "message": "Already published — no new ticket created."})
         return
     if status == "ok":
         issue_key, issue_url = payload
@@ -1275,16 +1289,29 @@ def handle_confirm(handler, task_id):
     try:
         src = task_lib.read_task(source_task)
     except FileNotFoundError:
-        task_lib.complete_task(task_id, actor="human")
+        try:
+            task_lib.complete_task(task_id, actor="human")
+        except Exception:
+            pass
         _json_response(handler, {"ok": True, "note": "confirmed; source draft no longer exists"})
         return
     draft = jira_publish.parse_jira_draft(src.get("body", ""))
     status, payload = _attempt_publish(source_task, draft)
+    if status == "already_published":
+        try:
+            task_lib.complete_task(task_id, actor="human")
+        except Exception:
+            pass
+        _json_response(handler, {"ok": True, "note": "source already published"})
+        return
     if status != "ok":
         code, msg = payload if isinstance(payload, tuple) else (500, "publish failed")
         _error_response(handler, msg, status=code)
         return
-    task_lib.complete_task(task_id, actor="human")
+    try:
+        task_lib.complete_task(task_id, actor="human")
+    except Exception:
+        pass
     issue_key, issue_url = payload
     _json_response(handler, {"ok": True, "issue_key": issue_key, "issue_url": issue_url})
 

@@ -36,6 +36,17 @@ def test_attempt_publish_ok_records_and_returns_keypair(srv, monkeypatch):
     assert status == "ok" and payload == ("ACM-9", "https://x/ACM-9")
 
 
+def test_attempt_publish_skips_when_task_already_done(srv, monkeypatch):
+    import adapters, task_lib
+    calls = []
+    monkeypatch.setattr(adapters, "publish", lambda *a, **k: calls.append(1) or ("ACM-1", "u"))
+    tid, _ = task_lib.create_task("draft", queue="human", domain="ops", creator="agent")
+    task_lib.complete_task(tid, actor="system")        # already published once
+    status, payload = srv._attempt_publish(tid, {"summary": "x"})
+    assert status == "already_published"
+    assert calls == []                                 # NO duplicate external write
+
+
 def test_emit_confirm_card_lands_on_collab_with_links(srv):
     import task_lib
     cid = srv._emit_confirm_card("project_management", "TASK-0042")

@@ -48,3 +48,42 @@ def test_pack_catalog_shape(tmp_path):
 
 def test_pack_catalog_missing_file_returns_empty_list(tmp_path):
     assert packs_lib.pack_catalog(root=str(tmp_path)) == []
+
+
+def test_load_packs_malformed_yaml_returns_empty(tmp_path):
+    _write_packs(str(tmp_path), """\
+        ":
+          - [unclosed
+    """)
+    assert packs_lib.load_packs(root=str(tmp_path)) == {}
+
+
+def test_load_packs_non_dict_root_returns_empty(tmp_path):
+    _write_packs(str(tmp_path), """\
+        - a
+        - b
+    """)
+    assert packs_lib.load_packs(root=str(tmp_path)) == {}
+
+
+def test_load_packs_skips_non_dict_pack_and_filters_skills(tmp_path):
+    _write_packs(str(tmp_path), """\
+        scalar_pack: "just a string"
+        pm:
+          label: "Product Management"
+          description: "PRDs."
+          skills: [workflow-prd-creation, 42, context-search, null]
+    """)
+    packs = packs_lib.load_packs(root=str(tmp_path))
+    assert "scalar_pack" not in packs
+    assert packs["pm"]["skills"] == ["workflow-prd-creation", "context-search"]
+
+
+def test_load_packs_label_defaults_to_titlecase(tmp_path):
+    _write_packs(str(tmp_path), """\
+        pm:
+          skills: [workflow-prd-creation]
+    """)
+    packs = packs_lib.load_packs(root=str(tmp_path))
+    assert packs["pm"]["label"] == "Pm"
+    assert packs["pm"]["description"] == ""

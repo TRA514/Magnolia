@@ -39,6 +39,7 @@ import profile_lib
 import packs_lib
 import adapters
 from adapters.project_management._contract import NotConfigured
+from adapters import NeedsConfirmation
 from cron_scheduler import CronScheduler
 
 # ─── Load LangFuse env vars if not already set ───────────────────────────────
@@ -1157,73 +1158,135 @@ def handle_schedule_meeting(handler, task_id):
     })
 
 
+def _note(task_id, msg):
+    try:
+        task_lib.update_task(task_id, changes={}, comment=msg, actor="system")
+    except Exception:
+        pass
+
+
+def _attempt_publish(task_id, draft):
+    """Shared publish core for the publish-jira and confirm handlers.
+
+    Returns (status, payload):
+      ("needs_confirm", None)             — Tier-2 gate fired; no external call made
+      ("unconfigured", (400, msg))        — no provider configured
+      ("error",       (code, msg))        — NotConfigured -> 400, RuntimeError -> 500
+      ("ok",          (issue_key, url))   — published; task marked done + traced
+    Records the outcome (task comment + LangFuse trace) for every terminal status."""
+    if draft is None:
+        return ("error", (400, "No JIRA_DRAFT block found in task body"))
+    try:
+        result = adapters.publish("project_management", draft)
+    except NeedsConfirmation:
+        return ("needs_confirm", None)
+    except NotConfigured as e:
+        _note(task_id, f"Jira publish failed: {e}")
+        jira_publish._trace_publish(task_id, draft, error=str(e))
+        return ("error", (400, str(e)))
+    except RuntimeError as e:
+        _note(task_id, f"Jira publish failed: {e}")
+        jira_publish._trace_publish(task_id, draft, error=str(e))
+        return ("error", (500, f"Jira publish failed: {e}"))
+    if result is None:
+        msg = "No project-management tool is configured for this install"
+        _note(task_id, f"Jira publish failed: {msg}")
+        jira_publish._trace_publish(task_id, draft, error=msg)
+        return ("unconfigured", (400, msg))
+    issue_key, issue_url = result
+    output_str = f"Created {issue_key}: {issue_url}"
+    try:
+        task_lib.update_task(task_id, changes={"agent_output": output_str},
+                             comment=f"Published to Jira: {output_str}", actor="system")
+        task_lib.complete_task(task_id, actor="system")
+    except Exception:
+        pass
+    jira_publish._trace_publish(task_id, draft, issue_key=issue_key, issue_url=issue_url)
+    return ("ok", (issue_key, issue_url))
+
+
+def _emit_confirm_card(family, source_task):
+    """Write a Tier-2 confirm card to the collab queue. Confirm flips consent and
+    re-drives source_task; Reject holds off. Carries the link fields handle_confirm reads."""
+    provider = (profile_lib.provider(family) or "").title() or "your tool"
+    summary = f"Okay to let this assistant post to your {provider}?"
+    cid, _ = task_lib.create_task(
+        summary, queue="collab", domain="ops", creator="agent",
+        description=(f"This is the first time it will write to your {provider}. "
+                     "Confirm to allow it from now on, or Reject to hold off."),
+        card_type="confirm")
+    task_lib.update_task(cid, changes={
+        "confirm_family": family,
+        "confirm_source_task": source_task,
+        "receipt_summary": summary,   # the `preview` body renderer reads this
+    })
+    return cid
+
+
 def handle_publish_jira(handler, task_id):
-    """POST /api/tasks/{id}/publish-jira — Publish a Jira draft via mini Claude session."""
+    """POST /api/tasks/{id}/publish-jira — publish a Jira draft (Tier-2 gated)."""
     try:
         task_data = task_lib.read_task(task_id)
     except FileNotFoundError:
         _error_response(handler, f"Task {task_id} not found", status=404)
         return
-
-    body = task_data.get("body", "")
-    draft = jira_publish.parse_jira_draft(body)
-    if draft is None:
-        _error_response(handler, "No JIRA_DRAFT block found in task body", status=400)
+    draft = jira_publish.parse_jira_draft(task_data.get("body", ""))
+    status, payload = _attempt_publish(task_id, draft)
+    if status == "needs_confirm":
+        cid = _emit_confirm_card("project_management", task_id)
+        _json_response(handler, {
+            "status": "needs_confirmation",
+            "confirm_task": cid,
+            "message": "First external write needs a one-time confirm — see the collab queue.",
+        })
         return
-
-    # Dispatch through the adapter loader so the configured project-management
-    # provider is used (mirrors how the transcript family dispatches).
-    pm = adapters.get("project_management")
-    if pm is None:
-        msg = "No project-management tool is configured for this install"
-        try:
-            task_lib.update_task(task_id, changes={}, comment=f"Jira publish failed: {msg}", actor="system")
-        except Exception:
-            pass
-        jira_publish._trace_publish(task_id, draft, error=msg)
-        _error_response(handler, msg, status=400)
+    if status == "ok":
+        issue_key, issue_url = payload
+        _json_response(handler, {
+            "status": "ok",
+            "message": f"Published to Jira: {issue_key}",
+            "issue_key": issue_key, "issue_url": issue_url,
+        })
         return
+    code, msg = payload
+    _error_response(handler, msg, status=code)
 
+
+def handle_confirm(handler, task_id):
+    """POST /api/tasks/{id}/confirm — Tier-2: record consent for an integration's
+    first external write, then re-drive the blocked publish."""
     try:
-        issue_key, issue_url = pm.publish(draft)
-    except NotConfigured as e:
-        # Selected provider isn't set up (e.g. the Asana stub) — degrade gracefully.
-        try:
-            task_lib.update_task(task_id, changes={}, comment=f"Jira publish failed: {e}", actor="system")
-        except Exception:
-            pass
-        jira_publish._trace_publish(task_id, draft, error=str(e))
-        _error_response(handler, str(e), status=400)
+        card = task_lib.read_task(task_id)
+    except FileNotFoundError:
+        _error_response(handler, f"Task {task_id} not found", status=404)
         return
-    except RuntimeError as e:
-        # Log the error to the task activity log
-        try:
-            task_lib.update_task(task_id, changes={}, comment=f"Jira publish failed: {e}", actor="system")
-        except Exception:
-            pass
-        jira_publish._trace_publish(task_id, draft, error=str(e))
-        _error_response(handler, f"Jira publish failed: {e}", status=500)
+    fm = card["frontmatter"]
+    family = fm.get("confirm_family")
+    source_task = fm.get("confirm_source_task")
+    if not family or not source_task:
+        _error_response(handler, "Confirm card missing confirm_family/confirm_source_task", status=400)
         return
-
-    # Success — update task with Jira link and complete it
-    output_str = f"Created {issue_key}: {issue_url}"
+    provider = profile_lib.provider(family)
     try:
-        task_lib.update_task(task_id, changes={
-            "agent_output": output_str,
-        }, comment=f"Published to Jira: {output_str}", actor="system")
-        archive_path, _ = task_lib.complete_task(task_id, actor="system")
+        profile_lib.set_integration_confirmed(family, True, provider=provider)
     except Exception as e:
-        # Ticket was created but archiving failed — still return success
-        pass
-
-    jira_publish._trace_publish(task_id, draft, issue_key=issue_key, issue_url=issue_url)
-
-    _json_response(handler, {
-        "status": "ok",
-        "message": f"Published to Jira: {issue_key}",
-        "issue_key": issue_key,
-        "issue_url": issue_url,
-    })
+        _error_response(handler, f"Could not record confirmation: {e}", status=500)
+        return
+    try:
+        src = task_lib.read_task(source_task)
+    except FileNotFoundError:
+        task_lib.complete_task(task_id, actor="human")
+        _json_response(handler, {"ok": True, "note": "confirmed; source draft no longer exists"})
+        return
+    draft = jira_publish.parse_jira_draft(src.get("body", ""))
+    status, payload = _attempt_publish(source_task, draft)
+    if status != "ok":
+        code, msg = payload if isinstance(payload, tuple) else (500, "publish failed")
+        _error_response(handler, msg, status=code)
+        return
+    task_lib.complete_task(task_id, actor="human")
+    issue_key, issue_url = payload
+    _json_response(handler, {"ok": True, "issue_key": issue_key, "issue_url": issue_url})
 
 
 def _load_email_cache():
@@ -1834,8 +1897,9 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
         _card_handlers = {
             "accept": handle_accept, "reject": handle_reject,
             "graduate": handle_graduate, "keep": handle_keep, "undo": handle_undo,
+            "confirm": handle_confirm,
         }
-        match = re.match(r"^/api/tasks/([^/]+)/(accept|reject|graduate|keep|undo)$", path)
+        match = re.match(r"^/api/tasks/([^/]+)/(accept|reject|graduate|keep|undo|confirm)$", path)
         if match and method == "POST":
             task_id = _parse_task_id(match.group(1))
             if task_id is None:

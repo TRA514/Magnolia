@@ -668,6 +668,14 @@ Your assignment is task {task_id}. Follow these steps:
 - If you ask a question, STOP immediately after. Do not guess the answer."""
 
 
+def _resolve_task_model(task, worker):
+    """Resolve the --model for a dispatch from the worker's tier + posture, with
+    a per-task override (task frontmatter 'model' or 'tier')."""
+    override = task.get("model") or task.get("tier")
+    tier = (worker or {}).get("tier")
+    return profile_lib.resolve_model(tier, task_override=override)
+
+
 def dispatch_task(task, dry_run=False, rerun=False, workers=None):
     """Invoke claude in interactive mode for a single task.
 
@@ -727,6 +735,9 @@ def dispatch_task(task, dry_run=False, rerun=False, workers=None):
         tools_str = "Bash(*),Read(*),Write(*),Edit(*),WebFetch(*),WebSearch(*),Agent(*),mcp__*"
         max_turns = "30"
 
+    model = _resolve_task_model(task, worker)
+    log(f"Model: {model}", task_id=task_id)
+
     output_file = os.path.join(LOG_DIR, f"dispatch-{task_id}.log")
 
     # ─── LangFuse tracing: worker-execution (start) ─────────────────
@@ -748,6 +759,7 @@ def dispatch_task(task, dry_run=False, rerun=False, workers=None):
     claude_cmd = [
         "claude",
         prompt,
+        "--model", model,
         "--allowedTools", tools_str,
         "--max-turns", max_turns,
         "--permission-mode", "bypassPermissions",

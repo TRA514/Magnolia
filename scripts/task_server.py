@@ -272,6 +272,140 @@ def build_quality(ladder_path=None):
             "total_judged": len(judged), "langfuse": _get_langfuse() is not None}
 
 
+# ─── Profile / Config room (GET /api/profile) ──────────────────────────────────
+
+# Module-level catalog of installable skill packs. Static metadata for the
+# Skill-packs section of the Profile room; "active" comes from config.yaml.
+PACK_CATALOG = [
+    {"id": "core", "label": "Core",
+     "description": "Baseline PM-OS skills: tasks, search, meeting synthesis."},
+    {"id": "pm", "label": "Product Management",
+     "description": "PRDs, roadmaps, strategy, metrics, and prioritization."},
+    {"id": "exec", "label": "Executive",
+     "description": "Strategy memos, goal-setting, and leadership-facing synthesis."},
+    {"id": "eng", "label": "Engineering",
+     "description": "Tech-spec review, velocity estimation, and ticket drafting."},
+    {"id": "recruiting", "label": "Recruiting",
+     "description": "Candidate synthesis and hiring-loop support."},
+]
+
+# Known adapters per integration category, keyed by the output category name.
+# Labels are human-readable; ids match provider strings in integrations.yaml.
+_INTEGRATION_OPTIONS = {
+    "transcripts": ("Transcripts", [("otter", "Otter.ai"), ("granola", "Granola")]),
+    "project_management": ("Project Management",
+                           [("jira", "Jira"), ("asana", "Asana"), ("linear", "Linear")]),
+    "calendar": ("Calendar", [("m365", "Microsoft 365"), ("google", "Google Calendar")]),
+}
+
+# Output category -> integrations.yaml key (transcripts is singular on disk).
+_INTEGRATION_SOURCE_KEY = {
+    "transcripts": "transcript",
+    "project_management": "project_management",
+    "calendar": "calendar",
+}
+
+
+def _profile_workers(root=None):
+    """Read scripts/workers/*.md frontmatter; surface any that declare a
+    model/tier. Returns [] when none do — never fabricates a tier."""
+    workers = []
+    workers_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workers")
+    if not os.path.isdir(workers_dir):
+        return workers
+    for fname in sorted(os.listdir(workers_dir)):
+        if not fname.endswith(".md"):
+            continue
+        path = os.path.join(workers_dir, fname)
+        try:
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+        except OSError:
+            continue
+        if not text.startswith("---"):
+            continue
+        end = text.find("\n---", 3)
+        if end == -1:
+            continue
+        fm = text[3:end]
+        name = None
+        tier = None
+        for line in fm.splitlines():
+            m = re.match(r"\s*(name|model|tier)\s*:\s*(.+?)\s*$", line)
+            if not m:
+                continue
+            key, val = m.group(1), m.group(2).strip().strip('"').strip("'")
+            if key == "name":
+                name = val
+            elif key in ("model", "tier"):
+                tier = val
+        if tier is not None:
+            workers.append({"name": name or os.path.splitext(fname)[0], "tier": tier})
+    return workers
+
+
+def build_profile(root=None):
+    """Pure assembler for the Profile/Config room (GET /api/profile).
+
+    FIVE sections, no system-status section: identity, integrations, voice
+    (two channels), skill packs, model posture. Reads everything through
+    profile_lib; integration option status derives from the Doctor's
+    capabilities.json when present, else "ok" for the active provider and
+    "available" for the rest. Read-only.
+    """
+    prof = profile_lib.profile(root)
+    cfg = profile_lib.config(root)
+    integ = profile_lib.integrations(root)
+    caps = (profile_lib.read_capabilities(root) or {}).get("capabilities", {}) or {}
+
+    identity = {
+        "name": prof.get("display_name") or "Operator",
+        "email": prof.get("email", ""),
+        "company": prof.get("company", ""),
+        "timezone": prof.get("timezone", ""),
+    }
+
+    integrations = {}
+    for out_key, (label, options) in _INTEGRATION_OPTIONS.items():
+        src_key = _INTEGRATION_SOURCE_KEY[out_key]
+        active = (integ.get(src_key) or {}).get("provider") or "none"
+        opts = []
+        for opt_id, opt_label in options:
+            cap = caps.get(opt_id)
+            if cap and cap.get("status"):
+                status = cap["status"]
+            elif opt_id == active:
+                status = "ok"
+            else:
+                status = "available"
+            opts.append({"id": opt_id, "label": opt_label,
+                         "status": status, "detail": (cap or {}).get("detail", "")})
+        integrations[out_key] = {"label": label, "active": active, "options": opts}
+
+    voice = {
+        "teams": profile_lib.voice_text("teams", root),
+        "email": profile_lib.voice_text("email", root),
+    }
+
+    packs = {
+        "active": cfg.get("active_skill_packs") or [],
+        "available": PACK_CATALOG,
+    }
+
+    model_posture = {
+        "level": (cfg.get("models") or {}).get("cost_posture") or "balanced",
+        "workers": _profile_workers(root),
+    }
+
+    return {
+        "identity": identity,
+        "integrations": integrations,
+        "voice": voice,
+        "packs": packs,
+        "model_posture": model_posture,
+    }
+
+
 def handle_quality(handler):
     """GET /api/quality — read-only shadow-judge scoreboard, frontmatter-sourced."""
     try:

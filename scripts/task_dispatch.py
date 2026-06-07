@@ -25,6 +25,8 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import task_lib
+import packs_lib
+import profile_lib
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -189,16 +191,23 @@ def parse_skill_frontmatter(path):
     return name, desc
 
 
-def build_skills_catalog():
-    """Walk .claude/skills/ and return a concise catalog of available skills."""
+def build_skills_catalog(root=None):
+    """Walk .claude/skills/ and return a concise catalog of available skills,
+    gated to the operator's active skill packs (packs_lib). Skills in no pack
+    stay visible; a missing/empty manifest disables gating (all skills shown)."""
+    root = root or PM_OS_DIR
     catalog_lines = []
-    skills_dir = os.path.join(PM_OS_DIR, ".claude", "skills")
+    skills_dir = os.path.join(root, ".claude", "skills")
     if not os.path.isdir(skills_dir):
         return "(no skills directory found)"
-    for root, dirs, files in os.walk(skills_dir):
+    active_packs = profile_lib.config(root).get("active_skill_packs") or []
+    visible = packs_lib.active_skill_folders(active_packs, root=root)
+    for dirpath, dirs, files in os.walk(skills_dir):
         if "SKILL.md" in files:
-            skill_path = os.path.join(root, "SKILL.md")
-            name, desc = parse_skill_frontmatter(skill_path)
+            folder = os.path.basename(dirpath)
+            if folder not in visible:
+                continue
+            name, desc = parse_skill_frontmatter(os.path.join(dirpath, "SKILL.md"))
             if name and desc:
                 catalog_lines.append(f"- **{name}**: {desc}")
     return "\n".join(catalog_lines) if catalog_lines else "(no skills found)"
@@ -476,9 +485,13 @@ def match_worker(task, workers):
 
 
 def build_skills_catalog_filtered(skill_paths):
-    """Build skills catalog containing only the specified skill paths."""
+    """Build skills catalog containing only the specified skill paths.
+
+    A worker's explicit skill_paths are a tighter allowlist than packs, so this
+    path is intentionally NOT pack-gated. Note the two fallbacks below return the
+    (pack-gated) full catalog when the filter is empty or matches nothing."""
     if not skill_paths:
-        return build_skills_catalog()  # empty filter = full catalog
+        return build_skills_catalog()  # empty filter = full catalog (pack-gated)
 
     catalog_lines = []
     skills_dir = os.path.join(PM_OS_DIR, ".claude", "skills")
@@ -495,6 +508,7 @@ def build_skills_catalog_filtered(skill_paths):
                     catalog_lines.append(f"- **{name}**: {desc}")
                 break
 
+    # No matches (e.g. all skill_paths typo'd) -> fall back to the full pack-gated catalog.
     return "\n".join(catalog_lines) if catalog_lines else build_skills_catalog()
 
 

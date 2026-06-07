@@ -1,0 +1,119 @@
+# packs.yaml — skill pack definitions (engine-shared, git-tracked).
+#
+# A "pack" is a named set of skill folders under .claude/skills/.
+# Activating a pack controls which skills the Magnolia BACKGROUND WORKERS see
+# (the headless dispatch catalog) and what the Engine/Profile UI lists. It does
+# NOT affect your interactive Claude Code session (native auto-discovery there is
+# unchanged).
+#
+# To add a skill to a pack:
+#   1. Drop the folder in .claude/skills/  (auto-discovered — no other wiring).
+#   2. Add its folder name to a pack's `skills:` list below.
+# A skill listed in NO pack stays always-available (gating never hides it).
+#
+# WHICH packs are active is per-person, in profile/config.yaml `active_skill_packs`.
+# `core` is always active regardless of that list.
+
+core:
+  label: "Core"
+  description: "Baseline PM-OS: tasks, search, meetings, onboarding, doctor, doc sync."
+  skills:
+    - task-create
+    - task-query
+    - task-update
+    - task-complete
+    - task-communicate
+    - task-extract-from-meeting
+    - context-search
+    - context-meeting-synthesis
+    - context-source-normalization
+    - meta-onboard
+    - meta-using-skills
+    - meta-skill-discovery
+    - meta-create-skill
+    - meta-refine-workflow
+    - workflow-doctor
+    - workflow-schedule-meeting
+    - workflow-doc-sync
+    - quality-meeting-schema-validation
+    - quality-documentation-sync
+
+pm:
+  label: "Product Management"
+  description: "PRDs, roadmaps, strategy, metrics, prioritization, tickets, and research."
+  skills:
+    - workflow-prd-creation
+    - workflow-product-planning
+    - workflow-roadmap-updating
+    - workflow-product-strategy-creation
+    - workflow-ambition-expander
+    - workflow-devils-advocate
+    - workflow-red-team-reviewer
+    - workflow-agentic-api-designer
+    - workflow-vision-clarifier
+    - workflow-launch-announcement
+    - workflow-tradeoff-decision
+    - workflow-cs-prep
+    - workflow-velocity-estimate
+    - workflow-metrics-definition
+    - workflow-metric-diagnosis
+    - workflow-dashboard-design
+    - workflow-goal-setting
+    - workflow-research-processing
+    - workflow-jira-home
+    - workflow-publish-package
+    - metric-funnel-metric-mapping
+    - metric-north-star-alignment
+    - metric-proxy-metric-selection
+    - metric-root-cause-diagnosis
+    - metric-tradeoff-evaluation
+    - context-priority-scoring
+    - context-research-gathering
+    - context-pendo-analytics
+    - context-databricks-analytics
+    - quality-prd-validation
+    - quality-product-strategy-validation
+    - quality-citation-compliance
+    - quality-source-integrity
+    - quality-link-verification
+
+exec:
+  label: "Executive"
+  description: "Strategy, goals, business cases — with deep metrics and research/context-gathering for informed decisions."
+  skills:
+    - workflow-strategy-memo
+    - workflow-strategy-session
+    - workflow-product-strategy-creation
+    - workflow-goal-setting
+    - workflow-swag-modeler
+    - workflow-metrics-definition
+    - workflow-metric-diagnosis
+    - workflow-dashboard-design
+    - workflow-tradeoff-decision
+    - workflow-research-processing
+    - metric-funnel-metric-mapping
+    - metric-north-star-alignment
+    - metric-proxy-metric-selection
+    - metric-root-cause-diagnosis
+    - metric-tradeoff-evaluation
+    - context-research-gathering
+    - context-pendo-analytics
+    - context-databricks-analytics
+    - context-priority-scoring
+    - quality-citation-compliance
+    - quality-source-integrity
+
+eng:
+  label: "Engineering"
+  description: "Placeholder — no skills yet (factory-extensible)."
+  skills: []
+
+recruiting:
+  label: "Recruiting"
+  description: "Placeholder — candidate synthesis and hiring-loop support; no skills yet (factory-extensible)."
+  skills: []
+
+ops:
+  label: "Operations"
+  description: "Placeholder — operational workflows; no skills yet (factory-extensible)."
+  skills: []

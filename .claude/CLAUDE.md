@@ -49,6 +49,10 @@ allowed-tools: Read, Grep, Glob, Bash
 
 Keep `description` action-oriented and trigger-led ("Use when…") so the skill matches against user intent.
 
+### Skill packs
+
+`.claude/packs.yaml` groups skill folders into packs (`core`/`pm`/`exec`/`eng`/`recruiting`/`ops`). The active list lives in `profile/config.yaml` `active_skill_packs`; `core` is always active. Packs gate the **background-worker dispatch catalog** and the Profile UI — not your interactive session (native auto-discovery there is unchanged). To add a skill to a pack: drop the folder in `.claude/skills/` (auto-discovered), then add its folder name to a pack's `skills:` in `packs.yaml`. A skill in no pack stays always-available.
+
 ## Slash Commands (`.claude/commands/`)
 
 Command files (`.claude/commands/<name>.md`) are thin wrappers that point at a skill. Auto-registered by Claude Code; appear as `/<namespace>:<name>` in the available-skills list. Adding a new command means dropping a new file — no registration.

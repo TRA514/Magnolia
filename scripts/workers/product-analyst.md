@@ -45,40 +45,40 @@ allowed_tools:
   - "mcp__claude_ai_VantacaDatabricks__*"
 skills:
   # /ship-it pipeline skills (vision → PRD → validation → business case)
-  - workflows/vision-clarifier
-  - workflows/devils-advocate
-  - workflows/agentic-api-designer
-  - workflows/prd-creation
-  - workflows/ambition-expander
-  - workflows/red-team-reviewer
-  - workflows/swag-modeler
+  - workflow-vision-clarifier
+  - workflow-devils-advocate
+  - workflow-agentic-api-designer
+  - workflow-prd-creation
+  - workflow-ambition-expander
+  - workflow-red-team-reviewer
+  - workflow-swag-modeler
   # Strategy and planning
-  - workflows/product-strategy-creation
-  - workflows/strategy-session
-  - workflows/strategy-memo
-  - workflows/product-planning
-  - workflows/roadmap-updating
-  - workflows/launch-announcement
-  - workflows/publish-package
+  - workflow-product-strategy-creation
+  - workflow-strategy-session
+  - workflow-strategy-memo
+  - workflow-product-planning
+  - workflow-roadmap-updating
+  - workflow-launch-announcement
+  - workflow-publish-package
   # Metrics and goals
-  - workflows/goal-setting
-  - workflows/metrics-definition
-  - workflows/metric-diagnosis
-  - workflows/tradeoff-decision
-  - workflows/dashboard-design
+  - workflow-goal-setting
+  - workflow-metrics-definition
+  - workflow-metric-diagnosis
+  - workflow-tradeoff-decision
+  - workflow-dashboard-design
   # Context assembly
-  - context-assembly/meeting-synthesis
-  - context-assembly/research-gathering
-  - context-assembly/priority-scoring
-  - context-assembly/context-search
-  - context-assembly/pendo-analytics
-  - context-assembly/databricks-analytics
-  - context-assembly/source-normalization
+  - context-meeting-synthesis
+  - context-research-gathering
+  - context-priority-scoring
+  - context-search
+  - context-pendo-analytics
+  - context-databricks-analytics
+  - context-source-normalization
   # Quality gates
-  - quality-gates/prd-validation
-  - quality-gates/product-strategy-validation
-  - quality-gates/citation-compliance
-  - quality-gates/source-integrity
+  - quality-prd-validation
+  - quality-product-strategy-validation
+  - quality-citation-compliance
+  - quality-source-integrity
 langfuse_prompt: "worker-product-analyst"
 timeout: 600
 max_turns: 30

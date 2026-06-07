@@ -24,9 +24,9 @@ allowed_tools:
   - "mcp__qmd__*"
   - "mcp__claude_ai_Microsoft_365__*"
 skills:
-  - workflows/schedule-meeting
-  - task-management/task-update
-  - task-management/task-communicate
+  - workflow-schedule-meeting
+  - task-update
+  - task-communicate
 langfuse_prompt: "worker-scheduler"
 timeout: 300
 max_turns: 15

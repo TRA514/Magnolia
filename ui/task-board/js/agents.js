@@ -14,147 +14,47 @@ async function checkLangfuseHealth() {
   }
 }
 
-// ─── Prompts View ───────────────────────────────────────────────────
+// ─── Workers View (file-backed; no LangFuse) ───
 
-async function fetchPrompts() {
+async function fetchWorkers() {
   const view = document.getElementById('prompts-view');
   try {
-    const [promptsRes, statsRes] = await Promise.all([
-      fetch(`${API}/langfuse/prompts`),
-      fetch(`${API}/langfuse/traces/stats`),
-    ]);
-    const promptsData = await promptsRes.json();
-    const statsData = await statsRes.json();
-    renderPrompts(promptsData.prompts || [], statsData.stats || {});
+    const res = await fetch(`${API}/workers`);
+    const data = await res.json();
+    _workerCache = data.workers || [];          // reused by the detail modal
+    renderWorkers(_workerCache);
   } catch (err) {
-    view.innerHTML = `<div class="loading" style="color:var(--danger)">LangFuse unavailable: ${err.message}</div>`;
+    view.innerHTML = `<div class="loading" style="color:var(--danger)">Could not load workers: ${err.message}</div>`;
   }
 }
 
-function renderPrompts(prompts, stats) {
+function renderWorkers(workers) {
   const view = document.getElementById('prompts-view');
-  const workers = prompts.filter(p => p.name.startsWith('worker-') && p.name !== 'worker-router');
-  const workerRouter = prompts.find(p => p.name === 'worker-router');
-  const taskParser = prompts.filter(p => p.name === 'task-parser');
-  const cronParser = prompts.find(p => p.name === 'cron-parser');
-  const skills = prompts.filter(p => p.name.startsWith('skill-'));
-  const STEP_ICONS = {'task-parser': '📝', 'worker-match': '🔀', 'worker-execution': '🤖'};
-
-  let html = '';
-
-  // Workers section
-  html += '<div class="prompts-section-title">Workers</div>';
-  html += '<div class="prompt-cards">';
-  if (workers.length === 0) {
-    html += '<div style="color:var(--text-muted);font-size:13px;">No worker prompts registered. Run: python3 scripts/langfuse_setup.py</div>';
+  let html = '<div class="prompts-section-title">Workers</div>';
+  if (!workers.length) {
+    html += '<div style="color:var(--text-muted);font-size:13px;">No workers found in scripts/workers/.</div>';
+    view.innerHTML = html;
+    return;
   }
-  for (const p of workers) {
-    const s = stats[`worker-execution`] || {};
-    const workerName = p.name.replace('worker-', '');
-    html += `<div class="prompt-card" onclick="openWorkerDetail('${workerName}')" style="cursor:pointer">
+  html += '<div class="prompt-cards">';
+  for (const w of workers) {
+    const tier = w.tier || 'standard';
+    const packs = (w.packs || []).join(', ');
+    html += `<div class="prompt-card" onclick="openWorkerDetail(${escapeHtml(JSON.stringify(w.name))})" style="cursor:pointer">
       <div class="prompt-card-header">
-        <span class="prompt-card-name">${workerName}</span>
-        <span class="prompt-card-version">v${p.version || '?'}</span>
+        <span class="prompt-card-name">${escapeHtml(w.name)}</span>
+        <span class="pf-tier ${escapeHtml(tier)}">${escapeHtml(tier)}</span>
       </div>
-      <div class="prompt-card-desc">${(p.labels || []).join(', ') || 'no labels'}</div>
+      <div class="prompt-card-desc">${escapeHtml(w.description || '')}</div>
       <div class="prompt-card-stats">
-        <span>Traces: ${s.count || 0}</span>
-        <span class="${(s.success_rate||0) >= 80 ? 'stat-good' : 'stat-bad'}">Success: ${s.success_rate || 0}%</span>
+        <span>Model: ${escapeHtml(w.model || '—')}</span>
+        ${packs ? `<span>Packs: ${escapeHtml(packs)}</span>` : ''}
       </div>
       <div style="font-size:11px;color:var(--text-dim);margin-top:6px;">Click for details</div>
     </div>`;
   }
   html += '</div>';
-
-  // Infrastructure Prompts section
-  html += '<div class="prompts-section-title">Infrastructure Prompts</div>';
-  html += '<div class="prompt-cards">';
-
-  // Task Parser
-  for (const p of taskParser) {
-    const s = stats['task-parser'] || {};
-    html += `<div class="prompt-card">
-      <div class="prompt-card-header">
-        <span class="prompt-card-name">task-parser</span>
-        <span class="prompt-card-version">v${p.version || '?'}</span>
-      </div>
-      <div class="prompt-card-desc">Classifies voice/text input into structured task fields (Ollama)</div>
-      <div class="prompt-card-stats">
-        <span>Traces: ${s.count || 0}</span>
-        <span class="${(s.success_rate||0) >= 80 ? 'stat-good' : 'stat-bad'}">Success: ${s.success_rate || 0}%</span>
-      </div>
-      <a class="prompt-card-link" href="${LANGFUSE_HOST}/project/pm-os/prompts/${p.name}" target="_blank">View in LangFuse ↗</a>
-    </div>`;
-  }
-
-  // Worker Router
-  if (workerRouter) {
-    const s = stats['worker-match'] || {};
-    html += `<div class="prompt-card">
-      <div class="prompt-card-header">
-        <span class="prompt-card-name">worker-router</span>
-        <span class="prompt-card-version">v${workerRouter.version || '?'}</span>
-      </div>
-      <div class="prompt-card-desc">Routes tasks to the best worker using LLM matching (Ollama)</div>
-      <div class="prompt-card-stats">
-        <span>Traces: ${s.count || 0}</span>
-        <span class="${(s.success_rate||0) >= 80 ? 'stat-good' : 'stat-bad'}">Success: ${s.success_rate || 0}%</span>
-      </div>
-      <a class="prompt-card-link" href="${LANGFUSE_HOST}/project/pm-os/prompts/${workerRouter.name}" target="_blank">View in LangFuse ↗</a>
-    </div>`;
-  }
-
-  // Cron Parser
-  if (cronParser) {
-    html += `<div class="prompt-card">
-      <div class="prompt-card-header">
-        <span class="prompt-card-name">cron-parser</span>
-        <span class="prompt-card-version">v${cronParser.version || '?'}</span>
-      </div>
-      <div class="prompt-card-desc">Parses free-form text into structured cron job definitions (Ollama)</div>
-      <a class="prompt-card-link" href="${LANGFUSE_HOST}/project/pm-os/prompts/${cronParser.name}" target="_blank">View in LangFuse ↗</a>
-    </div>`;
-  }
-
-  if (taskParser.length === 0 && !workerRouter && !cronParser) {
-    html += '<div style="color:var(--text-muted);font-size:13px;">Not registered yet. Run: python3 scripts/langfuse_setup.py</div>';
-  }
-  html += '</div>';
-
-  // Skills section (collapsible)
-  const skillsCollapsedDefault = skills.length > 12;
-  html += `<div class="prompts-section-title" style="cursor:pointer;" onclick="toggleSkillsList()">
-    Skills (${skills.length} registered) <span id="skills-toggle-icon">${skillsCollapsedDefault ? '▸' : '▾'}</span>
-  </div>`;
-  html += `<div class="prompt-cards" id="skills-grid" style="${skillsCollapsedDefault ? 'display:none;' : ''}">`;
-  for (const p of skills) {
-    html += `<a class="prompt-card" style="padding:10px;text-decoration:none;cursor:pointer;" href="${LANGFUSE_HOST}/project/pm-os/prompts/${p.name}" target="_blank">
-      <div class="prompt-card-header">
-        <span class="prompt-card-name" style="font-size:12px;">${p.name.replace('skill-', '')}</span>
-        <span class="prompt-card-version">v${p.version || '?'}</span>
-      </div>
-    </a>`;
-  }
-  html += '</div>';
-
-  // Link to full LangFuse UI
-  html += `<div style="text-align:center;margin-top:20px;">
-    <a href="${LANGFUSE_HOST}/project/pm-os" target="_blank" style="color:var(--accent);font-size:13px;text-decoration:none;">Open LangFuse Dashboard ↗</a>
-  </div>`;
-
   view.innerHTML = html;
-}
-
-function toggleSkillsList() {
-  const grid = document.getElementById('skills-grid');
-  const icon = document.getElementById('skills-toggle-icon');
-  if (grid.style.display === 'none') {
-    grid.style.display = '';
-    icon.textContent = '▾';
-  } else {
-    grid.style.display = 'none';
-    icon.textContent = '▸';
-  }
 }
 
 // ─── Worker Detail Modal ───────────────────────────────────────────
@@ -196,6 +96,13 @@ async function openWorkerDetail(workerName) {
   html += `<span>Priority: ${w.priority}</span>`;
   html += `<span>Timeout: ${w.timeout}s</span>`;
   html += `<span>Max turns: ${w.max_turns}</span>`;
+  html += `</div>`;
+
+  // Tier + resolved model + packs
+  html += `<div style="display:flex;gap:12px;align-items:center;font-size:11px;color:var(--text-dim);margin-bottom:16px;">`;
+  html += `<span class="pf-tier ${escapeHtml(w.tier || 'standard')}">${escapeHtml(w.tier || 'standard')}</span>`;
+  html += `<span>Model: ${escapeHtml(w.model || '—')}</span>`;
+  if ((w.packs || []).length) html += `<span>Packs: ${escapeHtml(w.packs.join(', '))}</span>`;
   html += `</div>`;
 
   // Tools
@@ -249,9 +156,5 @@ async function openWorkerDetail(workerName) {
   modalBody.innerHTML = html;
 
   // Actions
-  const lfPrompt = w.langfuse_prompt || `worker-${w.name}`;
-  modalActions.innerHTML = `
-    <a href="${LANGFUSE_HOST}/project/pm-os/prompts/${lfPrompt}" target="_blank" class="btn btn-primary">Edit Prompt in LangFuse</a>
-    <button class="btn" onclick="closeModal()">Close</button>
-  `;
+  modalActions.innerHTML = `<button class="btn" onclick="closeModal()">Close</button>`;
 }

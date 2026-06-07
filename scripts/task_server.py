@@ -417,6 +417,45 @@ def build_profile(root=None):
     }
 
 
+def _worker_packs(worker_skills, packs=None, root=None):
+    """Pack ids whose skill set intersects the worker's (flat) skill names.
+    [] when no manifest or no intersection."""
+    if packs is None:
+        packs = packs_lib.load_packs(root)
+    sk = set(worker_skills or [])
+    return [pid for pid, spec in packs.items() if sk & set(spec.get("skills", []))]
+
+
+def workers_payload(root=None, posture=None):
+    """Enriched, read-only worker list for GET /api/workers: file truth from
+    scripts/workers/*.md plus Phase-7 tier, resolved model at the current cost
+    posture, and pack membership. Degrades: missing tier -> resolve_model
+    defaults to standard; missing packs.yaml -> packs == []."""
+    from task_dispatch import load_workers
+    if posture is None:
+        posture = (profile_lib.config(root).get("models") or {}).get("cost_posture") or "balanced"
+    packs = packs_lib.load_packs(root)
+    out = []
+    for w in load_workers():
+        tier = w.get("tier")
+        out.append({
+            "name": w.get("name", ""),
+            "description": w.get("description", ""),
+            "priority": w.get("priority", 0),
+            "match": w.get("match", {}),
+            "allowed_tools": w.get("allowed_tools", []),
+            "skills": w.get("skills", []),
+            "langfuse_prompt": w.get("langfuse_prompt", ""),
+            "timeout": w.get("timeout", 600),
+            "max_turns": w.get("max_turns", 30),
+            "prompt_body": w.get("prompt_body", ""),
+            "tier": tier,
+            "model": profile_lib.resolve_model(tier, posture=posture),
+            "packs": _worker_packs(w.get("skills", []), packs=packs),
+        })
+    return out
+
+
 # ─── Profile write endpoints (pure helpers + HTTP wrappers) ────────────────────
 # The pure helpers take the parsed payload + root and return (status_code, body).
 # They own validation (path-traversal guards against the un-sanitizing profile_lib
@@ -1623,26 +1662,10 @@ def handle_delete_cron_job(handler, job_id):
 # ─── Worker API Handlers ─────────────────────────────────────────────────────
 
 def handle_list_workers(handler):
-    """GET /api/workers — List all worker definitions with tools, skills, and prompt body."""
+    """GET /api/workers — file-backed worker definitions enriched with tier,
+    resolved model at current posture, and pack membership (read-only)."""
     try:
-        from task_dispatch import load_workers
-        workers = load_workers()
-        # Return all fields except internal matching state
-        result = []
-        for w in workers:
-            result.append({
-                "name": w.get("name", ""),
-                "description": w.get("description", ""),
-                "priority": w.get("priority", 0),
-                "match": w.get("match", {}),
-                "allowed_tools": w.get("allowed_tools", []),
-                "skills": w.get("skills", []),
-                "langfuse_prompt": w.get("langfuse_prompt", ""),
-                "timeout": w.get("timeout", 600),
-                "max_turns": w.get("max_turns", 30),
-                "prompt_body": w.get("prompt_body", ""),
-            })
-        _json_response(handler, {"workers": result})
+        _json_response(handler, {"workers": workers_payload()})
     except Exception as e:
         _error_response(handler, f"Failed to load workers: {e}", status=500)
 

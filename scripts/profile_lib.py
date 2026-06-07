@@ -281,6 +281,8 @@ def resolve_model(worker_tier, posture=None, task_override=None, root=None):
     high +1) and clamped to [light, deep]. Unknown tier -> 'standard';
     unknown posture -> 'balanced'."""
     if task_override:
+        # Override may be a tier name OR a raw model id; tier names and model ids
+        # are disjoint keyspaces, so check the tier map first.
         if task_override in TIER_MODELS:            # a tier name
             return TIER_MODELS[task_override]
         return task_override                        # an explicit model id

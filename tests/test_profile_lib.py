@@ -247,3 +247,15 @@ def test_resolve_model_defaults_tier_standard_and_posture_balanced():
 def test_resolve_model_reads_posture_from_config(profile_root):
     # profile_root config has cost_posture: balanced -> deep worker => opus
     assert profile_lib.resolve_model("deep", root=profile_root) == "claude-opus-4-8"
+
+
+def test_resolve_model_override_arbitrary_model_id_passthrough():
+    # A non-tier override string is returned verbatim (raw model id wins).
+    assert profile_lib.resolve_model("light", posture="low",
+                                     task_override="some-future-model") == "some-future-model"
+
+
+def test_cost_posture_reads_and_defaults(profile_root, tmp_path):
+    assert profile_lib.cost_posture(root=profile_root) == "balanced"   # from fixture config
+    # missing config -> default 'balanced'
+    assert profile_lib.cost_posture(root=str(tmp_path)) == "balanced"

@@ -53,6 +53,14 @@ is visible on the board once it spawns), mark it in-progress as you begin, done 
 3. **Integrations** — ask: Otter or Granola? Jira / Asana / Linear / none? Teams & Outlook (M365)?
    Default M365 Teams+Outlook ON. Write `profile/integrations.yaml`. (Both Otter and Granola are
    offered; Otter is wired today.)
+   - **If they pick Jira** — gently gather their team's home on the board so the tickets I draft land
+     in the right place and sound like your team filed them. Ask for, and write into
+     `profile/integrations.yaml` under `project_management.jira`: `cloud_id` (your Jira site, e.g.
+     yourorg.atlassian.net), `project_key` (the prefix on their issues, like ABC), `board_id` (the
+     team's board number), `default_assignee` (who new tickets go to), `component_id`, and
+     `product_area` (the swim-lane label, e.g. their product name). Tell them
+     warmly that any of these can be left blank for now and filled in later — I'll just leave those
+     bits of the ticket open until they're ready, nothing breaks.
 4. **Doctor pass** — invoke the `workflow-doctor` skill; it runs `python3 scripts/doctor.py detect`
    and remediates conversationally. Continue even if some capabilities can't be fixed — degraded
    features just stay disabled with a reason; onboarding never blocks.

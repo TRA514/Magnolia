@@ -92,3 +92,21 @@ def test_validate_worker_flags_empty_body(tmp_path):
         "---\nname: s\ndescription: Use when x\npriority: 10\ntier: standard\n"
         "match:\n  task_type: []\nallowed_tools:\n  - \"Bash(*)\"\ntimeout: 300\nmax_turns: 15\n---\n\n   \n")
     assert "empty prompt body" in factory_lib.validate_worker(str(nobody))
+
+
+def test_receipt_failure_rolls_back_commit(tasks_root, tmp_path, monkeypatch):
+    """If the receipt can't be emitted, the commit is rolled back (no orphan commit);
+    the scaffolded files stay in the working tree for a retry."""
+    import factory_lib, task_lib
+    repo = _repo(tmp_path)
+    (repo / "new.md").write_text("scaffolded\n")
+    monkeypatch.setattr(factory_lib, "PM_OS_DIR", str(repo))
+    head_before = _git(str(repo), "rev-parse", "HEAD").stdout.strip()
+    def boom(*a, **k):
+        raise RuntimeError("simulated receipt failure (e.g. missing counter)")
+    monkeypatch.setattr(task_lib, "create_task", boom)
+    with pytest.raises(factory_lib.FactoryError):
+        factory_lib.commit_and_emit_receipt("x", files=["new.md"], kind="worker")
+    head_after = _git(str(repo), "rev-parse", "HEAD").stdout.strip()
+    assert head_after == head_before        # no orphan commit
+    assert (repo / "new.md").exists()        # scaffolded file preserved in working tree

@@ -50,19 +50,41 @@ def commit_and_emit_receipt(summary, files, kind, root=None):
     # `git diff --cached --quiet` returns 0 when NOTHING is staged.
     if _git(repo, "diff", "--cached", "--quiet").returncode == 0:
         raise FactoryError("scaffold produced no committable changes")
+    # Capture the pre-commit HEAD so we can roll back if the receipt can't be
+    # emitted. On a brand-new repo with no commits this is non-zero (no HEAD yet).
+    prev = _git(repo, "rev-parse", "HEAD")
     commit = _git(repo, "commit", "-m", f"factory: {summary}")
     if commit.returncode != 0:
         raise FactoryError(f"git commit failed: {commit.stderr.strip()[:300]}")
     sha = _git(repo, "rev-parse", "HEAD").stdout.strip()
-    receipt_id, _ = task_lib.create_task(
-        f"Built: {summary}", queue="human", domain="ops", creator="agent",
-        description="The factory built this for you. One-tap Undo reverts it cleanly.",
-        card_type="receipt")
-    task_lib.update_task(receipt_id, changes={
-        "revert_commit": sha,
-        "receipt_summary": summary,
-        "factory_kind": kind,
-    })
+    # Transactional: a committed scaffold with no receipt card strands a change
+    # with no Undo affordance (git is invisible; the receipt is the only Undo).
+    # If receipt emission fails AFTER the commit, soft-reset to the pre-commit
+    # HEAD — which preserves the scaffolded files staged in the working tree —
+    # and raise, so we never leave an orphan commit.
+    try:
+        receipt_id, _ = task_lib.create_task(
+            f"Built: {summary}", queue="human", domain="ops", creator="agent",
+            description="The factory built this for you. One-tap Undo reverts it cleanly.",
+            card_type="receipt")
+        task_lib.update_task(receipt_id, changes={
+            "revert_commit": sha,
+            "receipt_summary": summary,
+            "factory_kind": kind,
+        })
+    except Exception as e:
+        if prev.returncode == 0:
+            _git(repo, "reset", "--soft", prev.stdout.strip())
+            rolled_back = " rolled back the commit;"
+        else:
+            # Unborn HEAD (no prior commit): there is no prior state to soft-reset
+            # to, so this first commit is left in place. Accepted gap — PM-OS is
+            # always an established repo with history, so this path is unreachable
+            # in practice; not worth an update-ref dance for it.
+            rolled_back = ""
+        raise FactoryError(
+            f"receipt emission failed;{rolled_back} scaffolded files preserved "
+            f"in the working tree: {e}") from e
     return receipt_id
 
 

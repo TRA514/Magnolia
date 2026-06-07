@@ -13,6 +13,11 @@ PM_OS_DIR = os.path.dirname(SCRIPT_DIR)
 
 _yaml = YAML(typ="safe")
 
+# Round-trip loader/dumper for WRITES: preserves comments + formatting so the
+# helpful annotations in the profile YAML files survive a setter mutating one key.
+_yaml_rt = YAML()
+_yaml_rt.preserve_quotes = True
+
 
 def profile_dir(root=None):
     root = root or PM_OS_DIR
@@ -168,6 +173,90 @@ def write_capabilities(data, root=None):
     finally:
         if os.path.exists(tmp):
             os.remove(tmp)
+
+
+def _atomic_write_text(name, text, root=None):
+    """Atomically write text to <profile_dir>/name (mkstemp + os.replace)."""
+    target = os.path.join(profile_dir(root), name)
+    dir_ = os.path.dirname(target)
+    os.makedirs(dir_, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".profile-", dir=dir_)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, target)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
+def _update_yaml(name, mutate, root=None):
+    """Round-trip read-modify-write of a profile YAML file.
+
+    Loads with the round-trip loader (preserving comments/formatting), calls
+    mutate(doc) to change in place, and writes the result back atomically.
+    Mutating only the targeted key leaves all siblings + comments intact.
+    """
+    path = os.path.join(profile_dir(root), name)
+    if os.path.isfile(path):
+        with open(path, encoding="utf-8") as f:
+            doc = _yaml_rt.load(f)
+        if doc is None:
+            doc = {}
+    else:
+        doc = {}
+    mutate(doc)
+    import io
+    buf = io.StringIO()
+    _yaml_rt.dump(doc, buf)
+    _atomic_write_text(name, buf.getvalue(), root)
+
+
+def write_identity(data, root=None):
+    """Update identity fields in profile.yaml from data, preserving everything else.
+
+    Only display_name/email/company/timezone are written (when present in data);
+    unknown keys are ignored and existing keys like persona are never clobbered.
+    """
+    def mutate(doc):
+        for key in ("display_name", "email", "company", "timezone"):
+            if key in data:
+                doc[key] = data[key]
+    _update_yaml("profile.yaml", mutate, root)
+
+
+def write_voice(channel, text, root=None):
+    """Atomically write voice/{channel}.md, creating the file if missing."""
+    _atomic_write_text(os.path.join("voice", f"{channel}.md"), text, root)
+
+
+def set_integration_provider(category, provider_id, root=None):
+    """Set integrations.yaml[category]['provider'], preserving sub-config + siblings."""
+    def mutate(doc):
+        cat = doc.get(category)
+        if not isinstance(cat, dict):
+            cat = {}
+            doc[category] = cat
+        cat["provider"] = provider_id
+    _update_yaml("integrations.yaml", mutate, root)
+
+
+def set_active_packs(packs, root=None):
+    """Set config.yaml['active_skill_packs'] to the given list."""
+    def mutate(doc):
+        doc["active_skill_packs"] = list(packs)
+    _update_yaml("config.yaml", mutate, root)
+
+
+def set_cost_posture(level, root=None):
+    """Set config.yaml['models']['cost_posture'], preserving sibling model keys."""
+    def mutate(doc):
+        models = doc.get("models")
+        if not isinstance(models, dict):
+            models = {}
+            doc["models"] = models
+        models["cost_posture"] = level
+    _update_yaml("config.yaml", mutate, root)
 
 
 if __name__ == "__main__":

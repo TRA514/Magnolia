@@ -36,6 +36,7 @@ import ladder_lib
 import cron_lib
 import jira_publish
 import profile_lib
+import packs_lib
 import adapters
 from adapters.project_management._contract import NotConfigured
 from cron_scheduler import CronScheduler
@@ -274,21 +275,6 @@ def build_quality(ladder_path=None):
 
 # ─── Profile / Config room (GET /api/profile) ──────────────────────────────────
 
-# Module-level catalog of installable skill packs. Static metadata for the
-# Skill-packs section of the Profile room; "active" comes from config.yaml.
-PACK_CATALOG = [
-    {"id": "core", "label": "Core",
-     "description": "Baseline PM-OS skills: tasks, search, meeting synthesis."},
-    {"id": "pm", "label": "Product Management",
-     "description": "PRDs, roadmaps, strategy, metrics, and prioritization."},
-    {"id": "exec", "label": "Executive",
-     "description": "Strategy memos, goal-setting, and leadership-facing synthesis."},
-    {"id": "eng", "label": "Engineering",
-     "description": "Tech-spec review, velocity estimation, and ticket drafting."},
-    {"id": "recruiting", "label": "Recruiting",
-     "description": "Candidate synthesis and hiring-loop support."},
-]
-
 # Known adapters per integration category, keyed by the output category name.
 # Labels are human-readable; ids match provider strings in integrations.yaml.
 _INTEGRATION_OPTIONS = {
@@ -413,7 +399,7 @@ def build_profile(root=None):
 
     packs = {
         "active": cfg.get("active_skill_packs") or [],
-        "available": PACK_CATALOG,
+        "available": packs_lib.pack_catalog(root),
     }
 
     model_posture = {

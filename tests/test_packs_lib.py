@@ -134,3 +134,29 @@ def test_on_disk_skill_folders_detects_skill_manifests(tmp_path):
 
 def test_on_disk_skill_folders_missing_dir_returns_empty(tmp_path):
     assert packs_lib._on_disk_skill_folders(root=str(tmp_path)) == set()
+
+
+def test_build_skills_catalog_gates_to_active(tmp_path, monkeypatch):
+    import os, textwrap, task_dispatch, profile_lib, packs_lib
+    # temp engine root with two skills on disk and a manifest splitting them
+    skills = os.path.join(tmp_path, ".claude", "skills")
+    for name, desc in [("task-create", "Use when creating tasks"),
+                       ("workflow-jira-home", "Use when filing Jira issues")]:
+        os.makedirs(os.path.join(skills, name))
+        with open(os.path.join(skills, name, "SKILL.md"), "w") as f:
+            f.write(f"---\nname: {name}\ndescription: {desc}\n---\n# body\n")
+    with open(os.path.join(tmp_path, ".claude", "packs.yaml"), "w") as f:
+        f.write(textwrap.dedent("""\
+            core: {label: Core, description: x, skills: [task-create]}
+            eng:  {label: Engineering, description: x, skills: [workflow-jira-home]}
+        """))
+    monkeypatch.setattr(task_dispatch, "PM_OS_DIR", str(tmp_path))
+    monkeypatch.setattr(packs_lib, "PM_OS_DIR", str(tmp_path))
+    monkeypatch.setattr(profile_lib, "PM_OS_DIR", str(tmp_path))
+    # config with eng OFF
+    prof = os.path.join(tmp_path, "profile"); os.makedirs(prof)
+    with open(os.path.join(prof, "config.yaml"), "w") as f:
+        f.write('active_skill_packs: ["core"]\n')
+    catalog = task_dispatch.build_skills_catalog()
+    assert "task-create" in catalog
+    assert "workflow-jira-home" not in catalog   # eng pack inactive -> gated out

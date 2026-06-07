@@ -258,3 +258,19 @@ def test_cut_endpoints_not_routed():
     src = inspect.getsource(task_server.TaskServerHandler._route_request)
     assert "system/restart" not in src
     assert "doctor/fix" not in src
+
+
+def test_build_profile_packs_derive_from_manifest(profile_root):
+    import os, textwrap, task_server
+    claude = os.path.join(profile_root, ".claude")
+    os.makedirs(claude, exist_ok=True)
+    with open(os.path.join(claude, "packs.yaml"), "w") as f:
+        f.write(textwrap.dedent("""\
+            core:  {label: "Core", description: "Baseline.", skills: [task-create]}
+            pm:    {label: "Product Management", description: "PRDs.", skills: [workflow-prd-creation]}
+            exec:  {label: "Executive", description: "Memos.", skills: [workflow-strategy-memo]}
+        """))
+    p = task_server.build_profile(root=profile_root)
+    ids = {c["id"] for c in p["packs"]["available"]}
+    assert ids == {"core", "pm", "exec"}          # from manifest, not the old hardcoded list
+    assert "core" in p["packs"]["active"]

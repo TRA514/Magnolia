@@ -40,7 +40,7 @@ function renderWorkers(workers) {
   for (const w of workers) {
     const tier = w.tier || 'standard';
     const packs = (w.packs || []).join(', ');
-    html += `<div class="prompt-card" onclick="openWorkerDetail(${escapeHtml(JSON.stringify(w.name))})" style="cursor:pointer">
+    html += `<div class="prompt-card" onclick="openWorkerDetail('${w.name}')" style="cursor:pointer">
       <div class="prompt-card-header">
         <span class="prompt-card-name">${escapeHtml(w.name)}</span>
         <span class="pf-tier ${escapeHtml(tier)}">${escapeHtml(tier)}</span>

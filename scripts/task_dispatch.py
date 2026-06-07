@@ -670,7 +670,7 @@ Your assignment is task {task_id}. Follow these steps:
 
 def _resolve_task_model(task, worker):
     """Resolve the --model for a dispatch from the worker's tier + posture, with
-    a per-task override (task frontmatter 'model' or 'tier')."""
+    a per-task override (task frontmatter 'model' wins over 'tier')."""
     override = task.get("model") or task.get("tier")
     tier = (worker or {}).get("tier")
     return profile_lib.resolve_model(tier, task_override=override)
@@ -695,9 +695,11 @@ def dispatch_task(task, dry_run=False, rerun=False, workers=None):
         worker, score, reasons = match_worker(task, workers)
         log(f"Matched worker: {worker['name']} (score={score}, reasons={reasons})", task_id=task_id)
 
+    model = _resolve_task_model(task, worker)
+
     if dry_run:
         worker_name = worker["name"] if worker else "default"
-        log(f"DRY-RUN: Would dispatch {task_id} [{priority}] — {title} [worker={worker_name}]", task_id=task_id)
+        log(f"DRY-RUN: Would dispatch {task_id} [{priority}] — {title} [worker={worker_name} model={model}]", task_id=task_id)
         return {"task_id": task_id, "success": True, "output": "(dry run)", "error": None}
 
     log(f"Dispatching{' (rerun)' if rerun else ''}: {task_id} [{priority}] — {title}", task_id=task_id)
@@ -735,7 +737,6 @@ def dispatch_task(task, dry_run=False, rerun=False, workers=None):
         tools_str = "Bash(*),Read(*),Write(*),Edit(*),WebFetch(*),WebSearch(*),Agent(*),mcp__*"
         max_turns = "30"
 
-    model = _resolve_task_model(task, worker)
     log(f"Model: {model}", task_id=task_id)
 
     output_file = os.path.join(LOG_DIR, f"dispatch-{task_id}.log")
@@ -747,9 +748,9 @@ def dispatch_task(task, dry_run=False, rerun=False, workers=None):
         exec_trace = create_trace(
             name=f"worker-execution ({worker_name}){rerun_label}",
             session_id=task_id,
-            metadata={"worker": worker_name, "rerun": rerun, "priority": priority},
+            metadata={"worker": worker_name, "rerun": rerun, "priority": priority, "model": model},
             tags=[f"worker:{worker_name}", f"priority:{priority}"],
-            input_data={"worker": worker_name, "tools": tools_str, "max_turns": max_turns, "prompt_length": len(prompt)},
+            input_data={"worker": worker_name, "tools": tools_str, "max_turns": max_turns, "prompt_length": len(prompt), "model": model},
         )
     except Exception:
         pass
@@ -952,6 +953,8 @@ def main():
                     "priority": fm.get("priority", "medium"),
                     "domain": fm.get("domain"),
                     "task_type": fm.get("task_type"),
+                    "model": fm.get("model"),
+                    "tier": fm.get("tier"),
                 }
             except Exception:
                 task = {"id": task_id, "title": "(single dispatch)", "priority": "medium"}

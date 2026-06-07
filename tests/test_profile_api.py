@@ -274,3 +274,14 @@ def test_build_profile_packs_derive_from_manifest(profile_root):
     ids = {c["id"] for c in p["packs"]["available"]}
     assert ids == {"core", "pm", "exec"}          # from manifest, not the old hardcoded list
     assert "core" in p["packs"]["active"]
+
+
+def test_model_posture_workers_include_resolved_model(profile_root, monkeypatch):
+    import task_server
+    # Make _profile_workers return a known worker tier regardless of real files
+    monkeypatch.setattr(task_server, "_profile_workers",
+                        lambda root=None: [{"name": "researcher", "tier": "deep"}])
+    p = task_server.build_profile(root=profile_root)   # config posture: balanced
+    w = p["model_posture"]["workers"][0]
+    assert w["tier"] == "deep"
+    assert w["model"] == "claude-opus-4-8"   # deep @ balanced

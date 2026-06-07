@@ -402,10 +402,11 @@ def build_profile(root=None):
         "available": packs_lib.pack_catalog(root),
     }
 
-    model_posture = {
-        "level": (cfg.get("models") or {}).get("cost_posture") or "balanced",
-        "workers": _profile_workers(root),
-    }
+    posture_level = (cfg.get("models") or {}).get("cost_posture") or "balanced"
+    workers = _profile_workers(root)
+    for w in workers:
+        w["model"] = profile_lib.resolve_model(w.get("tier"), posture=posture_level)
+    model_posture = {"level": posture_level, "workers": workers}
 
     return {
         "identity": identity,

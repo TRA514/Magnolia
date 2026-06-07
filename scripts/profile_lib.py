@@ -259,6 +259,41 @@ def set_cost_posture(level, root=None):
     _update_yaml("config.yaml", mutate, root)
 
 
+TIER_ORDER = ["light", "standard", "deep"]
+TIER_MODELS = {
+    "light": "claude-haiku-4-5",
+    "standard": "claude-sonnet-4-6",
+    "deep": "claude-opus-4-8",
+}
+_POSTURE_SHIFT = {"low": -1, "balanced": 0, "high": 1}
+_DEFAULT_TIER = "standard"
+
+
+def cost_posture(root=None):
+    return (config(root).get("models") or {}).get("cost_posture") or "balanced"
+
+
+def resolve_model(worker_tier, posture=None, task_override=None, root=None):
+    """Resolve the model id for a dispatch.
+
+    Precedence: task_override (a model id OR a tier name) wins. Otherwise the
+    worker's declared tier is shifted by the posture (low -1 / balanced 0 /
+    high +1) and clamped to [light, deep]. Unknown tier -> 'standard';
+    unknown posture -> 'balanced'."""
+    if task_override:
+        # Override may be a tier name OR a raw model id; tier names and model ids
+        # are disjoint keyspaces, so check the tier map first.
+        if task_override in TIER_MODELS:            # a tier name
+            return TIER_MODELS[task_override]
+        return task_override                        # an explicit model id
+    tier = worker_tier if worker_tier in TIER_ORDER else _DEFAULT_TIER
+    if posture is None:
+        posture = cost_posture(root)
+    shift = _POSTURE_SHIFT.get(posture, 0)
+    idx = max(0, min(len(TIER_ORDER) - 1, TIER_ORDER.index(tier) + shift))
+    return TIER_MODELS[TIER_ORDER[idx]]
+
+
 if __name__ == "__main__":
     import sys
     if "--display-name" in sys.argv:

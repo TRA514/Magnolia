@@ -2,6 +2,7 @@
 name: researcher
 description: Research, competitive analysis, data gathering, and investigation tasks
 priority: 10
+tier: deep
 match:
   task_type: []
   domains:

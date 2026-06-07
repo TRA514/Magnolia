@@ -2,6 +2,7 @@
 name: grad-assessor
 description: Runs the deterministic trust-ladder graduation assessor and reports what it created. No analysis, no external writes.
 priority: 7
+tier: light
 match:
   task_type: []
   domains:

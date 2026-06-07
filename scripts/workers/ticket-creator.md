@@ -2,6 +2,7 @@
 name: ticket-creator
 description: Jira issue drafting — Features, Units, Bugs, Regression Defects, etc. on the Vantaca Home AI DLC board (VNT, board 1096). Supervised — human publishes via the task board.
 priority: 15
+tier: standard
 match:
   task_type: []
   domains: []

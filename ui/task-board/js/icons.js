@@ -31,6 +31,14 @@ const ICON = {
   chat: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 4.2h10.4v6H7.4l-2.8 2.4V10.2H2.8z"/></svg>`,
   send: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13.4 2.6 7 9"/><path d="M13.4 2.6 9.4 13.2l-2.4-4.2-4.2-2.4Z"/></svg>`,
   obsidian: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 1.8 13.4 7l-3.1 7.2-5.3-1.4-2.4-4.5 3.3-6.5Z"/><path d="M9.2 1.8 7.2 6l2.4 3-1.5 5.2"/></svg>`,
+
+  // card-kind marks (recommendation / receipt / graduation)
+  spark: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.4l1.3 3.4L12.8 7l-3.5 1.2L8 11.6 6.7 8.2 3.2 7l3.5-1.2L8 2.4Z"/></svg>`,
+  receipt: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.4h8v11l-1.6-1-1.2 1-1.2-1-1.2 1-1.2-1-1.4 1V2.4Z"/><path d="M6.2 5.6h3.6M6.2 8h3.6"/></svg>`,
+  ladder: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13.5V3M11 13.5V3"/><path d="M5 11h6M5 8h6M5 5h6"/></svg>`,
+  patch: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.6h5l3 3v7.8H4Z"/><path d="M9 2.6v3h3"/><path d="M8 7.4v3.4M6.3 9.1h3.4"/></svg>`,
+  undo: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 6.2H3.2V4M3.5 6A5 5 0 1 1 3 9.2"/></svg>`,
+  arrowRight: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 8h9.2M9 4.4 12.6 8 9 11.6"/></svg>`,
 };
 
 function svgIcon(name) { return ICON[name] || ''; }

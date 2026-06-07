@@ -148,6 +148,8 @@ const KIND_META = {
   recommendation: { label: 'suggestion', icon: 'spark', cls: 'kind-recommendation' },
   receipt:        { label: 'handled',    icon: 'receipt', cls: 'kind-receipt' },
   graduation:     { label: 'trust',      icon: 'ladder', cls: 'kind-graduation' },
+  // icon 'jira' is provisional: confirm is a general Tier-2 gate that will serve
+  // other families (calendar/doc_sync) later, so this PM-specific glyph is a placeholder.
   confirm:        { label: 'confirm',    icon: 'jira',   cls: 'kind-confirm' },
 };
 const _TIER_WORD = { shadow: 'observe-only', gated: 'gated', autonomous: 'autonomous' };

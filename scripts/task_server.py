@@ -1174,7 +1174,11 @@ def _attempt_publish(task_id, draft):
       ("unconfigured", (400, msg))        — no provider configured
       ("error",       (code, msg))        — NotConfigured -> 400, RuntimeError -> 500
       ("ok",          (issue_key, url))   — published; task marked done + traced
-    Records the outcome (task comment + LangFuse trace) for every terminal status."""
+    Records the full outcome (task comment + LangFuse trace) for the unconfigured,
+    error, and ok statuses. The needs_confirm and already_published branches are
+    early returns that skip the trace: needs_confirm records nothing (the caller
+    emits the confirm card), and already_published records only a single audit
+    comment so the duplicate-publish skip is visible in the task log."""
     if draft is None:
         return ("error", (400, "No JIRA_DRAFT block found in task body"))
     # Guard against re-publishing a task that already produced a ticket (double-confirm,
@@ -1184,6 +1188,7 @@ def _attempt_publish(task_id, draft):
     try:
         existing = task_lib.read_task(task_id)
         if (existing.get("frontmatter") or {}).get("status") == "done":
+            _note(task_id, "Publish skipped — task already published (no duplicate created).")
             return ("already_published", None)
     except FileNotFoundError:
         pass
@@ -1303,6 +1308,12 @@ def handle_confirm(handler, task_id):
         except Exception:
             pass
         _json_response(handler, {"ok": True, "note": "source already published"})
+        return
+    if status == "needs_confirm":
+        # The active provider changed between emitting this card and confirming, so
+        # consent was recorded for a different provider. Leave the confirm card
+        # un-completed — a retry against the new provider is expected.
+        _error_response(handler, "The integration changed since this card was created — please retry the publish to confirm again.", status=409)
         return
     if status != "ok":
         code, msg = payload if isinstance(payload, tuple) else (500, "publish failed")

@@ -18,6 +18,7 @@
 .card-kind-label.kind-recommendation { color: var(--accent); }
 .card-kind-label.kind-receipt        { color: var(--text-dim); }
 .card-kind-label.kind-graduation     { color: var(--accent); }
+.card-kind-label.kind-confirm        { color: var(--accent); }
 .card-kind-label svg { width: 13px; height: 13px; }
 
 /* Graduation carries a touch more weight — a faint accent seam at the top.

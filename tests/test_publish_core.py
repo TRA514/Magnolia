@@ -45,6 +45,10 @@ def test_attempt_publish_skips_when_task_already_done(srv, monkeypatch):
     status, payload = srv._attempt_publish(tid, {"summary": "x"})
     assert status == "already_published"
     assert calls == []                                 # NO duplicate external write
+    # The skip must be visible in the task's activity log so a duplicate-publish
+    # attempt is not silent (audit trail).
+    body = task_lib.read_task(tid)["body"]
+    assert "already published" in body.lower()
 
 
 def test_emit_confirm_card_lands_on_collab_with_links(srv):

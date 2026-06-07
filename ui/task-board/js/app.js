@@ -7,7 +7,7 @@ function switchTab(tabName) {
   document.querySelector(`.topbar-tab[data-tab="${tabName}"]`).classList.add('active');
   if (tabName === 'activity') renderActivity();
   if (tabName === 'quality') renderQuality();
-  if (tabName === 'engine') fetchPrompts();
+  if (tabName === 'engine') fetchWorkers();
   if (tabName === 'schedules') fetchCronJobs();
 }
 
@@ -23,7 +23,7 @@ function switchEngine(which) {
   if (paneEl) paneEl.classList.add('active');
   if (tabEl) tabEl.classList.add('active');
   if (which === 'profile') renderProfile();
-  if (which === 'prompts') fetchPrompts();
+  if (which === 'prompts') fetchWorkers();
 }
 
 // Close modal on overlay click

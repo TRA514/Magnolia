@@ -30,125 +30,21 @@
 
 This is data, not code — no test of its own; Tasks 2–4 validate the code that reads it.
 
-> **⚠️ REVIEW CHECKPOINT:** This skill→pack assignment is a *proposal*. Before committing,
-> present it to the operator (same review style as the worker-tier map) and apply edits. The
-> assignment below is the starting point.
+> **✅ REVIEW CHECKPOINT DONE (2026-06-07):** Operator reviewed and revised the assignment. The
+> file `.claude/packs.yaml` has been written and committed by the controller (it's a hand-reviewed
+> static data file with no test). Implementer subagents pick up from Task 2. The committed
+> assignment, for reference:
+> - `publish-package` → **pm** (PRD process), not core. `doc-sync` stays **core** (OneDrive sync).
+> - **eng** is an empty placeholder; its former skills (jira-home, velocity-estimate,
+>   red-team-reviewer, agentic-api-designer) live in **pm** (they're product needs).
+> - New **ops** pack, empty placeholder. **recruiting** stays empty placeholder.
+> - **exec** carries strategy + business case PLUS the full metrics suite, tradeoff-decision, and the
+>   research/context-gathering set (research-gathering, pendo, databricks, priority-scoring,
+>   research-processing) + citation/source-integrity — depth for informed exec decisions.
+> - `quality-content-style`, `workflow-landing-page-creator` remain **unlisted** (always-available).
 
-**Step 1: Write the file**
-
-```yaml
-# packs.yaml — skill pack definitions (engine-shared, git-tracked).
-#
-# A "pack" is a named set of skill folders under .claude/skills/.
-# Activating a pack controls which skills the Magnolia BACKGROUND WORKERS see
-# (the headless dispatch catalog) and what the Engine/Profile UI lists. It does
-# NOT affect your interactive Claude Code session (native auto-discovery there is
-# unchanged).
-#
-# To add a skill to a pack:
-#   1. Drop the folder in .claude/skills/  (auto-discovered — no other wiring).
-#   2. Add its folder name to a pack's `skills:` list below.
-# A skill listed in NO pack stays always-available (gating never hides it).
-#
-# WHICH packs are active is per-person, in profile/config.yaml `active_skill_packs`.
-# `core` is always active regardless of that list.
-
-core:
-  label: "Core"
-  description: "Baseline PM-OS: tasks, search, meetings, onboarding, doctor, doc sync."
-  skills:
-    - task-create
-    - task-query
-    - task-update
-    - task-complete
-    - task-communicate
-    - task-extract-from-meeting
-    - context-search
-    - context-meeting-synthesis
-    - context-source-normalization
-    - meta-onboard
-    - meta-using-skills
-    - meta-skill-discovery
-    - meta-create-skill
-    - meta-refine-workflow
-    - workflow-doctor
-    - workflow-schedule-meeting
-    - workflow-doc-sync
-    - workflow-publish-package
-    - quality-meeting-schema-validation
-    - quality-documentation-sync
-
-pm:
-  label: "Product Management"
-  description: "PRDs, roadmaps, strategy, metrics, prioritization, and research."
-  skills:
-    - workflow-prd-creation
-    - workflow-product-planning
-    - workflow-roadmap-updating
-    - workflow-product-strategy-creation
-    - workflow-ambition-expander
-    - workflow-devils-advocate
-    - workflow-red-team-reviewer
-    - workflow-agentic-api-designer
-    - workflow-vision-clarifier
-    - workflow-launch-announcement
-    - workflow-tradeoff-decision
-    - workflow-cs-prep
-    - workflow-velocity-estimate
-    - workflow-metrics-definition
-    - workflow-metric-diagnosis
-    - workflow-dashboard-design
-    - workflow-goal-setting
-    - workflow-research-processing
-    - metric-funnel-metric-mapping
-    - metric-north-star-alignment
-    - metric-proxy-metric-selection
-    - metric-root-cause-diagnosis
-    - metric-tradeoff-evaluation
-    - context-priority-scoring
-    - context-research-gathering
-    - context-pendo-analytics
-    - context-databricks-analytics
-    - quality-prd-validation
-    - quality-product-strategy-validation
-    - quality-citation-compliance
-    - quality-source-integrity
-    - quality-link-verification
-
-exec:
-  label: "Executive"
-  description: "Strategy memos, sessions, goal-setting, and business-case modeling."
-  skills:
-    - workflow-strategy-memo
-    - workflow-strategy-session
-    - workflow-goal-setting
-    - workflow-swag-modeler
-    - workflow-product-strategy-creation
-
-eng:
-  label: "Engineering"
-  description: "Ticket drafting, velocity estimation, and tech-spec stress review."
-  skills:
-    - workflow-jira-home
-    - workflow-velocity-estimate
-    - workflow-red-team-reviewer
-    - workflow-agentic-api-designer
-
-recruiting:
-  label: "Recruiting"
-  description: "Candidate synthesis and hiring-loop support (no skills yet — factory-extensible)."
-  skills: []
-```
-
-> Note: `quality-content-style` and `workflow-landing-page-creator` are intentionally **unlisted**
-> (marketing/content) → they stay always-available under the unlisted rule. Confirm at the checkpoint.
-
-**Step 2: Commit** (after the review checkpoint)
-
-```bash
-git add .claude/packs.yaml
-git commit -m "feat(phase-7): add packs.yaml skill-pack manifest (core/pm/exec/eng/recruiting)"
-```
+The committed file is the source of truth — see `.claude/packs.yaml`. Task 2 onward must treat its
+pack ids (`core/pm/exec/eng/recruiting/ops`) and folder lists as given.
 
 ---
 

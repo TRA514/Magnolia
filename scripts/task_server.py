@@ -121,7 +121,9 @@ def _sse_begin(handler):
     handler.send_header("Cache-Control", "no-cache")
     handler.send_header("Connection", "keep-alive")
     handler.send_header("X-Accel-Buffering", "no")
-    handler.send_header("Access-Control-Allow-Origin", "*")
+    # NOTE: do NOT send Access-Control-Allow-Origin here — the handler's
+    # overridden end_headers() injects it into every response. Sending it
+    # explicitly would duplicate the header on SSE responses.
     handler.end_headers()
 
 
@@ -1060,6 +1062,12 @@ def handle_chat(handler, task_id):
     The run-lock is ALWAYS released in a finally, including on client
     disconnect (a write raising BrokenPipeError/ConnectionResetError) — which
     also closes the run_turn generator, killing the claude process group.
+
+    Frontend contract: once _sse_begin has sent 200 OK, the stream ALWAYS
+    terminates with a normal `event: done` (via _sse_end), a `kind:error`
+    frame, or a clean stop on client disconnect. A stream that ends without
+    `event: done` (or with a `kind:error` frame) should be treated by the
+    frontend as a failed turn that can be retried.
     """
     body = _read_request_body(handler)
     message = (body.get("message") or "").strip()
@@ -1077,6 +1085,10 @@ def handle_chat(handler, task_id):
     except Exception as e:
         _error_response(handler, f"Failed to read task: {e}", status=500)
         return
+    # NOTE: this mutual-exclusion between a background run and a chat run is
+    # best-effort — there's a TOCTOU window between this read and the separate
+    # dispatcher process flipping agent_status. Acceptable for the single-
+    # operator local board.
     if task.get("frontmatter", {}).get("agent_status") == "running":
         _error_response(handler, "Agent is currently working", status=409)
         return
@@ -1095,8 +1107,32 @@ def handle_chat(handler, task_id):
         except (BrokenPipeError, ConnectionResetError):
             # Client disconnected mid-stream. Stop iterating — the for-loop's
             # exit closes the run_turn generator (its finally kills the claude
-            # process group). Do not crash the server thread.
+            # process group). The socket is gone, so do NOT try to write more;
+            # the finally releases the lock.
             pass
+        except Exception as exc:
+            # Any OTHER failure after 200 OK was committed (a task_lib /
+            # chat_transcript write failure, an OSError, a normalize bug, …).
+            # Headers are already sent, so we cannot send a 500 — instead emit
+            # a terminal error frame so the client always gets a signal rather
+            # than an unsignaled half-stream. Log the original exception so the
+            # failure is diagnosable rather than swallowed.
+            sys.stderr.write(
+                "[chat] run_turn failed for %s after stream began: %r\n"
+                % (task_id, exc)
+            )
+            try:
+                _sse_send(handler, {
+                    "kind": "error",
+                    "role": "error",
+                    "text": "The chat run failed unexpectedly. You can retry.",
+                })
+                _sse_end(handler)
+            except (BrokenPipeError, ConnectionResetError, Exception):
+                # The client also went away (or the socket broke) while we were
+                # reporting the error. Nothing more we can do — never let a
+                # write failure during error reporting escape handle_chat.
+                pass
     finally:
         _release_chat_run(task_id)
 

@@ -31,6 +31,9 @@ class FakeHandler:
         self.wfile = io.BytesIO()
         self.status = None
         self.sent_headers = {}
+        # Ordered list of (key, value) so we can assert on duplicates — the
+        # dict above collapses repeats and would hide a double-sent header.
+        self.header_list = []
         self.ended = False
 
     def send_response(self, status):
@@ -38,8 +41,12 @@ class FakeHandler:
 
     def send_header(self, key, value):
         self.sent_headers[key] = value
+        self.header_list.append((key, value))
 
     def end_headers(self):
+        # Mirror the real handler's overridden end_headers(), which injects the
+        # CORS header into EVERY response before the base class finalizes them.
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.ended = True
 
     def written(self):
@@ -205,4 +212,56 @@ def test_handle_chat_releases_lock_on_disconnect(monkeypatch):
     task_server.handle_chat(handler, "TASK-1")
 
     # Lock released despite the disconnect.
+    assert "TASK-1" not in task_server._CHAT_RUNS
+
+
+def test_handle_chat_emits_single_cors_header(monkeypatch):
+    """The SSE response must carry EXACTLY ONE Access-Control-Allow-Origin
+    header — _sse_begin must NOT send it (end_headers injects it)."""
+
+    def fake_run_turn(task_id, message):
+        yield {"kind": "text", "text": "hi"}
+
+    monkeypatch.setattr(chat_runner, "run_turn", fake_run_turn)
+    monkeypatch.setattr(
+        task_lib, "read_task",
+        lambda tid: {"frontmatter": {"agent_status": "complete"}, "body": ""},
+    )
+
+    handler = FakeHandler(body={"message": "hello"})
+    task_server.handle_chat(handler, "TASK-1")
+
+    cors = [
+        (k, v) for (k, v) in handler.header_list
+        if k == "Access-Control-Allow-Origin"
+    ]
+    assert len(cors) == 1, f"expected exactly one CORS header, got {cors}"
+    assert cors[0] == ("Access-Control-Allow-Origin", "*")
+
+
+def test_handle_chat_emits_error_frame_on_mid_stream_failure(monkeypatch):
+    """A non-disconnect exception after the stream began must NOT escape, must
+    emit a terminal error frame, and must release the lock."""
+
+    def fake_run_turn(task_id, message):
+        yield {"kind": "text", "text": "partial"}
+        raise RuntimeError("boom mid-stream")
+
+    monkeypatch.setattr(chat_runner, "run_turn", fake_run_turn)
+    monkeypatch.setattr(
+        task_lib, "read_task",
+        lambda tid: {"frontmatter": {"agent_status": "complete"}, "body": ""},
+    )
+
+    handler = FakeHandler(body={"message": "hello"})
+
+    # (a) Must not raise.
+    task_server.handle_chat(handler, "TASK-1")
+
+    out = handler.written()
+    # The first (normal) event still made it out.
+    assert "partial" in out
+    # (b) A terminal error frame was written.
+    assert '"kind": "error"' in out or '"kind":"error"' in out
+    # (c) Lock released afterward.
     assert "TASK-1" not in task_server._CHAT_RUNS

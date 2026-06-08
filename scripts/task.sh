@@ -20,4 +20,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PM_OS_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$PM_OS_DIR"
-exec /opt/homebrew/bin/python3 "$SCRIPT_DIR/task_cli.py" "$@"
+PYTHON="$(command -v python3 || command -v python)"
+if [ -z "$PYTHON" ]; then
+  echo "task.sh: no python3/python found on PATH" >&2
+  exit 127
+fi
+exec "$PYTHON" "$SCRIPT_DIR/task_cli.py" "$@"

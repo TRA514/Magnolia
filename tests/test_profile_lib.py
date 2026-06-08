@@ -240,7 +240,12 @@ def test_resolve_model_override_by_tier_name_wins():
 
 
 def test_resolve_model_defaults_tier_standard_and_posture_balanced():
-    assert profile_lib.resolve_model(None) == "claude-sonnet-4-6"
+    # Pin posture explicitly — resolve_model(None) with posture=None reads the
+    # LIVE profile/config.yaml cost_posture (gitignored, per-machine), so an
+    # implicit call is env-coupled and fails wherever the operator set a non-
+    # balanced posture. We assert the default-tier mapping, not the machine's
+    # posture.
+    assert profile_lib.resolve_model(None, posture="balanced") == "claude-sonnet-4-6"
     assert profile_lib.resolve_model("bogus", posture="bogus") == "claude-sonnet-4-6"
 
 

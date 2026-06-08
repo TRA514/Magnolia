@@ -54,8 +54,27 @@ def test_transcript_loader_dispatches_otter(profile_root, monkeypatch):
     assert mod is otter
 
 
-def test_granola_sync_reports_unsupported(tmp_path):
+def test_granola_sync_delegates_to_runner(tmp_path, monkeypatch):
+    # Real adapter delegates to transcript_sync._run_granola; the runner is
+    # provider-gated so a bare tmp_path no-ops without firing a real fetch.
     from adapters.transcript import granola
+    import transcript_sync
+    called = {}
+    monkeypatch.setattr(transcript_sync, "_run_granola",
+                        lambda root: called.setdefault("ran", True))
     result = granola.sync(root=str(tmp_path))
-    assert result["status"] == "unsupported"
+    assert called.get("ran") is True
+    assert result["status"] == "ok"
     assert result["provider"] == "granola"
+
+
+def test_granola_sync_wraps_runner_failure(tmp_path, monkeypatch):
+    from adapters.transcript import granola
+    import transcript_sync
+    def boom(root=None):
+        raise RuntimeError("mcp unauthorized")
+    monkeypatch.setattr(transcript_sync, "_run_granola", boom)
+    result = granola.sync(root=str(tmp_path))
+    assert result["status"] == "error"
+    assert result["provider"] == "granola"
+    assert "mcp unauthorized" in result["error"]

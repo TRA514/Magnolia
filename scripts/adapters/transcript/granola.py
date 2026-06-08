@@ -1,11 +1,15 @@
-"""Granola transcript adapter — documented drop-in stub.
+"""Granola transcript adapter.
 
-The seam is wired (select provider "granola" in integrations.yaml). To make it
-real, implement sync() to pull Granola transcripts into the profile's transcript
-target dir, mirroring otter.py's contract (return {"status": "ok", ...}).
-"""
+Delegates to transcript_sync._run_granola so the headless structured-error
+contract and its test monkeypatch hold (mirrors otter.py)."""
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
 def sync(root=None) -> dict:
-    return {"status": "unsupported", "provider": "granola",
-            "note": "Granola adapter is a wired stub — implement sync()"}
+    import transcript_sync
+    try:
+        transcript_sync._run_granola(root)
+    except Exception as e:
+        return {"status": "error", "provider": "granola", "error": str(e)}
+    return {"status": "ok", "provider": "granola"}

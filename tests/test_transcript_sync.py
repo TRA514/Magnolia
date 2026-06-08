@@ -9,11 +9,23 @@ def test_dispatch_none_is_noop(tmp_path):
     assert result["provider"] == "none"
 
 
-def test_dispatch_granola_not_yet(tmp_path):
+def test_dispatch_granola_calls_runner(tmp_path, monkeypatch):
     (tmp_path / "profile").mkdir()
     (tmp_path / "profile" / "integrations.yaml").write_text("transcript:\n  provider: granola\n")
+    called = {}
+    monkeypatch.setattr(transcript_sync, "_run_granola", lambda root: called.setdefault("ran", True))
+    transcript_sync.sync(root=str(tmp_path))
+    assert called.get("ran") is True
+
+
+def test_dispatch_granola_runner_failure_returns_error(tmp_path, monkeypatch):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "integrations.yaml").write_text("transcript:\n  provider: granola\n")
+    def boom(root=None):
+        raise RuntimeError("mcp unauthorized")
+    monkeypatch.setattr(transcript_sync, "_run_granola", boom)
     result = transcript_sync.sync(root=str(tmp_path))
-    assert result["status"] == "unsupported"  # Phase 3
+    assert result["status"] == "error" and result["provider"] == "granola"
 
 
 def test_dispatch_otter_calls_runner(tmp_path, monkeypatch):

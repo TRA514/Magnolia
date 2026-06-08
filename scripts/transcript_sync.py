@@ -26,6 +26,12 @@ def _run_otter(root=None):
     return otter_sync.main()  # ported entrypoint
 
 
+def _run_granola(root=None):
+    """Run the Granola sync. Lazy import keeps claude -p / MCP deps out of module load."""
+    import granola_sync
+    return granola_sync.main(root)
+
+
 def sync(root=None):
     # ``root`` selects the profile used to resolve the provider. Note that for
     # the Otter provider the ported runner operates on the LIVE profile and does

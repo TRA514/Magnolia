@@ -10,4 +10,4 @@ The preamble for building a new Magnolia engine feature or epic. Type `/magnolia
 - freeform text — describe the feature inline
 
 ## What it does
-Grounds in the reference layer → asks merge authority once → takes your ask → routes (a known engine extension goes to the matching `meta-create-*` factory skill; anything larger runs the full loop) → brainstorm → plan → subagent-driven build with two-stage review → e2e verify → ship per your merge choice. Assumes epic-level complexity by default.
+Preflights the environment (superpowers plugin installed, profile populated, git author set to *your* identity, dev board runnable — installs/onboards/routes to the doctor if not) → grounds in the reference layer → asks merge authority once → takes your ask → routes (a known engine extension goes to the matching `meta-create-*` factory skill; anything larger runs the full loop) → brainstorm → plan → subagent-driven build with two-stage review → e2e verify → ship per your merge choice. Assumes epic-level complexity by default.

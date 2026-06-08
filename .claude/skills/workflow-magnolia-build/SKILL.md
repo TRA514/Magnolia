@@ -16,11 +16,21 @@ than restating them.
 
 **When NOT to use:** trivial one-line fixes (just do them); PM-artifact work like PRDs/strategy (use the `workflow-*` PM skills); creating a *single* skill/worker/card-type/adapter where the operator already knows the shape (go straight to the matching `meta-create-*` skill).
 
+## Step 0 — Preflight: is this environment ready? (don't assume; check)
+This loop depends on tools and state that are **not guaranteed on a fresh clone**. Verify each before relying on it; remediate or route, don't barrel ahead.
+
+- **Superpowers plugin** — Step 5 *is* the superpowers skills. Confirm `superpowers:brainstorming`, `superpowers:writing-plans`, `superpowers:subagent-driven-development`, and `superpowers:finishing-a-development-branch` appear in the session's available-skills list. If they're absent, the plugin isn't enabled for this user (it lives in per-user Claude Code config, not the repo). Install it before proceeding: `/plugin` → add the `superpowers-marketplace` marketplace → enable `superpowers@superpowers-marketplace`, then confirm the `superpowers:*` skills now appear. **Never silently fall back to ad-hoc building if they're missing** — the loop's discipline comes from these skills.
+- **Profile populated** — the engine reads person/team identity from `profile/` (invariant #1). If `profile/` is missing or unpopulated, this is a first-time user: route to **`meta-onboard`** first. Don't proceed with de-personalization rules against an empty profile.
+- **Git author is *theirs*** — set the local git author to the *current* user's own identity, not whoever set up the repo (see Step 2). Confirm `gh auth status` is authenticated before any PR step.
+- **Dev board runs** — e2e verification (Step 5.4) assumes the board starts on `localhost:8743`. On a fresh clone, dependencies may not be installed; if the board won't start, install/setup per `ui/task-board/CLAUDE.md` before claiming e2e verification.
+
+If anything here is degraded or unclear, the **`workflow-doctor`** skill detects and remediates capabilities conversationally — reach for it rather than guessing.
+
 ## Step 1 — Ground in the reference layer (read first)
 Read, in order: `docs/reference/invariants.md` (the laws — load before acting), `docs/reference/conventions.md` (the working rhythm), and the relevant section(s) of `docs/reference/architecture.md` for whatever subsystem the build touches. This is where the dev/prod split, the green gates, branch + author discipline, and capture-to-profile live — honor them by reference; do not re-derive them.
 
 ## Step 2 — Kickoff (set context once, ask the one thing)
-State briefly that you've loaded the invariants + conventions and will work the standard loop. Then ask **merge authority for this build**: *"Merge to main when it's green, or open a PR for you to merge?"* Remember the answer for this build. Default branch off `main`, set the git author locally, and end commits with the standard `Co-Authored-By` trailer (per conventions).
+State briefly that you've loaded the invariants + conventions and will work the standard loop. Then ask **merge authority for this build**: *"Merge to main when it's green, or open a PR for you to merge?"* Remember the answer for this build. Default branch off `main`, set the git author locally to **the current user's own identity** (their name + their GitHub no-reply email — never inherit whoever last configured the repo), and end commits with the standard `Co-Authored-By` trailer (per conventions). If the local author isn't set, ask for it rather than assuming.
 
 ## Step 3 — Take the ask
 Accept a PRD/spec path, pasted details, or a freeform conversation. If the ask is thin or ambiguous, ask a few targeted clarifying questions before designing — do not guess at scope.
@@ -45,6 +55,7 @@ Follow the superpowers workflow, in order:
 - **Git stays invisible to the operator** where the factory handles it: speak Keep/Undo, not commits/reverts.
 
 ## Success criteria
+- Preflight passed: the superpowers skills were present (installed if not), the profile was populated (onboarded if not), and the git author was the current user's own.
 - The operator typed `/magnolia-build` (or equivalent) and never had to restate the operating context.
 - The reference layer was read before any code was written.
 - The build went through brainstorm → plan → subagent-driven build → e2e verify → ship, with gates green and the engine denylist-clean.
@@ -52,3 +63,4 @@ Follow the superpowers workflow, in order:
 ## Related skills
 - **superpowers:brainstorming**, **superpowers:writing-plans**, **superpowers:subagent-driven-development**, **superpowers:finishing-a-development-branch** — the loop.
 - **meta-factory-core** and the **meta-create-\*** family — the routing target for known engine extensions.
+- **meta-onboard** — first-time setup when `profile/` is unpopulated; **workflow-doctor** — detect/remediate a missing or degraded capability (e.g. the superpowers plugin, `gh` auth, the dev board).

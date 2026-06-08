@@ -236,7 +236,7 @@ async function sendChat() {
   thread.appendChild(a); scrollThread();
   const stepsBox = a.querySelector('.turn-steps');
   const textBox = a.querySelector('.turn-text');
-  let typingCleared = false, liveGroup = null, toolCount = 0, sawText = false;
+  let typingCleared = false, liveGroup = null, toolCount = 0, sawText = false, streamDone = false;
   const clearTyping = () => { if (!typingCleared) { textBox.innerHTML = ''; typingCleared = true; } };
 
   try {
@@ -259,6 +259,11 @@ async function sendChat() {
         const frame = buf.slice(0, idx); buf = buf.slice(idx + 2);
         handleFrame(frame);
       }
+      // The `event: done` sentinel is the authoritative end-of-turn signal —
+      // break on it rather than waiting for the TCP stream to close (a
+      // keep-alive connection may never deliver reader `done`, which would
+      // leave the composer disabled forever).
+      if (streamDone) break;
     }
   } catch (e) { /* message already shown on the turn */ }
 
@@ -269,7 +274,7 @@ async function sendChat() {
       if (line.startsWith('event:') && line.slice(6).trim() === 'done') isDone = true;
       else if (line.startsWith('data:')) dataLine = line.slice(5).trim();
     }
-    if (isDone) return;            // terminal sentinel; the read loop will end
+    if (isDone) { streamDone = true; return; }   // terminal sentinel — stop the read loop
     if (!dataLine) return;
     let ev; try { ev = JSON.parse(dataLine); } catch (_) { return; }
     renderEvent(ev);

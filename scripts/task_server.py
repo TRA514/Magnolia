@@ -120,7 +120,14 @@ def _sse_begin(handler):
     handler.send_response(200)
     handler.send_header("Content-Type", "text/event-stream")
     handler.send_header("Cache-Control", "no-cache")
-    handler.send_header("Connection", "keep-alive")
+    # The server is HTTP/1.1 (keep-alive by default) and an SSE body has no
+    # Content-Length, so a browser fetch() reader would never see end-of-stream
+    # on a kept-alive connection — the read loop hangs and the composer never
+    # re-enables. Force the connection to close after this response so the
+    # client's stream terminates cleanly. (The client also breaks on our
+    # explicit `event: done` sentinel, belt-and-suspenders.)
+    handler.send_header("Connection", "close")
+    handler.close_connection = True
     handler.send_header("X-Accel-Buffering", "no")
     # NOTE: do NOT send Access-Control-Allow-Origin here — the handler's
     # overridden end_headers() injects it into every response. Sending it

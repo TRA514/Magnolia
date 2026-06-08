@@ -51,8 +51,11 @@ is visible on the board once it spawns), mark it in-progress as you begin, done 
    permission to disable the old one so only Magnolia's feed runs; only call `feed_guard.disable`
    after they say yes. If you can't safely identify it, warn loudly and name exactly what to turn off.
 3. **Integrations** — ask: Otter or Granola? Jira / Asana / Linear / none? Teams & Outlook (M365)?
-   Default M365 Teams+Outlook ON. Write `profile/integrations.yaml`. (Both Otter and Granola are
-   offered; Otter is wired today.)
+   Default M365 Teams+Outlook ON. Write `profile/integrations.yaml`. Both Otter and Granola are
+   fully wired — pick one transcript feed (single active provider). Otter authes via
+   `python3 scripts/otter_auth.py`; Granola runs through its claude.ai MCP connector (connect via
+   `/mcp`, then finish the one-time signup at granola.ai/mcp-signup) and syncs hourly through
+   `scripts/granola_sync.py`.
    - **If they enable M365** — set `calendar.provider` AND `messaging.provider` to `m365` in
      `profile/integrations.yaml` (messaging powers the Outlook + Teams *send* buttons; calendar powers
      invites). M365 runs through the `mgc` Microsoft Graph CLI, so authorize it ONCE with the full

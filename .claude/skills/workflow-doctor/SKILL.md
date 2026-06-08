@@ -19,9 +19,15 @@ does only the irreducible minimum — clicking "Authorize."
      `remedy`). For `msgraph_cli`, the macOS install route may need looking up — confirm the
      current `mgc` install method before running it. `required: false` capabilities are
      RECOMMENDED — offer, don't insist.
-   - **feed/transcript** `needs_reauth`: the Otter session expired. Walk the user through
-     `python3 scripts/otter_auth.py` (a browser opens for Microsoft sign-in). This is
-     inherently manual — explain warmly, wait for them.
+   - **feed/transcript** `needs_reauth`: depends on the active provider (`probe_transcript`
+     keys off `transcript.provider`).
+     - **Otter**: the saved session expired. Walk the user through `python3 scripts/otter_auth.py`
+       (a browser opens for Microsoft sign-in). Inherently manual — explain warmly, wait for them.
+     - **Granola**: the MCP isn't connected yet. The probe stays `needs_reauth` until a successful
+       sync writes its marker (`granola_downloaded.json`). Walk the user through: connect Granola via
+       `/mcp`, then finish the one-time signup at granola.ai/mcp-signup (the MCP is a claude.ai
+       connector you can't refresh from the shell). Note transcripts need a paid Granola plan. Then
+       run `python3 scripts/granola_sync.py` once to seed the marker and confirm it flips to `ok`.
    - **remote** (jira/m365/pendo/…): you cannot refresh these from the shell — they are
      claude.ai connectors. Tell the user plainly: open claude.ai → Connectors → authorize X.
      Then verify by making one cheap read-only call to that MCP. If it works, set that

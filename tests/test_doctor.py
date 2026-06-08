@@ -66,6 +66,25 @@ def test_probe_transcript_needs_reauth_when_no_session(tmp_path):
     assert cap["status"] == "needs_reauth"  # no session.json present
 
 
+def test_probe_transcript_granola_no_marker_needs_reauth(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "integrations.yaml").write_text("transcript:\n  provider: granola\n")
+    cap = doctor.probe_transcript(root=str(tmp_path))
+    assert cap["provider"] == "granola"
+    assert cap["status"] == "needs_reauth"
+    assert "mcp-signup" in cap.get("detail", "")
+
+
+def test_probe_transcript_granola_with_marker_ok(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "integrations.yaml").write_text("transcript:\n  provider: granola\n")
+    st = tmp_path / "profile" / "transcript"
+    st.mkdir(parents=True)
+    (st / "granola_downloaded.json").write_text("{}")
+    cap = doctor.probe_transcript(root=str(tmp_path))
+    assert cap["status"] == "ok"
+
+
 def test_detect_assembles_capabilities(tmp_path, monkeypatch):
     (tmp_path / "profile").mkdir()
     (tmp_path / "profile" / "integrations.yaml").write_text(

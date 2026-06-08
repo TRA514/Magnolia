@@ -88,8 +88,20 @@ def probe_transcript(root=None):
     if provider == "none":
         cap["status"] = "not_expected"
         return cap
-    # otter: a saved Playwright session.json under the transcript state dir means authed
-    session = os.path.join(profile_lib.transcript_state_dir(root), "session.json")
+    state_dir = profile_lib.transcript_state_dir(root)
+    if provider == "granola":
+        # The Granola MCP is a claude.ai connector — detect() can't probe it
+        # directly. A successful-sync marker (granola_downloaded.json) is our
+        # proof of a working feed; absent it, nudge the user to connect.
+        marker = os.path.join(state_dir, "granola_downloaded.json")
+        if os.path.isfile(marker):
+            cap["status"] = "ok"
+        else:
+            cap["status"] = "needs_reauth"
+            cap["detail"] = "Connect Granola via /mcp, then finish granola.ai/mcp-signup"
+        return cap
+    # otter: a saved Playwright session.json means authed
+    session = os.path.join(state_dir, "session.json")
     cap["status"] = "ok" if os.path.isfile(session) else "needs_reauth"
     return cap
 

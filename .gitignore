@@ -93,3 +93,5 @@ docs/*
 !docs/plans/
 !docs/reference/
 !docs/INSTALL.md
+!docs/INSTALL-macos.md
+!docs/INSTALL-windows.md

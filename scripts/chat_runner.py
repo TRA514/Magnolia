@@ -87,3 +87,72 @@ def build_context_prompt(task, user_message):
         f"## {name}'s message\n"
         f"{user_message}"
     )
+
+
+# Order in which we probe a tool_use's input dict for a human-readable target.
+_TARGET_KEYS = ("file_path", "path", "pattern", "command", "query", "url", "description")
+
+
+def normalize(raw_event):
+    """Map one raw `claude --output-format stream-json` event to a list of
+    normalized UI events.
+
+    The four UI kinds are: ``think``, ``tool_step``, ``text``, ``result``.
+    An ``assistant`` event with multiple content blocks yields multiple rows,
+    in order. Uninteresting or unknown events (``system``, ``user``/tool_result,
+    ``rate_limit_event``, anything else) yield ``[]``. Pure: no I/O, never
+    raises on missing/malformed ``message``/``content``.
+    """
+    if not isinstance(raw_event, dict):
+        return []
+
+    etype = raw_event.get("type")
+
+    if etype == "assistant":
+        out = []
+        message = raw_event.get("message") or {}
+        content = message.get("content") or []
+        if not isinstance(content, list):
+            return []
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            btype = block.get("type")
+            if btype == "text":
+                out.append({
+                    "kind": "text",
+                    "role": "assistant",
+                    "text": block.get("text", ""),
+                })
+            elif btype == "thinking":
+                out.append({
+                    "kind": "think",
+                    "role": "assistant",
+                    "text": block.get("thinking", ""),
+                })
+            elif btype == "tool_use":
+                tool_input = block.get("input") or {}
+                target = ""
+                for key in _TARGET_KEYS:
+                    value = tool_input.get(key)
+                    if value:
+                        target = str(value)
+                        break
+                out.append({
+                    "kind": "tool_step",
+                    "role": "assistant",
+                    "verb": block.get("name", ""),
+                    "target": target,
+                })
+        return out
+
+    if etype == "result":
+        return [{
+            "kind": "result",
+            "usage": raw_event.get("usage", {}),
+            "cost": raw_event.get("total_cost_usd"),
+            "session_id": raw_event.get("session_id"),
+        }]
+
+    # system, user/tool_result, rate_limit_event, and anything else: noise.
+    return []

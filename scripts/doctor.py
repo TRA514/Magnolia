@@ -48,22 +48,35 @@ def probe_python_deps(modules):
 
 
 # Local CLI tools the Doctor knows how to detect (and a remedy hint for each).
+# `recommended: True` means STRONGLY recommended, not throwaway-optional: it still
+# won't BLOCK onboarding (required stays False), but its absence degrades real
+# capability, so the Doctor pushes it with a plain-language `rationale`.
 _LOCAL_TOOLS = {
-    "qmd":        {"required": False,
-                   "detail": "powers semantic search; optional (keyword search works without it)",
-                   "remedy": "brew install qmd"},
-    "pandoc":     {"remedy": "brew install pandoc"},
+    "qmd":        {"required": False, "recommended": True,
+                   "detail": "semantic search across all your meetings, notes, and docs",
+                   "rationale": "the killer feature — without it, search falls back to "
+                                "keyword-only and quality drops",
+                   # The ONE correct qmd is tobi/qmd (npm), NOT a brew formula or a
+                   # look-alike repo — installing the wrong 'qmd' breaks the MCP.
+                   "remedy": "npm install -g @tobilu/qmd  (needs Node >= 22; the correct "
+                             "qmd is https://github.com/tobi/qmd — do NOT install a "
+                             "different 'qmd'); it then runs as the qmd MCP via `qmd mcp`"},
+    "pandoc":     {"required": False, "recommended": True,
+                   "detail": "converts markdown <-> Word for doc sync / publish-package",
+                   "rationale": "without it, creating/syncing Word docs (publish-package) won't work",
+                   "remedy": "brew install pandoc (macOS) / "
+                             "winget install --id JohnMacFarlane.Pandoc -e (Windows)"},
     "claude_cli": {"bin": "claude", "remedy": "see claude.ai/code install"},
     # No Homebrew formula/tap exists for the Microsoft Graph CLI — the official
-    # macOS route is the release binary from GitHub put on PATH (per
+    # route is the release binary from GitHub put on PATH (per
     # github.com/microsoftgraph/msgraph-cli and aka.ms/get/graphcli).
-    # msgraph_cli (mgc): no Homebrew formula exists; binary download from aka.ms.
-    # Remedy URL/asset name should be confirmed on a live Doctor run.
-    "msgraph_cli":{"bin": "mgc", "required": False,
+    "msgraph_cli":{"bin": "mgc", "required": False, "recommended": True,
                    "detail": "powers calendar invites + Outlook/Teams sends",
+                   "rationale": "without it, messaging (Outlook + Teams send) and calendar "
+                                "invites stay disabled",
                    "remedy": "download mgc from https://aka.ms/get/graphcli/latest/"
-                             "osx-arm64.zip (osx-x64.zip on Intel Macs), extract it, "
-                             "and add the folder to your PATH; then authorize once: "
+                             "osx-arm64.zip (osx-x64.zip Intel Mac, win-x64.zip Windows), "
+                             "extract it, add the folder to your PATH; then authorize once: "
                              f'mgc login --scopes "{MGC_SCOPES}"'},
 }
 _PYTHON_DEPS = ["ruamel.yaml"]
@@ -126,10 +139,9 @@ def detect(root=None):
     for name, spec in _LOCAL_TOOLS.items():
         binname = spec.get("bin", name)
         c = probe_which(binname, remedy=spec.get("remedy"))
-        if "required" in spec:
-            c["required"] = spec["required"]
-        if "detail" in spec:
-            c["detail"] = spec["detail"]
+        for key in ("required", "recommended", "detail", "rationale"):
+            if key in spec:
+                c[key] = spec[key]
         caps[name] = c
     caps["python_deps"] = probe_python_deps(_PYTHON_DEPS)
     caps["server"] = probe_server(profile_lib.server_port(root))
@@ -155,10 +167,12 @@ def report_text(caps):
     for name, c in sorted(caps.get("capabilities", {}).items()):
         status = c.get("status", "?")
         line = f"  {name:14} {status}"
-        if c.get("remedy") and status != "ok":
-            line += f"   → {c['remedy']}"
-        if c.get("required") is False and status != "ok":
-            line += "   (recommended)"
+        if status not in ("ok", "running") and c.get("recommended"):
+            line += "   ★ STRONGLY RECOMMENDED"
+            if c.get("rationale"):
+                line += f" — {c['rationale']}"
+        if c.get("remedy") and status not in ("ok", "running"):
+            line += f"\n  {'':14} → {c['remedy']}"
         lines.append(line)
     return "\n".join(lines)
 

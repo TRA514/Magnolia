@@ -2,7 +2,7 @@
   "mcpServers": {
     "qmd": {
       "type": "stdio",
-      "command": "/opt/homebrew/bin/qmd",
+      "command": "qmd",
       "args": ["mcp"]
     }
   }

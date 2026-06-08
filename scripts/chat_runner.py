@@ -333,7 +333,9 @@ def run_turn(task_id, message):
     model = profile_lib.resolve_model(None, task_override=fm.get("model") or fm.get("tier"))
 
     if new_session:
-        minted_sid = uuid.uuid4().hex
+        # claude --session-id requires a canonical hyphenated UUID (verified in
+        # the CLI spike: a bare uuid4().hex is rejected with "Must be a valid UUID").
+        minted_sid = str(uuid.uuid4())
         sid = minted_sid
         sent_message = build_context_prompt(fm, message)
     else:

@@ -71,6 +71,13 @@ def test_new_session_tags_post_run_false_and_persists_session(
     # New session -> --session-id (not --resume) in the built argv.
     assert "--session-id" in seen["cmd"]
     assert "--resume" not in seen["cmd"]
+    # The minted session id MUST be a canonical hyphenated UUID — `claude
+    # --session-id` rejects a bare uuid4().hex ("Must be a valid UUID").
+    # (Regression guard for a bug only live e2e caught; mocked _spawn never
+    # validated the format.)
+    import re as _re
+    sid_arg = seen["cmd"][seen["cmd"].index("--session-id") + 1]
+    assert _re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", sid_arg), sid_arg
 
     # Session id + origin written to frontmatter so future turns resume.
     fm = task_lib.read_task(task_id)["frontmatter"]

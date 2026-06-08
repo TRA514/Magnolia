@@ -728,14 +728,20 @@ async function saveMessage() {
 }
 
 async function sendMessage(taskId) {
+  // No per-send dialog (Tier-2 is a one-time integration confirm): the click +
+  // the visible draft preview is the per-send check. The first-ever send returns
+  // needs_confirmation and the board refresh surfaces the one-time confirm card;
+  // a real send / manual-record fallback both just settle and close. Mirrors the
+  // publish-to-Jira flow, including surfacing the server's actionable error
+  // (e.g. the `mgc login` hint on an auth failure) rather than a generic code.
   const btn = document.getElementById('btn-send-message');
   if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
   try {
     const res = await fetch(`${API}/tasks/${taskId}/send-message`, { method: 'POST' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    toast('Message sent.', 'success');
-    closeModal();
+    const data = await res.json().catch(() => ({}));
+    if (data.error) throw new Error(data.error);
     fetchTasks();
+    closeModal();
   } catch (err) {
     toast(`Could not send: ${err.message}`);
     if (btn) { btn.disabled = false; btn.textContent = 'Send message'; }

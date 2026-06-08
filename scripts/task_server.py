@@ -19,6 +19,7 @@ import socket
 import shlex
 import subprocess
 import sys
+import threading
 import traceback
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -32,6 +33,7 @@ class ReusableHTTPServer(ThreadingHTTPServer):
 # Add script directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import task_lib
+import chat_runner
 import ladder_lib
 import cron_lib
 import jira_publish
@@ -41,6 +43,29 @@ import adapters
 from adapters.project_management._contract import NotConfigured
 from adapters import NeedsConfirmation
 from cron_scheduler import CronScheduler
+
+# ─── Chat run-lock ─────────────────────────────────────────────────────────────
+# A session must never have two concurrent chat runs. The server is a
+# ThreadingHTTPServer (one thread per request) within a single process, so an
+# in-memory set guarded by a lock is sufficient to serialize per task_id.
+_CHAT_RUNS = set()              # task_ids with an active chat run (this process)
+_CHAT_RUNS_GUARD = threading.Lock()
+
+
+def _try_acquire_chat_run(task_id):
+    """Atomically claim the chat run-lock for a task. True if acquired."""
+    with _CHAT_RUNS_GUARD:
+        if task_id in _CHAT_RUNS:
+            return False
+        _CHAT_RUNS.add(task_id)
+        return True
+
+
+def _release_chat_run(task_id):
+    """Release the chat run-lock for a task (idempotent)."""
+    with _CHAT_RUNS_GUARD:
+        _CHAT_RUNS.discard(task_id)
+
 
 # ─── Load LangFuse env vars if not already set ───────────────────────────────
 _PM_OS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -87,6 +112,30 @@ def _json_response(handler, data, status=200):
 def _error_response(handler, message, status=400):
     """Write a JSON error response."""
     _json_response(handler, {"error": message}, status=status)
+
+
+def _sse_begin(handler):
+    """Send the SSE response headers (200 + text/event-stream, unbuffered)."""
+    handler.send_response(200)
+    handler.send_header("Content-Type", "text/event-stream")
+    handler.send_header("Cache-Control", "no-cache")
+    handler.send_header("Connection", "keep-alive")
+    handler.send_header("X-Accel-Buffering", "no")
+    handler.send_header("Access-Control-Allow-Origin", "*")
+    handler.end_headers()
+
+
+def _sse_send(handler, obj):
+    """Write one SSE data frame and flush so the client sees it immediately."""
+    payload = json.dumps(obj, default=str)
+    handler.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
+    handler.wfile.flush()
+
+
+def _sse_end(handler):
+    """Write a terminal sentinel so the client knows the stream is complete."""
+    handler.wfile.write(b"event: done\ndata: {}\n\n")
+    handler.wfile.flush()
 
 
 def _read_request_body(handler):
@@ -998,6 +1047,58 @@ def handle_react(handler, task_id):
     except Exception:
         pass
     _json_response(handler, {"ok": True, "task_id": task_id, "react": react})
+
+
+def handle_chat(handler, task_id):
+    """POST /api/tasks/{id}/chat — run one chat turn, stream events over SSE.
+
+    Enforces two guards before streaming:
+      1. The background worker must not be mid-run on this session
+         (frontmatter agent_status == "running" → 409).
+      2. No other chat run may be active for this session (run-lock → 409).
+
+    The run-lock is ALWAYS released in a finally, including on client
+    disconnect (a write raising BrokenPipeError/ConnectionResetError) — which
+    also closes the run_turn generator, killing the claude process group.
+    """
+    body = _read_request_body(handler)
+    message = (body.get("message") or "").strip()
+    if not message:
+        _error_response(handler, "message is required")
+        return
+
+    # Background-busy check: if the dispatch worker is running on this session,
+    # a chat turn would collide with it.
+    try:
+        task = task_lib.read_task(task_id)
+    except FileNotFoundError:
+        _error_response(handler, "task not found", status=404)
+        return
+    except Exception as e:
+        _error_response(handler, f"Failed to read task: {e}", status=500)
+        return
+    if task.get("frontmatter", {}).get("agent_status") == "running":
+        _error_response(handler, "Agent is currently working", status=409)
+        return
+
+    # Chat-concurrency lock: one active chat run per session.
+    if not _try_acquire_chat_run(task_id):
+        _error_response(handler, "A chat run is already in progress", status=409)
+        return
+
+    try:
+        _sse_begin(handler)
+        try:
+            for event in chat_runner.run_turn(task_id, message):
+                _sse_send(handler, event)
+            _sse_end(handler)
+        except (BrokenPipeError, ConnectionResetError):
+            # Client disconnected mid-stream. Stop iterating — the for-loop's
+            # exit closes the run_turn generator (its finally kills the claude
+            # process group). Do not crash the server thread.
+            pass
+    finally:
+        _release_chat_run(task_id)
 
 
 def handle_rerun_task(handler, task_id):
@@ -1929,6 +2030,16 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
                 _error_response(self, "Invalid task ID format", status=400)
             else:
                 handle_react(self, task_id)
+            return True
+
+        # Match /api/tasks/{id}/chat
+        match = re.match(r"^/api/tasks/([^/]+)/chat$", path)
+        if match and method == "POST":
+            task_id = _parse_task_id(match.group(1))
+            if task_id is None:
+                _error_response(self, "Invalid task ID format", status=400)
+            else:
+                handle_chat(self, task_id)
             return True
 
         # Match card-action verbs: /api/tasks/{id}/{accept|reject|graduate|keep|undo}

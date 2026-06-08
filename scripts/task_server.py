@@ -19,6 +19,7 @@ import socket
 import shlex
 import subprocess
 import sys
+import threading
 import traceback
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -32,6 +33,8 @@ class ReusableHTTPServer(ThreadingHTTPServer):
 # Add script directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import task_lib
+import chat_runner
+import chat_transcript
 import ladder_lib
 import cron_lib
 import jira_publish
@@ -41,6 +44,29 @@ import adapters
 from adapters.project_management._contract import NotConfigured
 from adapters import NeedsConfirmation
 from cron_scheduler import CronScheduler
+
+# ─── Chat run-lock ─────────────────────────────────────────────────────────────
+# A session must never have two concurrent chat runs. The server is a
+# ThreadingHTTPServer (one thread per request) within a single process, so an
+# in-memory set guarded by a lock is sufficient to serialize per task_id.
+_CHAT_RUNS = set()              # task_ids with an active chat run (this process)
+_CHAT_RUNS_GUARD = threading.Lock()
+
+
+def _try_acquire_chat_run(task_id):
+    """Atomically claim the chat run-lock for a task. True if acquired."""
+    with _CHAT_RUNS_GUARD:
+        if task_id in _CHAT_RUNS:
+            return False
+        _CHAT_RUNS.add(task_id)
+        return True
+
+
+def _release_chat_run(task_id):
+    """Release the chat run-lock for a task (idempotent)."""
+    with _CHAT_RUNS_GUARD:
+        _CHAT_RUNS.discard(task_id)
+
 
 # ─── Load LangFuse env vars if not already set ───────────────────────────────
 _PM_OS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -87,6 +113,39 @@ def _json_response(handler, data, status=200):
 def _error_response(handler, message, status=400):
     """Write a JSON error response."""
     _json_response(handler, {"error": message}, status=status)
+
+
+def _sse_begin(handler):
+    """Send the SSE response headers (200 + text/event-stream, unbuffered)."""
+    handler.send_response(200)
+    handler.send_header("Content-Type", "text/event-stream")
+    handler.send_header("Cache-Control", "no-cache")
+    # The server is HTTP/1.1 (keep-alive by default) and an SSE body has no
+    # Content-Length, so a browser fetch() reader would never see end-of-stream
+    # on a kept-alive connection — the read loop hangs and the composer never
+    # re-enables. Force the connection to close after this response so the
+    # client's stream terminates cleanly. (The client also breaks on our
+    # explicit `event: done` sentinel, belt-and-suspenders.)
+    handler.send_header("Connection", "close")
+    handler.close_connection = True
+    handler.send_header("X-Accel-Buffering", "no")
+    # NOTE: do NOT send Access-Control-Allow-Origin here — the handler's
+    # overridden end_headers() injects it into every response. Sending it
+    # explicitly would duplicate the header on SSE responses.
+    handler.end_headers()
+
+
+def _sse_send(handler, obj):
+    """Write one SSE data frame and flush so the client sees it immediately."""
+    payload = json.dumps(obj, default=str)
+    handler.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
+    handler.wfile.flush()
+
+
+def _sse_end(handler):
+    """Write a terminal sentinel so the client knows the stream is complete."""
+    handler.wfile.write(b"event: done\ndata: {}\n\n")
+    handler.wfile.flush()
 
 
 def _read_request_body(handler):
@@ -998,6 +1057,107 @@ def handle_react(handler, task_id):
     except Exception:
         pass
     _json_response(handler, {"ok": True, "task_id": task_id, "react": react})
+
+
+def handle_get_chat(handler, task_id):
+    """GET /api/tasks/{id}/chat — return the task's persisted chat transcript.
+
+    Returns {"events": [...]} — the normalized chat events the frontend replays
+    into the panel on task open. A read failure (missing sidecar, malformed
+    line, OS error) never 500s the panel: it degrades to {"events": []} so the
+    chat opens empty rather than broken.
+    """
+    try:
+        events = chat_transcript.read_events(task_id)
+    except Exception:
+        events = []
+    _json_response(handler, {"events": events})
+
+
+def handle_chat(handler, task_id):
+    """POST /api/tasks/{id}/chat — run one chat turn, stream events over SSE.
+
+    Enforces two guards before streaming:
+      1. The background worker must not be mid-run on this session
+         (frontmatter agent_status == "running" → 409).
+      2. No other chat run may be active for this session (run-lock → 409).
+
+    The run-lock is ALWAYS released in a finally, including on client
+    disconnect (a write raising BrokenPipeError/ConnectionResetError) — which
+    also closes the run_turn generator, killing the claude process group.
+
+    Frontend contract: once _sse_begin has sent 200 OK, the stream ALWAYS
+    terminates with a normal `event: done` (via _sse_end), a `kind:error`
+    frame, or a clean stop on client disconnect. A stream that ends without
+    `event: done` (or with a `kind:error` frame) should be treated by the
+    frontend as a failed turn that can be retried.
+    """
+    body = _read_request_body(handler)
+    message = (body.get("message") or "").strip()
+    if not message:
+        _error_response(handler, "message is required")
+        return
+
+    # Background-busy check: if the dispatch worker is running on this session,
+    # a chat turn would collide with it.
+    try:
+        task = task_lib.read_task(task_id)
+    except FileNotFoundError:
+        _error_response(handler, "task not found", status=404)
+        return
+    except Exception as e:
+        _error_response(handler, f"Failed to read task: {e}", status=500)
+        return
+    # NOTE: this mutual-exclusion between a background run and a chat run is
+    # best-effort — there's a TOCTOU window between this read and the separate
+    # dispatcher process flipping agent_status. Acceptable for the single-
+    # operator local board.
+    if task.get("frontmatter", {}).get("agent_status") == "running":
+        _error_response(handler, "Agent is currently working", status=409)
+        return
+
+    # Chat-concurrency lock: one active chat run per session.
+    if not _try_acquire_chat_run(task_id):
+        _error_response(handler, "A chat run is already in progress", status=409)
+        return
+
+    try:
+        _sse_begin(handler)
+        try:
+            for event in chat_runner.run_turn(task_id, message):
+                _sse_send(handler, event)
+            _sse_end(handler)
+        except (BrokenPipeError, ConnectionResetError):
+            # Client disconnected mid-stream. Stop iterating — the for-loop's
+            # exit closes the run_turn generator (its finally kills the claude
+            # process group). The socket is gone, so do NOT try to write more;
+            # the finally releases the lock.
+            pass
+        except Exception as exc:
+            # Any OTHER failure after 200 OK was committed (a task_lib /
+            # chat_transcript write failure, an OSError, a normalize bug, …).
+            # Headers are already sent, so we cannot send a 500 — instead emit
+            # a terminal error frame so the client always gets a signal rather
+            # than an unsignaled half-stream. Log the original exception so the
+            # failure is diagnosable rather than swallowed.
+            sys.stderr.write(
+                "[chat] run_turn failed for %s after stream began: %r\n"
+                % (task_id, exc)
+            )
+            try:
+                _sse_send(handler, {
+                    "kind": "error",
+                    "role": "error",
+                    "text": "The chat run failed unexpectedly. You can retry.",
+                })
+                _sse_end(handler)
+            except (BrokenPipeError, ConnectionResetError, Exception):
+                # The client also went away (or the socket broke) while we were
+                # reporting the error. Nothing more we can do — never let a
+                # write failure during error reporting escape handle_chat.
+                pass
+    finally:
+        _release_chat_run(task_id)
 
 
 def handle_rerun_task(handler, task_id):
@@ -1929,6 +2089,18 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
                 _error_response(self, "Invalid task ID format", status=400)
             else:
                 handle_react(self, task_id)
+            return True
+
+        # Match /api/tasks/{id}/chat — POST runs a turn (SSE), GET reloads history.
+        match = re.match(r"^/api/tasks/([^/]+)/chat$", path)
+        if match and method in ("POST", "GET"):
+            task_id = _parse_task_id(match.group(1))
+            if task_id is None:
+                _error_response(self, "Invalid task ID format", status=400)
+            elif method == "GET":
+                handle_get_chat(self, task_id)
+            else:
+                handle_chat(self, task_id)
             return True
 
         # Match card-action verbs: /api/tasks/{id}/{accept|reject|graduate|keep|undo}

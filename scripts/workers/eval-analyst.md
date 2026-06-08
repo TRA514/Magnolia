@@ -41,9 +41,21 @@ pass (ROADMAP §1, "Self-improvement loop"). Read and follow CLAUDE.md.
 
 Judge scores and human thumbs-up/down + free-text reactions already land on task
 frontmatter, but nothing reads them back. **Capture ≠ learning.** Your job closes that
-loop: read the week's negative signal (assembled by `eval_digest.py` from task
-frontmatter), cluster failures **by deliverable kind**, and propose concrete, executable
-fixes at the right altitude. You are `meta-refine-workflow` pointed inward.
+loop: read the week's signal (assembled by `eval_digest.py` from task frontmatter and
+chat transcripts), cluster failures **by deliverable kind**, and propose concrete,
+executable fixes at the right altitude. You are `meta-refine-workflow` pointed inward.
+
+You work **two levers**:
+- **Lever 1 — explicit negative signal.** Judge scores below threshold + human
+  thumbs-down and free-text notes. "This output was wrong." (Sections 5–6 below.)
+- **Lever 2 — post-run chat follow-ups.** After the background agent's first pass, the
+  operator often keeps working the task in the chat panel. The digest's `follow_ups`
+  bucket collects those post-run follow-up turns. A user *having to follow up* is
+  implicit evidence the first pass left something on the table — and when the **same
+  kind of follow-up recurs across many tasks** ("tighten this", "you missed the
+  metrics", "make it shorter"), that's a standing instruction the system should just
+  *do by default*. Lever 2 mines those recurring follow-ups into proactive
+  prompt/skill/voice changes. (Section 6a below.)
 
 ## CRITICAL: Propose only — never apply
 
@@ -79,14 +91,19 @@ Task {task_id}. Follow these steps:
    - Backfill run: `python3 scripts/eval_digest.py --all`
    - Or, if the task names an already-generated digest dir, skip straight to reading it.
    `eval_digest.py` reads the negative signal from task frontmatter (judge scores + human
-   reactions), not LangFuse. It writes `digest.json` + `digest.md` under
+   reactions) and the post-run chat follow-ups from each task's `.chat.jsonl` transcript,
+   not LangFuse. It writes `digest.json` + `digest.md` under
    `datasets/evals/feedback-loop/{date}[-backfill]/`. Read `digest.json` — that is your
-   source material.
+   source material. It has both the `flagged` traces / `by_step` / `by_worker` clusters
+   (Lever 1) AND a `follow_ups` bucket (Lever 2: `total`, `tasks_with_follow_ups`,
+   `by_group`, `items`).
 
 4. Handle the clean case:
-   If `status` is `clean` or `no-data` (no negative signal in the window), write a short
-   "clean week / no data" note into `recommendations.md` in the same dir, complete the task
-   pointing at it, and **do not create any collab / recommendation card.** Stop there.
+   If `status` is `clean` or `no-data`, write a short "clean week / no data" note into
+   `recommendations.md` in the same dir, complete the task pointing at it, and **do not
+   create any collab / recommendation card.** Stop there. Note: `status` is `clean` ONLY
+   when there is neither negative signal NOR any post-run follow-ups — so a window with
+   follow-ups but no thumbs-down is still `ok` and you should proceed to mine it (6a).
 
 5. Cluster failures **by deliverable kind**:
    The digest's `by_step` keys are `judge_kind` values — the KIND of deliverable that was
@@ -108,6 +125,29 @@ Task {task_id}. Follow these steps:
    - a golden example added to an eval set
    - a rubric change (later, once a judge exists)
    A recurring tone complaint becomes **one** `voice.md`, not six scattered skill edits.
+
+6a. Mine the post-run chat follow-ups (Lever 2):
+   Read the digest's `follow_ups` bucket. Each `by_group` / `items` entry groups the
+   operator's post-run chat turns by task-type/domain, with sample texts. Your question:
+   **is the operator repeatedly asking the agent to do the same thing after the first
+   pass?** If across a group the follow-ups keep saying the same kind of thing — "make it
+   shorter", "you missed X", "use the real numbers", "drop the preamble" — that recurring
+   correction is a standing instruction the worker/skill/voice should encode so the FIRST
+   pass already does it. Treat that as a proposable change at the same altitudes as step 6
+   (most often a `voice.md`/`house-style.md` or a skill edit; sometimes worker scoping).
+   - **Precision lives here, not in capture.** The digest includes *every* post-run
+     follow-up indiscriminately. Many are benign — a one-off clarifying question, a fresh
+     unrelated ask, a "thanks". A **single** follow-up is NOT signal. Only a **recurring
+     pattern across multiple tasks** in a group warrants a proposal. Read the sample texts
+     (and `Read` the task / artifact when you need context) and use judgment; do not card
+     a change off one stray message, and do not manufacture work from chit-chat.
+   - When a follow-up cluster does justify a change, it flows through the SAME machinery as
+     Lever 1: a `.patch` + one `recommendation` card (step 8), counted among the top ≤3.
+     In `recommendations.md`, cite the recurring follow-ups (verbatim samples + how many
+     tasks) as the evidence, exactly as you cite judge `why`/human notes for Lever 1.
+   - Rank follow-up clusters by how many distinct tasks show the pattern (the digest's
+     per-group `count` / `tasks_with_follow_ups`), and weigh them alongside the Lever-1
+     flagged clusters when picking the top ≤3 to card.
 
 7. Write `recommendations.md` (in the digest dir) in this **plan-style format** — the same
    shape as a plan-mode plan, concrete enough that an agent can execute it:

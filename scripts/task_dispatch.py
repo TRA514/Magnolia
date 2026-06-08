@@ -20,6 +20,7 @@ import sys
 import fcntl
 import argparse
 import time
+import uuid
 import glob as globmod
 from datetime import datetime, timezone
 
@@ -676,6 +677,41 @@ def _resolve_task_model(task, worker):
     return profile_lib.resolve_model(tier, task_override=override)
 
 
+def build_claude_cmd(prompt, model, tools_str, max_turns, session_id=None):
+    """Build the `claude` argv + the session id it will use.
+
+    The prompt MUST stay the first positional arg: --allowedTools is variadic
+    and would otherwise swallow a trailing prompt (verified in the CLI spike).
+    """
+    sid = session_id or str(uuid.uuid4())
+    cmd = [
+        "claude",
+        prompt,
+        "--model", model,
+        "--allowedTools", tools_str,
+        "--max-turns", max_turns,
+        "--permission-mode", "bypassPermissions",
+        "--session-id", sid,
+    ]
+    return cmd, sid
+
+
+def _persist_session_id(task_id, claude_session_id):
+    """Best-effort: record the resumable session id on the task frontmatter.
+
+    Persisting the session id is a nice-to-have for a future chat panel. It must
+    NEVER destabilize dispatch — task_lib.update_task can raise FileNotFoundError
+    or other I/O errors, so swallow everything and just log a warning.
+    """
+    try:
+        task_lib.update_task(task_id, {
+            "claude_session_id": claude_session_id,
+            "session_origin": "background_agent",
+        })
+    except Exception:
+        log(f"WARN: could not persist session id for {task_id}", task_id=task_id)
+
+
 def dispatch_task(task, dry_run=False, rerun=False, workers=None):
     """Invoke claude in interactive mode for a single task.
 
@@ -757,19 +793,10 @@ def dispatch_task(task, dry_run=False, rerun=False, workers=None):
 
     # Interactive mode (no -p) gets cloud MCPs (Pendo, Jira, M365, etc.)
     # Use `script` to provide a pseudo-TTY for the interactive TUI
-    claude_cmd = [
-        "claude",
-        prompt,
-        "--model", model,
-        "--allowedTools", tools_str,
-        "--max-turns", max_turns,
-        "--permission-mode", "bypassPermissions",
-    ]
+    claude_cmd, claude_session_id = build_claude_cmd(prompt, model, tools_str, max_turns)
 
     # Wrap in `script -q` to provide pseudo-TTY
-    cmd = [
-        "script", "-q", output_file,
-    ] + claude_cmd
+    cmd = ["script", "-q", output_file] + claude_cmd
 
     # Strip ALL Claude-related env vars to prevent nested-session detection,
     # and ensure ~/.local/bin (claude) and /opt/homebrew/bin are in PATH for cron
@@ -793,6 +820,11 @@ def dispatch_task(task, dry_run=False, rerun=False, workers=None):
     except FileNotFoundError:
         log("ERROR: 'claude' or 'script' command not found in PATH", task_id=task_id)
         return {"task_id": task_id, "success": False, "output": None, "error": "claude not found"}
+
+    # best-effort: persist resumable session id; never let this break dispatch.
+    # The worker is already running (Popen succeeded) — a persistence failure
+    # must not orphan the live process or crash the dispatch loop.
+    _persist_session_id(task_id, claude_session_id)
 
     # Poll: wait for process exit OR agent to report completion via task file.
     # The claude interactive process often hangs after the agent finishes, so we

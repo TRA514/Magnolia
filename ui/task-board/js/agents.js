@@ -76,6 +76,10 @@ async function openWorkerDetail(workerName) {
   const modalActions = document.getElementById('modal-actions');
 
   overlay.classList.add('active');
+  overlay.classList.add('no-chat');                 // worker detail = single pane, no linked chat
+  overlay.classList.remove('closing');
+  document.body.classList.add('ws-open');
+  if (typeof revealWorkspace === 'function') revealWorkspace();
   modalBody.innerHTML = '<div class="loading">Loading worker details...</div>';
   modalTitle.textContent = workerName;
   modalActions.innerHTML = '';

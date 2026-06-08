@@ -22,6 +22,7 @@ from otterai import OtterAI
 # ── Engine wiring ────────────────────────────────────────────────────────────────
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import profile_lib  # noqa: E402
+import transcript_post  # noqa: E402
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 REQUEST_TIMEOUT = 30  # seconds — prevents indefinite hangs
@@ -47,14 +48,6 @@ MEETINGS_DIR = Path(profile_lib.PM_OS_DIR) / profile_lib.transcript_config()["ta
 STATE_FILE = STATE_DIR / "downloaded.json"
 SESSION_FILE = STATE_DIR / "session.json"
 LOG_FILE = STATE_DIR / "otter_sync.log"
-
-# ── Import classifier (graceful degradation if openai not installed) ───────────
-try:
-    from otter_classify import process_file as _process_file
-    _CLASSIFY_AVAILABLE = True
-except ImportError as _import_err:
-    _CLASSIFY_AVAILABLE = False
-    # Will log a warning at runtime if classification is attempted
 
 # Correct base is forward/api/v1/ (not forward/user/api/v1/)
 OTTER_USER_URL = "https://otter.ai/forward/api/v1/user"
@@ -318,68 +311,12 @@ def main() -> None:
                 "folder": str(folder),
             }
 
-            # ── Classify, add front matter, and move ───────────────────────────
-            if txt_path and _CLASSIFY_AVAILABLE:
-                try:
-                    result = _process_file(txt_path, speech_id=speech_id, downloaded_state=state)
-                    state[speech_id]["domain"] = result["domain"]
-                    state[speech_id]["final_path"] = str(result["final_path"])
-                    log.info("  Classified → %s", result["final_path"])
-                except Exception as classify_exc:
-                    log.warning("  Classification failed for %s: %s", speech_id, classify_exc)
-            elif txt_path and not _CLASSIFY_AVAILABLE:
-                log.warning("  openai not installed — skipping classification for %s", speech_id)
-
+            # ── Classify, add front matter, fire task-extract + qmd hooks ──────
+            if txt_path:
+                final_path = transcript_post.run_downstream(txt_path, speech_id, state, log)
+                state[speech_id]["final_path"] = final_path
             save_state(state)
             new_count += 1
-
-            # ── Task extraction hook ─────────────────────────────────────
-            final_path = state[speech_id].get("final_path") or (str(txt_path) if txt_path else None)
-            if final_path:
-                # Build one augmented-PATH env shared by both subprocess hooks.
-                # Under a LaunchAgent the inherited PATH is minimal (/usr/bin:/bin),
-                # so both `claude` (task-extract) and `qmd` must get the prepended dirs.
-                hook_env = os.environ.copy()
-                hook_env.pop("CLAUDECODE", None)  # allow nested claude -p
-                hook_env.pop("CLAUDE_CODE_ENTRYPOINT", None)
-                hook_env["PATH"] = (
-                    str(Path.home() / ".local" / "bin")
-                    + ":/opt/homebrew/bin"
-                    + ":" + hook_env.get("PATH", "/usr/bin:/bin")
-                )
-
-                try:
-                    log_dir = Path(profile_lib.PM_OS_DIR) / "logs"
-                    log_dir.mkdir(parents=True, exist_ok=True)
-                    hook_log = open(log_dir / "task-extract.log", "a")
-                    subprocess.Popen(
-                        [str(SCRIPT_DIR / "task-extract-meetings.sh"), final_path],
-                        cwd=str(profile_lib.PM_OS_DIR),
-                        start_new_session=True,
-                        env=hook_env,
-                        stdout=hook_log,
-                        stderr=hook_log,
-                    )
-                    log.info("  Triggered task extraction for %s", final_path)
-                except Exception as hook_exc:
-                    log.warning("  Task extraction hook failed: %s", hook_exc)
-
-                # QMD index update hook
-                try:
-                    log_dir = Path(profile_lib.PM_OS_DIR) / "logs"
-                    log_dir.mkdir(parents=True, exist_ok=True)
-                    qmd_log = open(log_dir / "qmd-index.log", "a")
-                    subprocess.Popen(
-                        ["qmd", "update", "-c", "meetings_product"],
-                        cwd=str(profile_lib.PM_OS_DIR),
-                        start_new_session=True,
-                        env=hook_env,
-                        stdout=qmd_log,
-                        stderr=qmd_log,
-                    )
-                    log.info("  Triggered qmd index update (meetings_product)")
-                except Exception as qmd_exc:
-                    log.warning("  QMD index update hook failed: %s", qmd_exc)
 
         except Exception as exc:
             log.error("  Failed to process %s: %s", speech_id, exc)

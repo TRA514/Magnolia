@@ -299,3 +299,42 @@ def test_no_notice_when_nothing_blocked(tasks_root, stub_spawn, stub_model):
     task_id = _make_task()
     events = list(cr.run_turn(task_id, "ping"))
     assert not [e for e in events if e.get("kind") == "notice"]
+
+
+# ─── Background → live handoff: re-orient once, then go quiet ─────────────────
+
+def test_first_resume_turn_reorients_and_flips_origin(
+    tasks_root, stub_model, monkeypatch
+):
+    """Opening a chat on a background-worker session (session_origin set by the
+    dispatcher, not chat) sends the re-orientation handoff AND flips
+    session_origin to human_chat so it fires exactly once."""
+    seen = {}
+    monkeypatch.setattr(cr, "_spawn",
+                        lambda cmd, exit_holder=None: seen.setdefault("cmd", cmd) or iter(_fixture_lines()))
+
+    task_id = _make_task(claude_session_id="SID-BG", session_origin="background_agent")
+    list(cr.run_turn(task_id, "what's your take?"))
+
+    # The message handed to claude carries the handoff re-orientation.
+    sent = seen["cmd"][1]  # prompt is the first positional arg
+    assert "background" in sent.lower()
+    assert "chief of staff" in sent.lower()
+
+    # Origin is flipped so the NEXT turn won't repeat the handoff.
+    fm = task_lib.read_task(task_id)["frontmatter"]
+    assert fm["session_origin"] == "human_chat"
+
+
+def test_second_resume_turn_is_steady_state(tasks_root, stub_model, monkeypatch):
+    """Once session_origin is human_chat, resumed turns are light: no handoff."""
+    seen = {}
+    monkeypatch.setattr(cr, "_spawn",
+                        lambda cmd, exit_holder=None: seen.setdefault("cmd", cmd) or iter(_fixture_lines()))
+
+    task_id = _make_task(claude_session_id="SID-CHAT", session_origin="human_chat")
+    list(cr.run_turn(task_id, "next?"))
+
+    sent = seen["cmd"][1]
+    assert "chief of staff" not in sent.lower()   # no re-orientation
+    assert "## Current task state" in sent         # just the light metadata refresh

@@ -130,57 +130,142 @@ def _task_context_block(task, *, include_description=True, heading="## Task cont
     return "\n".join(lines)
 
 
-def build_context_prompt(task, user_message):
+# How much card body to embed inline. Generous (the first-turn prompt is cached),
+# but capped so a giant artifact can't blow up the prompt — past the cap we tell
+# the agent to read the file for the rest.
+_CARD_BODY_CAP = 6000
+
+
+def _card_body_block(body, *, current=False):
+    """The card's actual contents, embedded inline so the agent can answer
+    directly instead of spending a tool call to find what's right in front of
+    the user. Returns a labelled block (trailing blank line). When the card has
+    no body, returns a read-the-file instruction rather than nothing — so the
+    agent never guesses about a card it hasn't actually looked at.
+    """
+    label = "### Card contents (current)" if current else "### Card contents"
+    body = (body or "").strip()
+    if not body:
+        return (
+            f"{label}\n"
+            "(This card has no written body — read the task file and any linked "
+            "artifacts before answering rather than guessing.)\n\n"
+        )
+    if len(body) > _CARD_BODY_CAP:
+        body = body[:_CARD_BODY_CAP].rstrip() + "\n\n…(truncated)"
+    return (
+        f"{label}\n{body}\n\n"
+        "If you need more than what's shown here, read the task file and any "
+        "linked artifacts before answering.\n\n"
+    )
+
+
+# The shared "what you can and can't do from this chat" boundary, reused by the
+# fresh-session framing and the background→live handoff so both stay in sync.
+def _capability_boundary(name):
+    return (
+        f"What you can and can't do from here: you can read, search, and "
+        f"draft/edit this task's local artifacts, and run the local task CLI "
+        f"(./scripts/task.sh) to update or complete THIS task. You CANNOT perform "
+        f"external writes (sending messages, filing tickets, scheduling) or run "
+        f"other shell commands from this chat — those are gated behind buttons on "
+        f"the task detail. If asked for one, say so plainly and point to the "
+        f"button; never claim {name} can 'approve it in the terminal'."
+    )
+
+
+def build_context_prompt(task, body, user_message):
     """Build the first-turn system/context prompt for a NEW chat session.
 
     Only the FIRST turn of a new session gets this prompt: it frames the
-    assistant and embeds the task context plus the operator's message. Resumed
-    sessions get a lighter prompt (see ``build_resume_prompt``) — Claude Code
-    owns the resumed conversation, so we never replay chat history here.
+    assistant as the operator's chief of staff, embeds the task context AND the
+    card's actual body (so it answers directly without searching), plus the
+    operator's message. Resumed sessions get a lighter prompt (see
+    ``build_resume_prompt``) — Claude Code owns the resumed conversation.
 
-    Identity is read ONLY via profile_lib (display_name / company / persona) —
-    never a hardcoded person literal (invariant #1).
+    Identity is read ONLY via profile_lib (display_name / company) — never a
+    hardcoded person literal (invariant #1). The framing is role-agnostic: the
+    engine isn't product-specific, so it says "getting things done", not work of
+    any one discipline.
     """
     name = profile_lib.display_name()
     company = profile_lib.company()
-    persona = profile_lib.persona()
 
     task_block = _task_context_block(task)
+    body_block = _card_body_block(body)
 
     where = f" at {company}" if company else ""
     return (
-        f"You are the task execution assistant for {name}{where} inside Magnolia, "
-        f"acting as their {persona}. Continue as the task execution assistant for "
-        f"the task below: help move it forward, ask only when genuinely blocked, "
-        f"and keep replies concise.\n\n"
-        f"You can read, search, and draft/edit this task's local artifacts, and "
-        f"run the local task CLI (./scripts/task.sh) to update or complete THIS "
-        f"task. You CANNOT perform external writes (sending messages, filing "
-        f"tickets, scheduling) or run other shell commands from this chat — those "
-        f"are gated behind buttons on the task detail. If asked for one, say so "
-        f"plainly and point to the button; never claim the user can 'approve it "
-        f"in the terminal'.\n\n"
+        f"You are {name}'s chief of staff{where}, working inside Magnolia — their "
+        f"right hand for getting things done. You're in a live, interactive "
+        f"session with {name}, who has this task card open in front of them right "
+        f"now. Your job is to help them get caught up on it and move it forward — "
+        f"to DO the work, not just advise.\n\n"
+        f"How you work:\n"
+        f"- Lead with the answer or the action; keep it concise and warm. You "
+        f"have the card's contents below and tools to go deeper — use them so you "
+        f"genuinely understand the task before you respond, and never make {name} "
+        f"wait while you hunt for something already in front of you.\n"
+        f"- When {name} asks something loose (\"should I do this?\", \"what's your "
+        f"take?\"), assume they mean THIS task, give a real, reasoned opinion, "
+        f"then offer to take the next step.\n"
+        f"- You can update, complete, and re-prioritize this task and draft or "
+        f"edit its artifacts directly. When asked, just do it — then say briefly "
+        f"what you did.\n"
+        f"- Ask a clarifying question only when you're genuinely blocked and "
+        f"can't make a sensible assumption.\n\n"
+        f"{_capability_boundary(name)}\n\n"
         f"{task_block}\n\n"
+        f"{body_block}"
         f"## {name}'s message\n"
         f"{user_message}"
     )
 
 
-def build_resume_prompt(task, user_message):
+def build_resume_prompt(task, user_message, *, first_interactive=False, body=None):
     """Build the prompt for a RESUMED session's turn.
 
-    The resumed session already carries its framing and history (from the first
-    chat turn, or from the background worker's run), so we DON'T replay the
-    persona preamble. We DO re-inject a compact, CURRENT task-state block every
-    turn: the volatile fields (status / priority / queue / due) can change
-    between turns, and giving them inline means the model reads live state for
-    free instead of spending a tool call to re-fetch metadata we already hold.
-    The long body is omitted (``include_description=False``) — it's already in
-    session history from the first turn.
+    Two shapes:
+
+    - **first_interactive** (the handoff): a human has just opened a chat on a
+      session a background worker created. The session is still in autonomous
+      "execute the assignment" mode, so we re-orient it ONCE — background → live
+      chief of staff — AND re-inject the CURRENT body so it catches the user up
+      with real content, not just metadata. (Without this, the agent knows the
+      title but not what the card actually says — the starvation that the
+      metadata-only refresh below caused on its own.)
+
+    - **steady state** (default): the session already carries its framing and
+      the body from the handoff/first turn, so we DON'T replay either. We only
+      re-inject the compact, CURRENT task-state block — volatile fields
+      (status / priority / queue / due) can change between turns, and giving
+      them inline means the model reads live state for free instead of spending
+      a tool call to re-fetch metadata we already hold.
 
     Identity via profile_lib only (invariant #1).
     """
     name = profile_lib.display_name()
+    if first_interactive:
+        state_block = _task_context_block(
+            task, include_description=False, heading="## Current task state"
+        )
+        return (
+            f"[Handoff] Until now you've been working this task on your own, in "
+            f"the background. {name} has just opened it and started talking to "
+            f"you directly — so you're moving from autonomous background work to "
+            f"a live, interactive conversation. From here you're {name}'s chief "
+            f"of staff for this task: help them get caught up on what it is and "
+            f"what you've done so far, and get things done together. Be "
+            f"proactive, concise, and willing to take a clear position; you "
+            f"already know this task, so answer directly instead of re-searching "
+            f"for the basics, and reach for your tools only to go deeper or to "
+            f"act. Ask only when you're genuinely blocked.\n\n"
+            f"{_capability_boundary(name)}\n\n"
+            f"{state_block}\n\n"
+            f"{_card_body_block(body, current=True)}"
+            f"## {name}'s message\n"
+            f"{user_message}"
+        )
     state_block = _task_context_block(
         task, include_description=False, heading="## Current task state"
     )
@@ -411,9 +496,15 @@ def run_turn(task_id, message):
     """
     task = task_lib.read_task(task_id)
     fm = task["frontmatter"] or {}
+    body = task.get("body") or ""
 
     existing_sid = fm.get("claude_session_id")
     new_session = not existing_sid
+    # First interactive turn on a session a BACKGROUND WORKER created: the
+    # dispatcher stamps session_origin (e.g. "background_agent"); chat flips it to
+    # "human_chat" after the handoff. So "resume + origin != human_chat" == the
+    # one moment we re-orient background → live.
+    first_interactive = bool(existing_sid and fm.get("session_origin") != "human_chat")
     # post_run marks the user msg as a follow-up AFTER the agent's first pass.
     post_run = bool(fm.get("agent_status") == "complete" or existing_sid)
 
@@ -427,14 +518,16 @@ def run_turn(task_id, message):
         # the CLI spike: a bare uuid4().hex is rejected with "Must be a valid UUID").
         minted_sid = str(uuid.uuid4())
         sid = minted_sid
-        sent_message = build_context_prompt(fm, message)
+        sent_message = build_context_prompt(fm, body, message)
     else:
         minted_sid = None
         sid = existing_sid
-        # Re-inject the current task state so the model reads live metadata inline
-        # rather than spending a tool call to re-fetch it (the body stays in
-        # session history). The ORIGINAL message is what we persist below.
-        sent_message = build_resume_prompt(fm, message)
+        # Resume: re-inject current task state inline (no tool call to re-fetch).
+        # On the FIRST interactive turn, also re-orient background → live and
+        # re-inject the body for the catch-up. The ORIGINAL message is persisted.
+        sent_message = build_resume_prompt(
+            fm, message, first_interactive=first_interactive, body=body
+        )
 
     # 1) Persist the USER turn first — the operator's ORIGINAL message.
     chat_transcript.append_event(task_id, {
@@ -528,7 +621,18 @@ def run_turn(task_id, message):
             pass
         yield error_event
 
-    # Resume path: stamp last-active on its own (the new-session path already
-    # folded this into _persist_chat_session, I2).
+    # Resume path: stamp last-active. On the FIRST interactive turn (the handoff
+    # from a background-worker session), also flip session_origin to "human_chat"
+    # in the SAME write — so the heavy re-orientation preamble fires exactly once
+    # and every later turn falls through to the light steady-state refresh.
     if not new_session:
-        _touch_last_active(task_id)
+        if first_interactive:
+            try:
+                task_lib.update_task(task_id, {
+                    "session_origin": "human_chat",
+                    "chat_last_active": _now_iso(),
+                })
+            except Exception:
+                pass
+        else:
+            _touch_last_active(task_id)

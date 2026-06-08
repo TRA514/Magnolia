@@ -15,6 +15,10 @@ transcript:
   target: "datasets/meetings/"
 calendar:
   provider: "none"       # m365 | google | none
+messaging:
+  provider: "none"       # m365 | none — set m365 to enable Outlook + Teams sends (via mgc)
+  m365:
+    confirmed: false     # Tier-2 gate: one plain-language confirm before the first send
 doc_sync:
   onedrive_root: ""      # auto-detected by the Doctor (OneDrive-* under ~/Library/CloudStorage)
   sharepoint_site: "PM-OS"

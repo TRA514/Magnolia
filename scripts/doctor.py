@@ -14,6 +14,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import platform_lib  # noqa: E402
 import profile_lib  # noqa: E402
+from send_message_graph import MGC_SCOPES  # noqa: E402 — the one canonical mgc scope set
 
 
 def probe_which(name, remedy=None):
@@ -57,16 +58,18 @@ _LOCAL_TOOLS = {
     # msgraph_cli (mgc): no Homebrew formula exists; binary download from aka.ms.
     # Remedy URL/asset name should be confirmed on a live Doctor run.
     "msgraph_cli":{"bin": "mgc", "required": False,
-                   "detail": "recommended for doc-sync + bulk Teams/OneDrive",
+                   "detail": "powers calendar invites + Outlook/Teams sends",
                    "remedy": "download mgc from https://aka.ms/get/graphcli/latest/"
                              "osx-arm64.zip (osx-x64.zip on Intel Macs), extract it, "
-                             "and add the folder to your PATH"},
+                             "and add the folder to your PATH; then authorize once: "
+                             f'mgc login --scopes "{MGC_SCOPES}"'},
 }
 _PYTHON_DEPS = ["ruamel.yaml"]
 # Remote connectors keyed by the integration category that implies them.
 _REMOTE_FROM_INTEGRATION = {
     "project_management": lambda prov: prov,   # 'jira'/'asana'/'linear'
     "calendar": lambda prov: "m365" if prov == "m365" else prov,
+    "messaging": lambda prov: "m365" if prov == "m365" else prov,   # Outlook + Teams sends
 }
 
 

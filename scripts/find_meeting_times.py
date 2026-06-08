@@ -16,10 +16,14 @@ Output: JSON array of slot suggestions with start/end times (UTC) and availabili
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
 from datetime import datetime, timedelta
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from send_message_graph import MGC_SCOPES  # the one canonical mgc scope set
 
 
 def find_meeting_times(attendees, duration_minutes, start_date, end_date,
@@ -32,7 +36,7 @@ def find_meeting_times(attendees, duration_minutes, start_date, end_date,
         raise RuntimeError(
             "mgc (Microsoft Graph CLI) not found.\n"
             "Install from: https://github.com/microsoftgraph/msgraph-cli/releases\n"
-            "Auth: mgc login --scopes \"Calendars.ReadWrite User.Read.All\""
+            f'Auth: mgc login --scopes "{MGC_SCOPES}"'
         )
 
     # Build the request payload
@@ -79,7 +83,7 @@ def find_meeting_times(attendees, duration_minutes, start_date, end_date,
         stderr = result.stderr.strip()
         if "token" in stderr.lower() or "login" in stderr.lower():
             raise RuntimeError(
-                f"Authentication error. Run: mgc login --scopes \"Calendars.ReadWrite\"\n"
+                f'Authentication error. Run: mgc login --scopes "{MGC_SCOPES}"\n'
                 f"Details: {stderr}"
             )
         raise RuntimeError(f"mgc failed (exit {result.returncode}): {stderr}")

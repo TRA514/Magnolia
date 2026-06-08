@@ -96,6 +96,25 @@ def test_msgraph_remedy_is_a_real_install_command():
     assert "# confirm" not in remedy   # internal note must not leak to users
 
 
+def test_msgraph_remedy_includes_unified_login_scopes():
+    # Onboarding/Doctor must capture the SEND scopes, not just calendar — one
+    # login grants calendar + email + Teams. The remedy carries the full set.
+    remedy = doctor._LOCAL_TOOLS["msgraph_cli"]["remedy"]
+    assert "mgc login --scopes" in remedy
+    assert "Mail.Send" in remedy and "Chat.ReadWrite" in remedy
+
+
+def test_messaging_m365_seeds_a_remote_capability(tmp_path, monkeypatch):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "integrations.yaml").write_text(
+        "messaging:\n  provider: m365\n")
+    (tmp_path / "profile" / "config.yaml").write_text("server:\n  port: 59997\n")
+    monkeypatch.setattr(doctor.shutil, "which", lambda n: None)
+    monkeypatch.setattr(doctor.importlib.util, "find_spec", lambda n: object())
+    caps = doctor.detect(root=str(tmp_path))["capabilities"]
+    assert caps["m365"]["kind"] == "remote" and caps["m365"]["expected"] is True
+
+
 def test_detect_preserves_stamped_remote_status(tmp_path, monkeypatch):
     (tmp_path / "profile").mkdir()
     (tmp_path / "profile" / "integrations.yaml").write_text(

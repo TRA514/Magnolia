@@ -53,6 +53,12 @@ is visible on the board once it spawns), mark it in-progress as you begin, done 
 3. **Integrations** — ask: Otter or Granola? Jira / Asana / Linear / none? Teams & Outlook (M365)?
    Default M365 Teams+Outlook ON. Write `profile/integrations.yaml`. (Both Otter and Granola are
    offered; Otter is wired today.)
+   - **If they enable M365** — set `calendar.provider` AND `messaging.provider` to `m365` in
+     `profile/integrations.yaml` (messaging powers the Outlook + Teams *send* buttons; calendar powers
+     invites). M365 runs through the `mgc` Microsoft Graph CLI, so authorize it ONCE with the full
+     scope set (one login grants calendar invites, email send, Teams send, and people lookup):
+     `mgc login --scopes "Calendars.ReadWrite Mail.Send Chat.ReadWrite User.Read.All"`. The first send
+     still surfaces a one-time Tier-2 confirm (`messaging.m365.confirmed` flips on approval).
    - **If they pick Jira** — gently gather their team's home on the board so the tickets I draft land
      in the right place and sound like your team filed them. Ask for, and write into
      `profile/integrations.yaml` under `project_management.jira`: `cloud_id` (your Jira site, e.g.

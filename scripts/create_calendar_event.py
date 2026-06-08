@@ -15,9 +15,13 @@ Usage:
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from send_message_graph import MGC_SCOPES  # the one canonical mgc scope set
 
 
 def build_event_payload(subject, start, end, timezone, attendees=None, body=None,
@@ -108,7 +112,7 @@ def create_event(payload, dry_run=False):
         raise RuntimeError(
             "mgc (Microsoft Graph CLI) not found.\n"
             "Install: brew install microsoft/microsoft-graph-cli/mgc\n"
-            "Auth:    mgc login --scopes \"Calendars.ReadWrite\""
+            f'Auth:    mgc login --scopes "{MGC_SCOPES}"'
         )
 
     try:
@@ -127,7 +131,7 @@ def create_event(payload, dry_run=False):
         stderr = result.stderr.strip()
         if "auth" in stderr.lower() or "token" in stderr.lower() or "login" in stderr.lower():
             raise RuntimeError(
-                f"Authentication error. Run: mgc login --scopes \"Calendars.ReadWrite\"\n"
+                f'Authentication error. Run: mgc login --scopes "{MGC_SCOPES}"\n'
                 f"Details: {stderr}"
             )
         raise RuntimeError(f"mgc failed (exit {result.returncode}): {stderr}")

@@ -49,7 +49,9 @@ def probe_python_deps(modules):
 
 # Local CLI tools the Doctor knows how to detect (and a remedy hint for each).
 _LOCAL_TOOLS = {
-    "qmd":        {"remedy": "brew install qmd"},
+    "qmd":        {"required": False,
+                   "detail": "powers semantic search; optional (keyword search works without it)",
+                   "remedy": "brew install qmd"},
     "pandoc":     {"remedy": "brew install pandoc"},
     "claude_cli": {"bin": "claude", "remedy": "see claude.ai/code install"},
     # No Homebrew formula/tap exists for the Microsoft Graph CLI — the official

@@ -178,6 +178,12 @@ def test_report_text_lists_caps(tmp_path):
     assert "brew install qmd" in text
 
 
+def test_qmd_is_not_required():
+    doc = doctor.detect()
+    qmd = doc["capabilities"]["qmd"]
+    assert qmd.get("required") is False
+
+
 def test_check_exit_code(tmp_path, monkeypatch):
     (tmp_path / "profile").mkdir()
     (tmp_path / "profile" / "integrations.yaml").write_text("transcript:\n  provider: none\n")

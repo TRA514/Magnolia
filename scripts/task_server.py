@@ -34,6 +34,7 @@ class ReusableHTTPServer(ThreadingHTTPServer):
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import task_lib
 import chat_runner
+import chat_transcript
 import ladder_lib
 import cron_lib
 import jira_publish
@@ -1049,6 +1050,21 @@ def handle_react(handler, task_id):
     except Exception:
         pass
     _json_response(handler, {"ok": True, "task_id": task_id, "react": react})
+
+
+def handle_get_chat(handler, task_id):
+    """GET /api/tasks/{id}/chat — return the task's persisted chat transcript.
+
+    Returns {"events": [...]} — the normalized chat events the frontend replays
+    into the panel on task open. A read failure (missing sidecar, malformed
+    line, OS error) never 500s the panel: it degrades to {"events": []} so the
+    chat opens empty rather than broken.
+    """
+    try:
+        events = chat_transcript.read_events(task_id)
+    except Exception:
+        events = []
+    _json_response(handler, {"events": events})
 
 
 def handle_chat(handler, task_id):
@@ -2068,12 +2084,14 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
                 handle_react(self, task_id)
             return True
 
-        # Match /api/tasks/{id}/chat
+        # Match /api/tasks/{id}/chat — POST runs a turn (SSE), GET reloads history.
         match = re.match(r"^/api/tasks/([^/]+)/chat$", path)
-        if match and method == "POST":
+        if match and method in ("POST", "GET"):
             task_id = _parse_task_id(match.group(1))
             if task_id is None:
                 _error_response(self, "Invalid task ID format", status=400)
+            elif method == "GET":
+                handle_get_chat(self, task_id)
             else:
                 handle_chat(self, task_id)
             return True

@@ -13,6 +13,7 @@ import pytest
 import task_server
 import task_lib
 import chat_runner
+import chat_transcript
 
 
 # ─── Fake handler ──────────────────────────────────────────────────────────────
@@ -237,6 +238,54 @@ def test_handle_chat_emits_single_cors_header(monkeypatch):
     ]
     assert len(cors) == 1, f"expected exactly one CORS header, got {cors}"
     assert cors[0] == ("Access-Control-Allow-Origin", "*")
+
+
+# ─── handle_get_chat (history reload) ────────────────────────────────────────────
+
+def test_handle_get_chat_returns_events_in_order(tasks_root):
+    """GET history returns the persisted events in append order under {"events":[...]}.
+
+    The transcript path derives from task_lib.TASKS_DIR (redirected by the
+    tasks_root fixture), so append_event writes into the temp tree and
+    handle_get_chat reads it back.
+    """
+    task_id, _ = task_lib.create_task(title="Chat me", queue="agent")
+    chat_transcript.append_event(task_id, {"role": "user", "kind": "text",
+                                           "text": "first", "run_id": "r1"})
+    chat_transcript.append_event(task_id, {"role": "assistant", "kind": "text",
+                                           "text": "second", "run_id": "r1"})
+
+    handler = FakeHandler()
+    task_server.handle_get_chat(handler, task_id)
+
+    assert handler.status == 200
+    body = json.loads(handler.written())
+    events = body["events"]
+    assert len(events) == 2
+    assert events[0]["text"] == "first"
+    assert events[0]["role"] == "user"
+    assert events[1]["text"] == "second"
+    assert events[1]["role"] == "assistant"
+
+
+def test_handle_get_chat_empty_when_no_history(tasks_root):
+    """A task with no transcript yields {"events": []} (never 500s the panel)."""
+    task_id, _ = task_lib.create_task(title="No chat yet", queue="agent")
+    handler = FakeHandler()
+    task_server.handle_get_chat(handler, task_id)
+    assert handler.status == 200
+    assert json.loads(handler.written()) == {"events": []}
+
+
+def test_handle_get_chat_degrades_on_read_error(monkeypatch):
+    """A read failure degrades to {"events": []} rather than raising/500ing."""
+    def boom(_tid):
+        raise OSError("disk gone")
+    monkeypatch.setattr(chat_transcript, "read_events", boom)
+    handler = FakeHandler()
+    task_server.handle_get_chat(handler, "TASK-0001")
+    assert handler.status == 200
+    assert json.loads(handler.written()) == {"events": []}
 
 
 def test_handle_chat_emits_error_frame_on_mid_stream_failure(monkeypatch):

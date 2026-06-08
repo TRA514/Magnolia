@@ -25,7 +25,7 @@ let chatState = null; // { task, busy }
 // hidden baseline, so adding the class animates to the shown state.
 function revealNow(el, cls) { void el.offsetWidth; el.classList.add(cls); }
 
-function buildChat(task) {
+async function buildChat(task) {
   chatState = { task, busy: false };
 
   const anchor = document.getElementById('chat-anchor');
@@ -38,6 +38,24 @@ function buildChat(task) {
   if (empty) empty.classList.remove('gone');
   const thread = document.getElementById('chat-thread');
   if (thread) thread.innerHTML = '';
+
+  // Replay any persisted history INSTANTLY so re-opening a chatted task shows
+  // its prior turns rather than an empty panel. Robust to network/empty/parse
+  // failure: on any problem we simply leave the empty-whisper state in place.
+  if (thread) {
+    try {
+      const res = await fetch(`${API}/tasks/${task.id}/chat`);
+      if (res.ok) {
+        const data = await res.json();
+        const turns = groupEventsIntoTurns((data && data.events) || []);
+        if (turns.length) {
+          turns.forEach(turn => thread.appendChild(renderTurn(turn, true)));
+          if (empty) empty.classList.add('gone');
+          scrollThread();
+        }
+      }
+    } catch (_) { /* leave the empty-whisper state untouched */ }
+  }
 
   const input = document.getElementById('chat-input');
   if (input) {
@@ -58,12 +76,64 @@ function buildChat(task) {
   if (send) send.disabled = false;
 }
 
+// Reassemble persisted chat events into the turn shape renderTurn expects. The
+// transcript is a flat append log; we group by run_id so each assistant turn
+// reunites its think / tool_step / text rows the way the live path renders them:
+//   - a `user` event is its own turn ({role:'user', text})
+//   - assistant `text`/`think`/`tool_step` events sharing a run_id become ONE
+//     assistant turn ({role:'assistant', text:<concatenated>, steps:[...]})
+//   - an `error` event becomes an error turn ({role:'error', text})
+// `result` events are metadata and skipped. Tool verbs map through toolKind so
+// replayed steps read identically to live ones (qmd → "Searched", etc.).
+function groupEventsIntoTurns(events) {
+  const turns = [];
+  let current = null; // open assistant turn being assembled
+  const flush = () => { if (current) { turns.push(current); current = null; } };
+  for (const ev of (events || [])) {
+    if (!ev || typeof ev !== 'object') continue;
+    const kind = ev.kind;
+    if (kind === 'result') continue; // metadata, not rendered
+    if (ev.role === 'user' || (kind === 'text' && ev.role === 'user')) {
+      flush();
+      turns.push({ role: 'user', text: ev.text || '' });
+      continue;
+    }
+    if (kind === 'error') {
+      flush();
+      turns.push({ role: 'error', text: ev.text || '' });
+      continue;
+    }
+    // assistant think / tool_step / text — assemble into one turn per run_id.
+    if (current && current.run_id !== ev.run_id) flush();
+    if (!current) current = { role: 'assistant', text: '', steps: [], run_id: ev.run_id };
+    if (kind === 'think') {
+      current.steps.push({ kind: 'think', label: ev.text || '' });
+    } else if (kind === 'tool_step') {
+      current.steps.push({ kind: toolKind(ev.verb), label: ev.target || ev.verb || '' });
+    } else if (kind === 'text') {
+      current.text += ev.text || '';
+    }
+  }
+  flush();
+  return turns;
+}
+
 // ── Turn rendering (single column — user bubble · assistant prose) ───
 function renderTurn(turn, instant) {
   const el = document.createElement('div');
   el.className = `chat-turn turn-${turn.role}${instant ? ' show' : ''}`;
   if (turn.role === 'user') {
     el.innerHTML = `<div class="turn-text">${escapeHtml(turn.text || '')}</div>`;
+    return el;
+  }
+  if (turn.role === 'error') {
+    // Mirror the live error path (renderEvent 'error' branch): an assistant-style
+    // turn flagged turn-error carrying the plain failure text.
+    el.className = `chat-turn turn-assistant turn-error${instant ? ' show' : ''}`;
+    const t = document.createElement('div');
+    t.className = 'turn-text';
+    t.textContent = turn.text || 'The chat run failed. You can retry.';
+    el.appendChild(t);
     return el;
   }
   const stepsBox = document.createElement('div');
@@ -81,6 +151,17 @@ function stepHtml(s) {
   const VERB = { read: 'Read', search: 'Searched', write: 'Wrote', run: 'Ran' };
   if (s.kind === 'think') return `<div class="tool-think">${escapeHtml(s.label)}</div>`;
   return `<div class="tool-step"><span class="tool-verb">${VERB[s.kind] || 'Tool'}</span><span class="tool-target">${escapeHtml(s.label)}</span></div>`;
+}
+
+// Map a tool verb (e.g. "Read", "grep", "mcp__qmd__query") to a step kind so the
+// rendered verb word matches across the live SSE path and history replay. qmd
+// MCP tools (query/get/multi_get) are semantic searches → "search". Everything
+// else falls back to "run" ("Ran").
+function toolKind(verb) {
+  const v = (verb || 'tool').toLowerCase();
+  if (v.startsWith('mcp__qmd')) return 'search';
+  const kindMap = { read: 'read', grep: 'search', glob: 'search', write: 'write', edit: 'write', bash: 'run' };
+  return kindMap[v] || 'run';
 }
 
 // Collapse threshold — runs with this many tool calls fold into one line.
@@ -132,31 +213,6 @@ function renderStepsInto(stepsBox, steps, instant) {
 function scrollThread() {
   const body = document.getElementById('chat-body');
   if (body) body.scrollTop = body.scrollHeight;
-}
-
-// streamText — kept for parity with the render layer (history replay can use
-// it). The LIVE path appends tokens directly as SSE 'text' events arrive, which
-// is simpler and robust for real streaming; this helper stays harmless.
-async function streamText(box, text) {
-  const _sleep = ms => new Promise(r => setTimeout(r, ms));
-  const words = String(text).split(/(\s+)/);
-  box.textContent = '';
-  box.classList.add('streaming');
-  for (let i = 0; i < words.length; i++) {
-    box.textContent += words[i];
-    if (i % 2 === 0) { scrollThread(); await _sleep(26); }
-  }
-  box.classList.remove('streaming');
-  scrollThread();
-}
-
-function actionNote(turnEl, label) {
-  const note = document.createElement('div');
-  note.className = 'turn-result';
-  note.innerHTML = `${svgIcon('done')}<span>${escapeHtml(label)}</span>`;
-  turnEl.appendChild(note);
-  revealNow(note, 'in');
-  scrollThread();
 }
 
 // ── Send + real SSE stream ───────────────────────────────────────────
@@ -227,9 +283,7 @@ async function sendChat() {
     } else if (ev.kind === 'tool_step') {
       clearTyping();
       if (!liveGroup) { liveGroup = makeStepsGroup(); stepsBox.appendChild(liveGroup.group); }
-      const verb = (ev.verb || 'tool').toLowerCase();
-      const kindMap = { read: 'read', grep: 'search', glob: 'search', write: 'write', edit: 'write', bash: 'run' };
-      const row = elFromHTML(stepHtml({ kind: kindMap[verb] || 'run', label: ev.target || ev.verb || '' }));
+      const row = elFromHTML(stepHtml({ kind: toolKind(ev.verb), label: ev.target || ev.verb || '' }));
       liveGroup.inner.appendChild(row); revealNow(row, 'in'); scrollThread();
       toolCount += 1;
       if (toolCount === STEP_COLLAPSE_AT) collapseGroup(liveGroup, toolCount);

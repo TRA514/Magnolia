@@ -69,20 +69,7 @@ If upstream artifacts exist, announce what was imported and which sections were 
 - **One-liner Description**: 1-3 sentence summary for quick context
 - **Background**: Why does this project exist? What problem does it solve?
 
-### Phase 2: Ownership (DACE)
-
-**Ask user:**
-- **Driver**: Who is driving this initiative?
-- **Approver**: Who has final approval authority?
-- **Contributors**: Who is contributing to the work?
-- **Escalation Path**: Where to escalate blockers or decisions?
-- **Driving Teams**: Which teams own this work? (include PM, PMO, Engineering, Design roles)
-- **Contributing Teams**: Which teams are contributing?
-- **Other Stakeholders**: Legal, Security, etc.
-
-*If user doesn't know, leave as TBD.*
-
-### Phase 3: Objectives
+### Phase 2: Objectives
 
 **Ask user:**
 - **Target Customer/User**: Who is this for? (Customer/Partner/Developer/etc.)
@@ -97,7 +84,7 @@ If upstream artifacts exist, announce what was imported and which sections were 
 
 *Source from meeting signals if available. Leave blank if not known.*
 
-### Phase 4: Scope & Non-Goals
+### Phase 3: Scope & Non-Goals
 
 **Ask user:**
 - **Use Cases In Scope**: What specific use cases will be supported? Include descriptions.
@@ -107,7 +94,7 @@ If upstream artifacts exist, announce what was imported and which sections were 
 
 *Be specific. Think through edge cases.*
 
-### Phase 5: Requirements
+### Phase 4: Requirements
 
 **For each milestone, ask:**
 - **Milestone Name/Summary**: What does this milestone deliver?
@@ -121,7 +108,7 @@ If upstream artifacts exist, announce what was imported and which sections were 
 
 *Only include requirements that are known. Don't fabricate.*
 
-### Phase 5b: Build Sequence
+### Phase 4b: Build Sequence
 
 **Organize all requirements into build phases:**
 - **Foundation (P0)**: Core capabilities that everything else depends on
@@ -130,7 +117,7 @@ If upstream artifacts exist, announce what was imported and which sections were 
 
 All phases ship. This is sequencing, not cutting. Include dependency tracking between phases.
 
-### Phase 6: Timeline
+### Phase 5: Timeline
 
 **Ask user:**
 - **Milestones**: List of major milestones (e.g., Architecture, Design, Development, Testing, Launch)
@@ -139,7 +126,7 @@ All phases ship. This is sequencing, not cutting. Include dependency tracking be
 
 *If timeline is not yet determined, leave as TBD.*
 
-### Phase 7: Links and Resources
+### Phase 6: Links and Resources
 
 **Ask user:**
 - **Slack Channels**: Related Slack channels for discussion
@@ -150,21 +137,21 @@ All phases ship. This is sequencing, not cutting. Include dependency tracking be
 
 *Only include links that exist. Don't create placeholder URLs.*
 
-### Phase 8: Metrics and Learning Agenda
+### Phase 7: Metrics and Learning Agenda
 
 **Ask user:**
 - **Goals and Hypotheses**: What do you want to happen?
 - **Signals**: What would indicate success or validation?
 - **Metrics**: What to measure to see these signals?
 
-### Phase 9: Open Questions / Tracked Assumptions
+### Phase 8: Open Questions / Tracked Assumptions
 
 **Populate from Living FAQ:**
 - Import every item from the "Open Questions for PM" section of `living-faq.md` that is still UNANSWERED
 - Add any new questions surfaced during PRD creation
 - Track assumptions the PRD is built on — what happens if they're wrong?
 
-### Phase 10: Appendix / Upstream Artifact Links
+### Phase 9: Appendix / Upstream Artifact Links
 
 **Link to all upstream artifacts** for traceability:
 - Context Brief, Press Releases, One-Pager, Living FAQ, AI Agent Scenarios
@@ -183,7 +170,7 @@ All phases ship. This is sequencing, not cutting. Include dependency tracking be
 
 **Invoke:** `prd-validation` skill
 
-- Apply 6-point rubric
+- Apply 5-point rubric
 - Drafting PRDs may have warnings but not blockers
 - Actionable PRDs must pass all criteria
 

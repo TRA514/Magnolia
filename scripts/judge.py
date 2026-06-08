@@ -40,6 +40,7 @@ ENV_FILE = os.path.join(PM_OS_DIR, ".env.langfuse")
 # voice now comes from profile/voice/* via profile_lib.voice_text()
 
 sys.path.insert(0, SCRIPT_DIR)
+import platform_lib  # noqa: E402
 import profile_lib  # noqa: E402
 import task_lib  # noqa: E402
 
@@ -350,12 +351,8 @@ def build_prompt(kind, rubric, task_fm, body, evidence, log_tail, voice=None):
 
 def run_claude(prompt):
     """Call Claude headless (Opus). Returns assistant text or None."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "CMUX_CLAUDE"))}
-    env["PATH"] = (
-        os.path.join(os.path.expanduser("~"), ".local", "bin")
-        + ":/opt/homebrew/bin:" + env.get("PATH", "/usr/bin:/bin")
-    )
-    cmd = ["claude", "-p", prompt, "--model", JUDGE_MODEL, "--output-format", "json"]
+    env = platform_lib.headless_claude_env()
+    cmd = [platform_lib.resolve_claude(), "-p", prompt, "--model", JUDGE_MODEL, "--output-format", "json"]
     try:
         proc = subprocess.run(
             cmd, cwd=PM_OS_DIR, env=env, capture_output=True, text=True, timeout=CLAUDE_TIMEOUT

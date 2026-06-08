@@ -37,15 +37,38 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import task_lib
+import chat_transcript
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 FEEDBACK_DIR = PROJECT_DIR / "datasets" / "evals" / "feedback-loop"
 
 JUDGE_GOOD_THRESHOLD = 7  # mirror task_server.JUDGE_GOOD_THRESHOLD
+FOLLOW_UP_SAMPLE_CHARS = 160  # trim each follow-up sample text to this length
+FOLLOW_UP_SAMPLE_CAP = 3      # max sample texts per group / per item
 
 
 # ── Signal logic ──────────────────────────────────────────────────────────────
+
+
+def _group_key(t):
+    """Cluster key mirroring the by_worker clustering (task_type → domain → fallback)."""
+    return t.get("task_type") or t.get("domain") or "uncategorized"
+
+
+def _is_followup(event):
+    """A post-run chat follow-up is a user turn that originated in chat after the
+    agent's first pass. Missing origin/post_run are treated as not-a-follow-up."""
+    if not isinstance(event, dict):
+        return False
+    return (event.get("role") == "user"
+            and event.get("origin") == "chat"
+            and event.get("post_run") is True)
+
+
+def _trim(text):
+    s = (text or "").strip()
+    return s[:FOLLOW_UP_SAMPLE_CHARS]
 
 def _is_negative(t):
     s = t.get("judge_score")
@@ -112,13 +135,53 @@ def build_digest(window_days=7, all_history=False, out_dir=None):
         })
 
     flagged_out.sort(key=lambda r: r["timestamp"] or "", reverse=True)
+
+    # ── Post-run chat follow-ups ────────────────────────────────────────────
+    # Scan the SAME windowed task set for chat follow-ups: user turns made in
+    # chat AFTER the agent's first pass. Deterministic capture only — every
+    # post-run follow-up is included; the eval-analyst worker decides what to
+    # do with the clusters. Defensive: tasks without a transcript yield [].
+    windowed = [t for t in (active + archived) if _within_window(t, cutoff_iso)]
+    fu_by_group = defaultdict(lambda: {"count": 0, "samples": []})
+    fu_items = []
+    fu_total = 0
+    for t in windowed:
+        try:
+            events = chat_transcript.read_events(t["id"])
+        except Exception:
+            events = []
+        texts = [_trim(e.get("text")) for e in events if _is_followup(e)]
+        if not texts:
+            continue
+        group = _group_key(t)
+        fu_total += len(texts)
+        g = fu_by_group[group]
+        g["count"] += len(texts)
+        for s in texts:
+            if len(g["samples"]) < FOLLOW_UP_SAMPLE_CAP:
+                g["samples"].append(s)
+        fu_items.append({
+            "task_id": t["id"], "title": t.get("title", ""), "group": group,
+            "count": len(texts), "samples": texts[:FOLLOW_UP_SAMPLE_CAP],
+        })
+    fu_items.sort(key=lambda i: i["count"], reverse=True)
+    follow_ups = {
+        "total": fu_total,
+        "tasks_with_follow_ups": len(fu_items),
+        "by_group": dict(fu_by_group),
+        "items": fu_items,
+    }
+
+    has_signal = bool(flagged_out) or fu_total > 0
     payload = {
         "generated": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "window": window_label,
-        "status": "ok" if flagged_out else "clean",
+        "status": "ok" if has_signal else "clean",
         "totals": {"negative_scores": sum(len(r["negative_scores"]) for r in flagged_out),
-                   "flagged_traces": len(flagged_out)},
+                   "flagged_traces": len(flagged_out),
+                   "follow_ups": fu_total},
         "by_step": dict(by_step), "by_worker": dict(by_worker), "flagged": flagged_out,
+        "follow_ups": follow_ups,
     }
     out.mkdir(parents=True, exist_ok=True)
     (out / "digest.json").write_text(json.dumps(payload, indent=2, default=str))
@@ -135,8 +198,9 @@ def write_stub(out_dir, reason, window_label):
         "window": window_label,
         "status": "no-data",
         "reason": reason,
-        "totals": {"negative_scores": 0, "flagged_traces": 0},
+        "totals": {"negative_scores": 0, "flagged_traces": 0, "follow_ups": 0},
         "by_step": {}, "by_worker": {}, "flagged": [],
+        "follow_ups": {"total": 0, "tasks_with_follow_ups": 0, "by_group": {}, "items": []},
     }
     (out_dir / "digest.json").write_text(json.dumps(payload, indent=2))
     (out_dir / "digest.md").write_text(
@@ -151,7 +215,8 @@ def _write_markdown(path, payload):
     lines.append(f"Generated {payload['generated']}. Status: **{payload['status']}**.")
     lines += ["",
               f"- Negative scores: **{t['negative_scores']}**",
-              f"- Flagged traces: **{t['flagged_traces']}**", ""]
+              f"- Flagged traces: **{t['flagged_traces']}**",
+              f"- Post-run chat follow-ups: **{t.get('follow_ups', 0)}**", ""]
     if payload["status"] == "clean":
         lines.append("No negative signal in this window. Clean week.")
         path.write_text("\n".join(lines) + "\n")
@@ -182,6 +247,28 @@ def _write_markdown(path, payload):
         if r.get("output_summary"):
             lines.append(f"- output: {r['output_summary']}")
         lines.append("")
+
+    fu = payload.get("follow_ups") or {}
+    if fu.get("total", 0) > 0:
+        def _san(s):
+            return (s or "").replace("|", "/").replace("\n", " ")
+        lines += ["## Post-run chat follow-ups", "",
+                  f"{fu['total']} follow-up turn(s) across {fu['tasks_with_follow_ups']} task(s) — "
+                  "evidence the agent's first pass left something on the table.", "",
+                  "| Group | Count | Sample follow-ups |", "|---|---|---|"]
+        for g, d in sorted(fu.get("by_group", {}).items(), key=lambda kv: -kv[1]["count"]):
+            sample = "; ".join(_san(s) for s in d.get("samples", [])[:3])
+            lines.append(f"| {g} | {d['count']} | {sample} |")
+        lines.append("")
+        lines += ["### By task", ""]
+        for item in fu.get("items", []):
+            title = item.get("title") or item.get("task_id")
+            lines.append(f"- **{title}** (`{item['task_id']}`, {item['group']}) — "
+                         f"{item['count']} follow-up(s)")
+            for s in item.get("samples", [])[:3]:
+                lines.append(f"  - {_san(s)}")
+        lines.append("")
+
     path.write_text("\n".join(lines) + "\n")
 
 

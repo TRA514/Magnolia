@@ -42,6 +42,7 @@ import profile_lib
 import packs_lib
 import adapters
 from adapters.project_management._contract import NotConfigured
+from adapters.messaging._contract import NotConfigured as MessagingNotConfigured
 from adapters import NeedsConfirmation
 from cron_scheduler import CronScheduler
 
@@ -790,31 +791,128 @@ def handle_update_message(handler, task_id):
         _error_response(handler, f"Failed to update message: {e}", status=500)
 
 
-def handle_send_message(handler, task_id):
-    """POST /api/tasks/{id}/send-message — Mark a send-message task as sent.
+def _message_draft_from_task(task_id):
+    """Build the messaging-adapter draft from a send-message task's fields.
 
-    Records the send and archives the task. PM-OS has no Slack/Teams/Email
-    transmission channel — this is the approve-and-send step of the collab
-    pattern: the human sends from the drafted doc, then confirms here. It does
-    NOT transmit anything externally.
-    """
+    Channel mirrors the frontend's rendering (email if the channel reads
+    "email", else Teams). Recipients are resolved name→address via the people
+    email cache (literal addresses pass through). Returns the dict the m365
+    adapter's publish() consumes."""
+    fm = task_lib.read_task(task_id)["frontmatter"] or {}
+    raw_channel = (fm.get("message_channel") or "").lower()
+    channel = "email" if "email" in raw_channel else "teams"
+    cache = _load_email_cache()
+    to_display = fm.get("message_to") or ""
+    to = []
+    for tok in (t.strip() for t in to_display.split(",")):
+        if not tok:
+            continue
+        to.append(tok if "@" in tok else cache.get(tok, tok))
+    return {
+        "channel": channel,
+        "to": to,
+        "to_display": to_display,
+        "subject": fm.get("message_subject") or "",
+        "body": fm.get("message_body") or "",
+        "task_id": task_id,
+    }
+
+
+def _attempt_send_message(task_id, draft):
+    """Tier-2 gated send. Returns (status, payload), mirroring _attempt_publish:
+      ("needs_confirm", None)      — gate fired; nothing sent
+      ("already_sent",  None)      — task already done; nothing sent
+      ("unconfigured",  None)      — no messaging provider (caller records manually)
+      ("error",  (code, msg))      — NotConfigured -> 400, mgc/RuntimeError -> 502
+      ("ok",     (message_id, None))
+    On ok, stamps message_sent_at + message_id and archives the task."""
     try:
-        task_lib.update_task(
-            task_id,
-            changes={"message_sent_at": task_lib._now_iso()},
-            comment="Message marked as sent (recorded; PM-OS does not transmit — sent manually from the draft).",
-            actor="human",
-        )
-        archive_path = task_lib.complete_task(task_id, actor="human")
-        _json_response(handler, {
-            "status": "ok",
-            "message": f"Message recorded as sent; {task_id} archived",
-            "archive_path": archive_path,
-        })
+        existing = task_lib.read_task(task_id)
+        if (existing.get("frontmatter") or {}).get("status") == "done":
+            _note(task_id, "Send skipped — task already sent (no duplicate message).")
+            return ("already_sent", None)
+    except FileNotFoundError:
+        pass
+    try:
+        result = adapters.publish("messaging", draft)
+    except NeedsConfirmation:
+        return ("needs_confirm", None)
+    except MessagingNotConfigured as e:
+        _note(task_id, f"Send failed: {e}")
+        return ("error", (400, str(e)))
+    except RuntimeError as e:
+        # mgc/auth failure — the message carries the actionable `mgc login` hint.
+        _note(task_id, f"Send failed: {e}")
+        return ("error", (502, f"Send failed: {e}"))
+    if result is None:
+        return ("unconfigured", None)
+    message_id, _url = result
+    try:
+        task_lib.update_task(task_id, changes={
+            "message_sent_at": task_lib._now_iso(), "message_id": message_id,
+            "agent_output": f"Sent via {draft.get('channel')} ({message_id})"},
+            comment=f"Message sent via {draft.get('channel')} to {draft.get('to_display')} ({message_id}).",
+            actor="system")
+        task_lib.complete_task(task_id, actor="system")
+    except Exception:
+        pass
+    return ("ok", (message_id, None))
+
+
+def _record_manual_send(task_id):
+    """Legacy fallback when no messaging provider is configured: record that the
+    operator sent the drafted message themselves, and archive (the pre-mgc
+    behavior). Returns the archive path."""
+    task_lib.update_task(
+        task_id, changes={"message_sent_at": task_lib._now_iso()},
+        comment="Message marked as sent (no send provider configured — sent manually from the draft).",
+        actor="human")
+    return task_lib.complete_task(task_id, actor="human")
+
+
+def handle_send_message(handler, task_id):
+    """POST /api/tasks/{id}/send-message — actually send the drafted message.
+
+    Routes through the Tier-2 messaging adapter (mgc → Graph): email via
+    sendMail, Teams via chat. First-ever send raises NeedsConfirmation → a
+    one-time confirm card; later sends fire straight through. With no provider
+    configured it falls back to recording a manual send (pre-mgc behavior)."""
+    try:
+        draft = _message_draft_from_task(task_id)
     except FileNotFoundError:
         _error_response(handler, f"Task {task_id} not found", status=404)
-    except Exception as e:
-        _error_response(handler, f"Failed to send message: {e}", status=500)
+        return
+    status, payload = _attempt_send_message(task_id, draft)
+    if status == "needs_confirm":
+        cid = _emit_confirm_card("messaging", task_id)
+        _json_response(handler, {
+            "status": "needs_confirmation", "confirm_task": cid,
+            "message": "First send needs a one-time confirm — see the collab queue.",
+        })
+        return
+    if status == "already_sent":
+        _json_response(handler, {"status": "ok", "message": "Already sent — no duplicate."})
+        return
+    if status == "unconfigured":
+        try:
+            archive_path = _record_manual_send(task_id)
+        except FileNotFoundError:
+            _error_response(handler, f"Task {task_id} not found", status=404)
+            return
+        _json_response(handler, {
+            "status": "ok", "archive_path": archive_path,
+            "message": f"Recorded as sent (sent manually); {task_id} archived",
+        })
+        return
+    if status == "ok":
+        message_id, _ = payload
+        _json_response(handler, {
+            "status": "ok", "message_id": message_id,
+            "message": f"Message sent ({draft['channel']}); {task_id} archived",
+        })
+        return
+    code, msg = payload
+    _error_response(handler, msg, status=code)
 
 
 def handle_add_comment(handler, task_id):
@@ -1460,31 +1558,47 @@ def handle_confirm(handler, task_id):
             pass
         _json_response(handler, {"ok": True, "note": "confirmed; source draft no longer exists"})
         return
-    draft = jira_publish.parse_jira_draft(src.get("body", ""))
-    status, payload = _attempt_publish(source_task, draft)
-    if status == "already_published":
+
+    # Re-drive the blocked external write, dispatched by family. Each family
+    # returns the same (status, payload) shape; "already_*" statuses differ in
+    # name only. The success payload differs (issue key vs message id).
+    if family == "messaging":
+        draft = _message_draft_from_task(source_task)
+        status, payload = _attempt_send_message(source_task, draft)
+        done_statuses = ("ok", "already_sent")
+        success_key = "message_id"
+    else:
+        draft = jira_publish.parse_jira_draft(src.get("body", ""))
+        status, payload = _attempt_publish(source_task, draft)
+        done_statuses = ("ok", "already_published")
+        success_key = "issue"
+
+    if status in done_statuses and status != "ok":
         try:
             task_lib.complete_task(task_id, actor="human")
         except Exception:
             pass
-        _json_response(handler, {"ok": True, "note": "source already published"})
+        _json_response(handler, {"ok": True, "note": f"source already {status.split('_')[-1]}"})
         return
     if status == "needs_confirm":
         # The active provider changed between emitting this card and confirming, so
         # consent was recorded for a different provider. Leave the confirm card
         # un-completed — a retry against the new provider is expected.
-        _error_response(handler, "The integration changed since this card was created — please retry the publish to confirm again.", status=409)
+        _error_response(handler, "The integration changed since this card was created — please retry to confirm again.", status=409)
         return
     if status != "ok":
-        code, msg = payload if isinstance(payload, tuple) else (500, "publish failed")
+        code, msg = payload if isinstance(payload, tuple) else (500, "external write failed")
         _error_response(handler, msg, status=code)
         return
     try:
         task_lib.complete_task(task_id, actor="human")
     except Exception:
         pass
-    issue_key, issue_url = payload
-    _json_response(handler, {"ok": True, "issue_key": issue_key, "issue_url": issue_url})
+    if success_key == "message_id":
+        _json_response(handler, {"ok": True, "message_id": payload[0]})
+    else:
+        issue_key, issue_url = payload
+        _json_response(handler, {"ok": True, "issue_key": issue_key, "issue_url": issue_url})
 
 
 def _load_email_cache():

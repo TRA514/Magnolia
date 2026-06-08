@@ -20,6 +20,7 @@ import sys
 import fcntl
 import argparse
 import time
+import uuid
 import glob as globmod
 from datetime import datetime, timezone
 
@@ -676,6 +677,25 @@ def _resolve_task_model(task, worker):
     return profile_lib.resolve_model(tier, task_override=override)
 
 
+def build_claude_cmd(prompt, model, tools_str, max_turns, session_id=None):
+    """Build the `claude` argv + the session id it will use.
+
+    The prompt MUST stay the first positional arg: --allowedTools is variadic
+    and would otherwise swallow a trailing prompt (verified in the CLI spike).
+    """
+    sid = session_id or str(uuid.uuid4())
+    cmd = [
+        "claude",
+        prompt,
+        "--model", model,
+        "--allowedTools", tools_str,
+        "--max-turns", max_turns,
+        "--permission-mode", "bypassPermissions",
+        "--session-id", sid,
+    ]
+    return cmd, sid
+
+
 def dispatch_task(task, dry_run=False, rerun=False, workers=None):
     """Invoke claude in interactive mode for a single task.
 
@@ -757,19 +777,10 @@ def dispatch_task(task, dry_run=False, rerun=False, workers=None):
 
     # Interactive mode (no -p) gets cloud MCPs (Pendo, Jira, M365, etc.)
     # Use `script` to provide a pseudo-TTY for the interactive TUI
-    claude_cmd = [
-        "claude",
-        prompt,
-        "--model", model,
-        "--allowedTools", tools_str,
-        "--max-turns", max_turns,
-        "--permission-mode", "bypassPermissions",
-    ]
+    claude_cmd, claude_session_id = build_claude_cmd(prompt, model, tools_str, max_turns)
 
     # Wrap in `script -q` to provide pseudo-TTY
-    cmd = [
-        "script", "-q", output_file,
-    ] + claude_cmd
+    cmd = ["script", "-q", output_file] + claude_cmd
 
     # Strip ALL Claude-related env vars to prevent nested-session detection,
     # and ensure ~/.local/bin (claude) and /opt/homebrew/bin are in PATH for cron
@@ -790,6 +801,10 @@ def dispatch_task(task, dry_run=False, rerun=False, workers=None):
             env=env,
             start_new_session=True,  # own process group for clean kill
         )
+        task_lib.update_task(task_id, {
+            "claude_session_id": claude_session_id,
+            "session_origin": "background_agent",
+        })
     except FileNotFoundError:
         log("ERROR: 'claude' or 'script' command not found in PATH", task_id=task_id)
         return {"task_id": task_id, "success": False, "output": None, "error": "claude not found"}

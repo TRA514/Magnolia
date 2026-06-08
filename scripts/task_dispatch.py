@@ -25,6 +25,7 @@ import glob as globmod
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import platform_lib
 import task_lib
 import packs_lib
 import profile_lib
@@ -571,18 +572,25 @@ def build_prompt_for_worker(task_id, worker, rerun=False):
 # ─── Task Dispatch ────────────────────────────────────────────────────────────
 
 def _kill_process_group(proc):
-    """Send SIGTERM to the process group, escalate to SIGKILL if needed."""
-    try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-    except OSError:
-        pass
+    """Terminate the child's process group, escalate if it doesn't exit.
+
+    The first (graceful) signal goes through the cross-platform seam
+    (SIGTERM on POSIX, terminate() on Windows). On POSIX we keep the
+    reap + SIGKILL escalation exactly as before so macOS behavior does
+    not regress; on Windows there is no group-SIGKILL equivalent, so a
+    second seam call (terminate) is the best-effort escalation.
+    """
+    platform_lib.kill_process_group(proc)
     try:
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        except OSError:
-            pass
+        if platform_lib.os_kind() == "windows":
+            platform_lib.kill_process_group(proc)
+        else:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except OSError:
+                pass
         proc.wait()
 
 

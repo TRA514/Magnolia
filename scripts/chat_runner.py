@@ -22,6 +22,7 @@ import signal
 import subprocess
 import uuid
 
+import platform_lib
 import profile_lib
 import task_lib
 import chat_transcript
@@ -393,18 +394,11 @@ def _now_iso():
 def _chat_env():
     """Env for the claude subprocess.
 
-    Mirrors task_dispatch's handling: strip every CLAUDE*/CMUX_CLAUDE* var so the
-    child doesn't detect a nested session, and prepend ~/.local/bin (where
-    `claude` lives) + /opt/homebrew/bin to PATH so it resolves under cron/headless.
+    Thin seam over the cross-platform launch abstraction: strips every
+    CLAUDE*/CMUX_CLAUDE* var (so the child doesn't detect a nested session) and
+    fixes PATH per-OS so `claude` resolves under cron/headless.
     """
-    env = {k: v for k, v in os.environ.items()
-           if not k.startswith(("CLAUDE", "CMUX_CLAUDE"))}
-    env["PATH"] = (
-        os.path.join(os.path.expanduser("~"), ".local", "bin")
-        + ":/opt/homebrew/bin"
-        + ":" + env.get("PATH", "/usr/bin:/bin")
-    )
-    return env
+    return platform_lib.headless_claude_env()
 
 
 def _spawn(cmd, exit_holder=None):
@@ -426,6 +420,8 @@ def _spawn(cmd, exit_holder=None):
     The subprocess return code is written into ``exit_holder['returncode']``
     (when a dict is supplied) so run_turn can detect abnormal termination (I1).
     """
+    if cmd and cmd[0] == "claude":
+        cmd = [platform_lib.resolve_claude()] + list(cmd[1:])
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -433,7 +429,7 @@ def _spawn(cmd, exit_holder=None):
         text=True,
         cwd=PM_OS_DIR,
         env=_chat_env(),
-        start_new_session=True,  # own process group for clean kill (C1)
+        **platform_lib.process_group_kwargs(),  # own process group for clean kill (C1)
     )
     try:
         yield from proc.stdout

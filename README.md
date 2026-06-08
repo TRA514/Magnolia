@@ -3,6 +3,8 @@
 *A guide for someone meeting the system for the first time.*
 
 > Companion to [`UX_VISION.md`](./UX_VISION.md) (why the experience feels the way it does) and [`ROADMAP.md`](./ROADMAP.md) (where the system goes). This document explains, from a user's perspective, **what Magnolia is and how it works.**
+>
+> **Setting it up for the first time? Start with [`docs/INSTALL.md`](./docs/INSTALL.md)** — prerequisites, where to put the repo, and the `onboard me` handoff.
 
 ---
 

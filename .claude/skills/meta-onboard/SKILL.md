@@ -81,7 +81,10 @@ is visible on the board once it spawns), mark it in-progress as you begin, done 
    (install requires a non-empty program list, so pass `default_cmd()`). It returns a dict; on macOS
    check the `activated` flag — if it's False (see `activation_error`), let them know auto-start-on-reboot
    didn't engage yet (the board still runs now, it just won't relaunch on reboot until that's sorted)
-   and move on without blocking. Then open it: `platform_lib.open_url(server_lib.url())`. **This is the
+   and move on without blocking. On Windows, auto-start-on-reboot uses Task Scheduler and is **not set
+   up automatically** — the board runs now; tell them it's a quick optional follow-up later (the
+   `persist_lib.install` return carries the PowerShell command, but never auto-run it on their first
+   session). Don't block. Then open it: `platform_lib.open_url(server_lib.url())`. **This is the
    board-spawn beat** — welcome them onto their live board.
 6. **Voice discovery** — if M365 is authorized, study their recent Teams + Outlook messages (and any
    adopted/feed transcripts) and draft `profile/voice/teams.md` and `profile/voice/email.md`, then

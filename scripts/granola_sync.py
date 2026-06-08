@@ -18,6 +18,7 @@ import transcript_post        # noqa: E402
 
 DEFAULT_MODEL = "claude-haiku-4-5"
 MAX_NEW_PER_RUN = 20
+SEEN_IN_PROMPT = 200          # cap ledger ids interpolated into the fetch prompt
 FETCH_TIMEOUT = 300           # seconds for the claude -p subprocess
 GRANOLA_TOOLS = ("mcp__claude_ai_Granola__list_meetings,"
                  "mcp__claude_ai_Granola__get_meeting_transcript")
@@ -45,14 +46,17 @@ def safe_filename(name):
     return re.sub(r'[\\/:*?"<>|]', "_", name or "").strip()
 
 
-def _basename(created_at, title):
+def _basename(created_at, title, mid=None):
     try:
         dt = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
         stamp = dt.strftime("%Y-%m-%d_%H-%M")
     except Exception:
         dt, stamp = None, "unknown"
     clean = re.sub(r"[_ ]{2,}", " ", safe_filename(title)).strip() or "untitled"
-    return f"{stamp}_{clean}", dt
+    # Suffix a short id slice so same minute+title across meetings can't collide.
+    suffix = (mid or "")[:8]
+    base = f"{stamp}_{clean}_{suffix}" if suffix else f"{stamp}_{clean}"
+    return base, dt
 
 
 def _load_state(root=None):
@@ -87,11 +91,15 @@ def _parse_fetch_output(stdout):
     text = stdout.strip()
     try:
         outer = json.loads(text)
-        text = outer.get("result", text) if isinstance(outer, dict) else text
+        if isinstance(outer, dict):
+            text = outer.get("result", text)
     except json.JSONDecodeError:
         pass
     if isinstance(text, list):
         return text
+    if not isinstance(text, str):
+        # e.g. {"result": null} / {"result": 42} / {"result": {...}}
+        return None
     start, end = text.find("["), text.rfind("]")
     if start == -1 or end == -1 or end < start:
         return None
@@ -102,10 +110,30 @@ def _parse_fetch_output(stdout):
         return None
 
 
-def _fetch_new_meetings(seen_ids, root=None):
+def _prompt_ids(state_or_ids):
+    """Cap the ledger ids interpolated into the fetch prompt to a recent slice.
+    The LOCAL post-fetch filter (using the FULL seen set) is the authoritative
+    dedup — this only bounds prompt size. If we got a dict keyed by UUID with
+    `downloaded_at`, take the most-recently-downloaded N; else a plain slice."""
+    if isinstance(state_or_ids, dict):
+        ordered = sorted(
+            state_or_ids,
+            key=lambda k: (state_or_ids.get(k) or {}).get("downloaded_at") or "",
+            reverse=True,
+        )
+        return ordered[:SEEN_IN_PROMPT]
+    return list(state_or_ids)[:SEEN_IN_PROMPT]
+
+
+def _fetch_new_meetings(state_or_ids, root=None):
     """THE mockable seam. Shell out to claude -p + Granola MCP; return a list of
-    new meeting dicts. Validates JSON; one retry on malformed; [] on hard failure."""
-    cmd = ["claude", "-p", _fetch_prompt(seen_ids),
+    new meeting dicts. Validates JSON; one retry on malformed; [] on hard failure.
+
+    Accepts the full state dict (keyed by UUID) or a bare set/iterable of ids.
+    `seen` (the FULL set) is the authoritative local dedup; the prompt only
+    carries a bounded recent slice."""
+    seen = set(state_or_ids)
+    cmd = ["claude", "-p", _fetch_prompt(_prompt_ids(state_or_ids)),
            "--model", _model(root), "--output-format", "json",
            "--allowedTools", GRANOLA_TOOLS,
            "--permission-mode", "bypassPermissions", "--max-turns", "30"]
@@ -119,8 +147,9 @@ def _fetch_new_meetings(seen_ids, root=None):
             continue
         meetings = _parse_fetch_output(out.stdout)
         if meetings is not None:
-            return [m for m in meetings if m.get("id") not in seen_ids and m.get("transcript")]
-        log.warning("malformed fetch JSON (attempt %d)", attempt)
+            return [m for m in meetings if m.get("id") not in seen and m.get("transcript")]
+        log.warning("malformed fetch JSON (attempt %d): rc=%s stderr=%.500s",
+                    attempt, out.returncode, (out.stderr or ""))
     return []
 
 
@@ -137,7 +166,7 @@ def main(root=None):
 
     Path(_state_dir(root)).mkdir(parents=True, exist_ok=True)
     state = _load_state(root)
-    meetings = _fetch_new_meetings(set(state), root=root)
+    meetings = _fetch_new_meetings(state, root=root)
     log.info("Granola returned %d new meeting(s)", len(meetings))
 
     new_count = 0
@@ -145,7 +174,7 @@ def main(root=None):
         mid = m.get("id")
         if not mid or mid in state:
             continue
-        base, dt = _basename(m.get("created_at"), m.get("title"))
+        base, dt = _basename(m.get("created_at"), m.get("title"), mid)
         folder = _meetings_dir(root) / (dt.strftime("%Y-%m") if dt else "unknown")
         folder.mkdir(parents=True, exist_ok=True)
         txt_path = folder / f"{base}.txt"
@@ -159,9 +188,16 @@ def main(root=None):
             continue            # do NOT mark seen -> retried next run
         state[mid] = {"title": m.get("title"), "downloaded_at": datetime.now().isoformat(),
                       "folder": str(folder)}
-        final_path = transcript_post.run_downstream(txt_path, mid, state, log)
-        state[mid]["final_path"] = str(final_path)
-        _save_state(state, root)
+        # Already marked seen + the .txt write succeeded; isolate downstream so one
+        # bad meeting can't abort the loop. On error, log and continue (stays seen).
+        try:
+            final_path = transcript_post.run_downstream(txt_path, mid, state, log)
+            state[mid]["final_path"] = str(final_path)
+            _save_state(state, root)
+        except Exception as exc:
+            log.error("  Downstream failed for %s: %s", mid, exc)
+            _save_state(state, root)
+            continue
         new_count += 1
 
     log.info("Downloaded %d new Granola transcript(s)", new_count)

@@ -874,6 +874,15 @@ def dispatch_task(task, dry_run=False, rerun=False, workers=None):
 
         time.sleep(POLL_INTERVAL)
 
+    # Windows: close our inherited write handle now that the process is done, so
+    # the read-back below sees a complete, flushed file. (POSIX used the `script`
+    # pty + DEVNULL — there's no handle of ours to close.)
+    if stdout_target is not subprocess.DEVNULL:
+        try:
+            stdout_target.close()
+        except OSError:
+            pass
+
     # Read output from the script log file
     task_output = None
     try:

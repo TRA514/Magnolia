@@ -17,7 +17,7 @@ set -euo pipefail
 PM_OS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # 2. Python interpreter (whatever python3 is on PATH).
-PYTHON="$(command -v python3)"
+PYTHON="$(command -v python3)" || { echo "python3 not found on PATH" >&2; exit 1; }
 
 # 3. Generic label — NOT a person's name.
 LABEL="com.magnolia.granolasync"
@@ -62,7 +62,10 @@ done <<< "$rendered"
 
 # 7. (Re)load the LaunchAgent.
 launchctl unload "$PLIST" 2>/dev/null || true
-launchctl load "$PLIST"
+if ! launchctl load "$PLIST"; then
+    echo "launchctl load failed for $PLIST — check 'launchctl list | grep $LABEL' and Console.app for details." >&2
+    exit 1
+fi
 
 # 8. Confirmation.
 cat <<EOF

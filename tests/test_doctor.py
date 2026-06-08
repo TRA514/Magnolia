@@ -184,6 +184,36 @@ def test_qmd_is_not_required():
     assert qmd.get("required") is False
 
 
+def test_recommended_tools_carry_rationale():
+    # qmd/pandoc/mgc are strongly recommended (non-blocking) and must carry a
+    # plain-language rationale the Doctor can surface — see _LOCAL_TOOLS.
+    doc = doctor.detect()
+    caps = doc["capabilities"]
+    for name in ("qmd", "pandoc", "msgraph_cli"):
+        assert caps[name].get("recommended") is True, name
+        assert caps[name].get("rationale"), name
+
+
+def test_qmd_remedy_points_at_correct_repo():
+    # Guard against the wrong-qmd hallucination: the remedy must name the npm
+    # package + tobi/qmd, NOT a brew formula. (Asserted against the source-of-
+    # truth spec, since detect() omits remedy when the tool is already present.)
+    remedy = doctor._LOCAL_TOOLS["qmd"]["remedy"]
+    assert "@tobilu/qmd" in remedy
+    assert "github.com/tobi/qmd" in remedy
+    assert "brew install qmd" not in remedy
+
+
+def test_report_text_surfaces_strong_recommendation():
+    caps = {"schema_version": 1, "platform": "windows", "capabilities": {
+        "qmd": {"kind": "local", "status": "missing", "recommended": True,
+                "rationale": "the killer feature", "remedy": "npm install -g @tobilu/qmd"},
+    }}
+    text = doctor.report_text(caps)
+    assert "STRONGLY RECOMMENDED" in text
+    assert "the killer feature" in text
+
+
 def test_check_exit_code(tmp_path, monkeypatch):
     (tmp_path / "profile").mkdir()
     (tmp_path / "profile" / "integrations.yaml").write_text("transcript:\n  provider: none\n")

@@ -696,6 +696,22 @@ def build_claude_cmd(prompt, model, tools_str, max_turns, session_id=None):
     return cmd, sid
 
 
+def _persist_session_id(task_id, claude_session_id):
+    """Best-effort: record the resumable session id on the task frontmatter.
+
+    Persisting the session id is a nice-to-have for a future chat panel. It must
+    NEVER destabilize dispatch — task_lib.update_task can raise FileNotFoundError
+    or other I/O errors, so swallow everything and just log a warning.
+    """
+    try:
+        task_lib.update_task(task_id, {
+            "claude_session_id": claude_session_id,
+            "session_origin": "background_agent",
+        })
+    except Exception:
+        log(f"WARN: could not persist session id for {task_id}", task_id=task_id)
+
+
 def dispatch_task(task, dry_run=False, rerun=False, workers=None):
     """Invoke claude in interactive mode for a single task.
 
@@ -801,13 +817,14 @@ def dispatch_task(task, dry_run=False, rerun=False, workers=None):
             env=env,
             start_new_session=True,  # own process group for clean kill
         )
-        task_lib.update_task(task_id, {
-            "claude_session_id": claude_session_id,
-            "session_origin": "background_agent",
-        })
     except FileNotFoundError:
         log("ERROR: 'claude' or 'script' command not found in PATH", task_id=task_id)
         return {"task_id": task_id, "success": False, "output": None, "error": "claude not found"}
+
+    # best-effort: persist resumable session id; never let this break dispatch.
+    # The worker is already running (Popen succeeded) — a persistence failure
+    # must not orphan the live process or crash the dispatch loop.
+    _persist_session_id(task_id, claude_session_id)
 
     # Poll: wait for process exit OR agent to report completion via task file.
     # The claude interactive process often hangs after the agent finishes, so we

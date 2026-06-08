@@ -75,13 +75,37 @@ my approval. I'll see permission prompts for installs/downloads — that's expec
 ```
 
 ## Prompt 1 — macOS
-Same as above, with these substitutions:
-- Package installs via Homebrew: `brew install git node python pandoc` (install Homebrew from
-  https://brew.sh first if missing).
-- mgc: download `osx-arm64.zip` (`osx-x64.zip` on Intel), extract, add to PATH.
-- qmd, the clone, and the location question are identical.
-- pip uses `--break-system-packages` if Homebrew Python complains (PEP-668):
-  `python3 -m pip install --break-system-packages ruamel.yaml pytest`.
+Paste into a fresh Claude Code session:
+
+```
+You're installing a tool called Magnolia on my Mac and getting it ready for first-run setup. Do
+the steps in order, explain each in plain language, and ASK before anything that needs my
+approval. I'll see permission prompts for installs/downloads — that's expected. Do NOT start
+"onboard me" — stop at the end and tell me to restart you.
+
+1. Confirm this is macOS and tell me the chip: run `uname -m` (arm64 = Apple Silicon, x86_64 = Intel).
+2. Ask me: "Do you already use Claude Code? If so, where — what folder do you usually run it in?"
+   - If yes: we'll clone Magnolia INSIDE that same workspace so it inherits my existing
+     integrations and skills. Confirm the target path with me before cloning.
+   - If no: use ~/dev/Magnolia (create ~/dev if needed).
+3. Make sure Homebrew is installed (`brew --version`). If it isn't, install it from
+   https://brew.sh and add it to my PATH (on Apple Silicon, add `eval "$(/opt/homebrew/bin/brew
+   shellenv)"` to ~/.zprofile).
+4. Install these via Homebrew (skip any already present): git, node (Node >= 22, for qmd),
+   python, pandoc  →  `brew install git node python pandoc`
+5. Install qmd (semantic search): npm install -g @tobilu/qmd
+   The correct qmd is https://github.com/tobi/qmd — do NOT install any other tool named "qmd".
+6. Install the Microsoft Graph CLI (mgc): download https://aka.ms/get/graphcli/latest/osx-arm64.zip
+   (use osx-x64.zip on Intel), extract to a stable folder (e.g. ~/.local/bin), and make sure that
+   folder is on my PATH in ~/.zprofile. Verify `mgc --version` in a NEW terminal. Do NOT log me in
+   yet — the setup flow handles the Microsoft sign-in.
+7. Install Python deps: python3 -m pip install --break-system-packages ruamel.yaml pytest
+   (Homebrew's Python is "externally managed" — the flag is expected and safe here.)
+8. Clone the repo to the location we agreed in step 2:
+   git clone https://github.com/jayhjenkins/Magnolia.git "<agreed path>"
+9. STOP. Tell me exactly: "Setup's done. Fully quit Claude Code and reopen it (so it picks up the
+   newly installed tools on PATH), then cd into your Magnolia folder and type: onboard me."
+```
 
 ---
 

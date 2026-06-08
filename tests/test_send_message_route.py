@@ -104,6 +104,29 @@ def test_attempt_send_skips_when_already_sent(srv, monkeypatch):
     assert status == "already_sent" and calls == []
 
 
+def test_attempt_send_skips_when_message_sent_at_present(srv, monkeypatch):
+    # H2: message_sent_at alone (archive may have failed) still blocks a re-send.
+    import adapters, task_lib
+    calls = []
+    monkeypatch.setattr(adapters, "publish", lambda *a, **k: calls.append(1) or ("M", None))
+    tid = _send_task()
+    task_lib.update_task(tid, {"message_sent_at": task_lib._now_iso()})  # sent but not archived
+    status, _ = srv._attempt_send_message(tid, _draft())
+    assert status == "already_sent" and calls == []
+
+
+def test_attempt_send_blocks_unresolved_bare_name(srv, monkeypatch):
+    # H1: a recipient that didn't resolve to an address (no '@') must NOT be sent.
+    import adapters
+    monkeypatch.setattr(adapters, "get", lambda fam, root=None: object())  # provider configured
+    calls = []
+    monkeypatch.setattr(adapters, "publish", lambda *a, **k: calls.append(1) or ("X", None))
+    draft = {"channel": "email", "to": ["Dana Smith"], "to_display": "Dana Smith", "body": "x"}
+    status, payload = srv._attempt_send_message(_send_task(), draft)
+    assert status == "error" and payload[0] == 400
+    assert calls == []   # never attempted to send to a malformed address
+
+
 def test_attempt_send_runtime_error_is_502(srv, monkeypatch):
     import adapters
     monkeypatch.setattr(adapters, "publish",

@@ -826,13 +826,25 @@ def _attempt_send_message(task_id, draft):
       ("error",  (code, msg))      — NotConfigured -> 400, mgc/RuntimeError -> 502
       ("ok",     (message_id, None))
     On ok, stamps message_sent_at + message_id and archives the task."""
+    # Idempotency: a prior send stamps message_sent_at AND marks the task done.
+    # Either signal means "already sent" — message_sent_at survives even if the
+    # archive step failed, so a retry can't re-send (closes the double-send window).
     try:
-        existing = task_lib.read_task(task_id)
-        if (existing.get("frontmatter") or {}).get("status") == "done":
+        fm = task_lib.read_task(task_id).get("frontmatter") or {}
+        if fm.get("status") == "done" or fm.get("message_sent_at"):
             _note(task_id, "Send skipped — task already sent (no duplicate message).")
             return ("already_sent", None)
     except FileNotFoundError:
         pass
+    # Fail fast on a recipient we couldn't resolve to a real address/UPN — never
+    # send to a bare display name. Only enforced when a provider is actually
+    # configured; with no provider the caller records a manual send (labels are fine).
+    unresolved = [t for t in (draft.get("to") or []) if "@" not in t]
+    if unresolved and adapters.get("messaging") is not None:
+        msg = ("Couldn't resolve recipient(s) to an address: " + ", ".join(unresolved)
+               + " — add them to datasets/people/email_cache.json or use a full address.")
+        _note(task_id, f"Send blocked: {msg}")
+        return ("error", (400, msg))
     try:
         result = adapters.publish("messaging", draft)
     except NeedsConfirmation:
@@ -847,15 +859,20 @@ def _attempt_send_message(task_id, draft):
     if result is None:
         return ("unconfigured", None)
     message_id, _url = result
+    # Email (sendMail) returns no id — m365 reports "sent"; only stamp a real id.
+    changes = {"message_sent_at": task_lib._now_iso(),
+               "agent_output": f"Sent via {draft.get('channel')}"}
+    if message_id and message_id != "sent":
+        changes["message_id"] = message_id
     try:
-        task_lib.update_task(task_id, changes={
-            "message_sent_at": task_lib._now_iso(), "message_id": message_id,
-            "agent_output": f"Sent via {draft.get('channel')} ({message_id})"},
-            comment=f"Message sent via {draft.get('channel')} to {draft.get('to_display')} ({message_id}).",
+        task_lib.update_task(task_id, changes=changes,
+            comment=f"Message sent via {draft.get('channel')} to {draft.get('to_display')}.",
             actor="system")
         task_lib.complete_task(task_id, actor="system")
-    except Exception:
-        pass
+    except Exception as e:
+        # The send already happened — make the bookkeeping failure VISIBLE (a
+        # not-archived-but-sent task could otherwise be retried into a duplicate).
+        _note(task_id, f"WARNING: message sent but recording/archive failed: {e}")
     return ("ok", (message_id, None))
 
 

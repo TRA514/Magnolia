@@ -81,3 +81,39 @@ def test_unified_scopes_cover_email_and_teams_and_calendar():
     assert "Mail.Send" in s
     assert "Chat.ReadWrite" in s
     assert "Calendars.ReadWrite" in s
+
+
+# ── Real mgc argv (the actual send command — regression guard for C1/C2) ─────
+
+class _FakeProc:
+    def __init__(self, stdout="", rc=0):
+        self.stdout, self.stderr, self.returncode = stdout, "", rc
+
+
+def test_send_email_argv_requires_user_id_me(monkeypatch):
+    """sendMail under the users resource REQUIRES --user-id (verified vs mgc 1.9.0)."""
+    calls = []
+    monkeypatch.setattr(g.shutil, "which", lambda _: "/usr/bin/mgc")
+    monkeypatch.setattr(g.subprocess, "run", lambda args, **k: calls.append(args) or _FakeProc(""))
+    g.send_email(["a@x.com"], "S", "B")
+    argv = calls[0]
+    assert argv[:4] == ["mgc", "users", "send-mail", "post"]
+    assert "--user-id" in argv and argv[argv.index("--user-id") + 1] == "me"
+    assert "--body" in argv
+
+
+def test_send_teams_message_uses_chat_id_option_not_positional(monkeypatch):
+    """The chat id is a REQUIRED --chat-id option, not a path segment (verified vs mgc 1.9.0)."""
+    import json as _json
+    calls = []
+    def fake_run(args, **k):
+        calls.append(args)
+        return _FakeProc(_json.dumps({"id": "CHAT-1" if "messages" not in args else "MSG-1"}))
+    monkeypatch.setattr(g.shutil, "which", lambda _: "/usr/bin/mgc")
+    monkeypatch.setattr(g.subprocess, "run", fake_run)
+    out = g.send_teams("me@co.com", ["them@co.com"], "ping")
+    create_argv, message_argv = calls[0], calls[1]
+    assert create_argv[:3] == ["mgc", "chats", "create"]
+    assert message_argv[:4] == ["mgc", "chats", "messages", "create"]
+    assert message_argv[message_argv.index("--chat-id") + 1] == "CHAT-1"
+    assert out["message_id"] == "MSG-1"

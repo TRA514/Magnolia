@@ -117,8 +117,10 @@ def send_email(to, subject, body, html=False, dry_run=False):
     payload = build_email_payload(to, subject, body, html=html)
     if dry_run:
         return {"dry_run": True, "channel": "email", "payload": payload}
-    _run_mgc(["users", "send-mail", "post", "--body", json.dumps(payload)])
-    # sendMail has no response body; synthesize a stable marker for the caller.
+    # sendMail lives under the users resource and REQUIRES --user-id ("me" =
+    # the signed-in user); the body is the sendMail request payload.
+    _run_mgc(["users", "send-mail", "post", "--user-id", "me", "--body", json.dumps(payload)])
+    # sendMail returns 204 No Content — there is no message id to return.
     return {"status": "sent", "channel": "email", "to": list(to)}
 
 
@@ -133,7 +135,8 @@ def send_teams(me_upn, recipient_upns, body, html=False, dry_run=False):
     chat_id = chat.get("id")
     if not chat_id:
         raise RuntimeError(f"Could not resolve a chat id from mgc response: {chat!r}")
-    msg = _run_mgc(["chats", chat_id, "messages", "create",
+    # The chat id is a REQUIRED option (--chat-id), not a path segment.
+    msg = _run_mgc(["chats", "messages", "create", "--chat-id", chat_id,
                     "--body", json.dumps(msg_payload)])
     return {"status": "sent", "channel": "teams",
             "chat_id": chat_id, "message_id": msg.get("id")}

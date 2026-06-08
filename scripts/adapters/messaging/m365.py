@@ -30,7 +30,8 @@ def _resolve_me_upn():
     global _ME_UPN
     if _ME_UPN:
         return _ME_UPN
-    out = graph._run_mgc(["me", "get", "--select", "userPrincipalName"]) or {}
+    # `users get` also requires --user-id ("me" = signed-in user).
+    out = graph._run_mgc(["users", "get", "--user-id", "me", "--select", "userPrincipalName"]) or {}
     upn = out.get("userPrincipalName")
     if not upn:
         raise NotConfigured("could not resolve the signed-in user (mgc me get)")

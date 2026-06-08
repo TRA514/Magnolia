@@ -61,6 +61,14 @@ CHAT_ALLOWED_TOOLS = [
     # Read-only git inspection only — narrowly scoped so Bash cannot shell out
     # to send (no plain `Bash`, no `Bash(*)`).
     "Bash(git log:*)", "Bash(git show:*)", "Bash(git diff:*)", "Bash(git status:*)",
+    # The local task CLI. task.sh is a thin wrapper over task_cli.py, whose
+    # ENTIRE surface (add/list/show/update/done/agent:*/inbox) is local task-file
+    # mutation — it has NO external-write path (no http/requests/adapters/
+    # publish). So this is the one non-git Bash exemption: it lets the chat act
+    # on its OWN task (mark done, change status/priority) without dead-ending on
+    # an approval the headless session can never grant. It cannot breach the
+    # Tier-2 boundary because the wrapper physically cannot reach outside.
+    "Bash(./scripts/task.sh:*)",
     # Read-only semantic search over the local PM-OS corpus (qmd). These query/
     # fetch only — qmd has no write surface.
     "mcp__qmd__query", "mcp__qmd__get", "mcp__qmd__multi_get", "mcp__qmd__status",
@@ -133,6 +141,13 @@ def build_context_prompt(task, user_message):
         f"acting as their {persona}. Continue as the task execution assistant for "
         f"the task below: help move it forward, ask only when genuinely blocked, "
         f"and keep replies concise.\n\n"
+        f"You can read, search, and draft/edit this task's local artifacts, and "
+        f"run the local task CLI (./scripts/task.sh) to update or complete THIS "
+        f"task. You CANNOT perform external writes (sending messages, filing "
+        f"tickets, scheduling) or run other shell commands from this chat — those "
+        f"are gated behind buttons on the task detail. If asked for one, say so "
+        f"plainly and point to the button; never claim the user can 'approve it "
+        f"in the terminal'.\n\n"
         f"{task_block}\n\n"
         f"## {name}'s message\n"
         f"{user_message}"
@@ -202,6 +217,11 @@ def normalize(raw_event):
             "usage": raw_event.get("usage", {}),
             "cost": raw_event.get("total_cost_usd"),
             "session_id": raw_event.get("session_id"),
+            # Every tool the session was NOT allowed to run lands here (verified
+            # against the real CLI). run_turn turns a non-empty list into a human
+            # `notice` so the user isn't left with the model's misleading
+            # "approve in the terminal" narration.
+            "permission_denials": raw_event.get("permission_denials") or [],
         }]
 
     # system, user/tool_result, rate_limit_event, and anything else: noise.
@@ -209,6 +229,37 @@ def normalize(raw_event):
 
 
 # ─── Task 6: orchestration seam ──────────────────────────────────────────────
+
+def _blocked_tool_notice(denials):
+    """Build the human "I can't do that from here" message from a result event's
+    ``permission_denials``, or ``None`` when nothing was blocked.
+
+    A denial isn't a failure: the chat is deliberately sandboxed to drafting +
+    local task ops (invariant #5), so anything reaching the outside world is
+    denied — and the headless session has no terminal to grant approval on. So
+    we don't echo the model's misleading "approve in the terminal" line; we name
+    what it tried and point to the task-detail action buttons (the gated,
+    one-tap-confirm path: agent drafts → board publishes).
+    """
+    if not denials:
+        return None
+    first = denials[0] if isinstance(denials[0], dict) else {}
+    tool = first.get("tool_name") or "that"
+    tool_input = first.get("tool_input") or {}
+    target = ""
+    if isinstance(tool_input, dict):
+        target = tool_input.get("command") or tool_input.get("url") or tool_input.get("file_path") or ""
+    tried = f"run `{target}`" if target else f"use {tool}"
+    return (
+        f"I just tried to {tried} for you, but I can't do that from this chat — "
+        f"it needs an approval this panel can't grant (there's no terminal here "
+        f"to say yes to it). From here I can read, search, and draft on this "
+        f"task. For anything that reaches outside that — sending a message, "
+        f"filing a ticket, scheduling — use the action buttons on the task detail "
+        f"to the left; they run it with a one-tap confirm. Just click the button "
+        f"this time and I'll pick up from there."
+    )
+
 
 def _now_iso():
     """Current UTC time as an ISO-8601 'Z' string (mirrors task_lib._now_iso)."""
@@ -383,6 +434,23 @@ def run_turn(task_id, message):
                 result_sid = event.get("session_id") or result_sid
                 if new_session and result_sid:
                     _persist_chat_session(task_id, result_sid)
+                # A blocked tool (headless can't prompt for approval) → surface a
+                # human notice BEFORE the result finalizes the turn, and persist
+                # it so a transcript reload shows it (parallels the error path).
+                notice_text = _blocked_tool_notice(event.get("permission_denials"))
+                if notice_text:
+                    notice = {
+                        "kind": "notice",
+                        "role": "notice",
+                        "text": notice_text,
+                        "run_id": run_id,
+                        "origin": "chat",
+                    }
+                    try:
+                        chat_transcript.append_event(task_id, dict(notice))
+                    except Exception:
+                        pass
+                    yield notice
                 yield event
                 continue
 

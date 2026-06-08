@@ -23,3 +23,17 @@ def test_build_chat_cmd_uses_locked_allowlist_by_default():
     assert "mcp__*" not in tools_arg
     for banned in ("createIssue", "sendMessage", "createEvent"):
         assert banned not in tools_arg
+
+
+def test_chat_tools_allow_local_task_cli_but_not_broad_bash():
+    """task.sh is a thin wrapper over task_cli.py — purely local task-file ops
+    (add/list/show/update/done/agent:*/inbox) with NO external-write surface
+    (no http/requests/adapters/publish). So the chat may run it directly. But
+    the broad Bash escape hatch must stay closed: a chat that could run any
+    shell command could `curl`/`gh`/`mail` an external send (invariant #5)."""
+    tools = cr.CHAT_ALLOWED_TOOLS
+    assert any("task.sh" in t for t in tools), "chat should be allowed to run the local task CLI"
+    # plain Bash / Bash(*) must NOT be present — Bash stays narrowly scoped.
+    assert "Bash" not in tools
+    assert "Bash(*)" not in tools
+    assert not any(t.strip() == "Bash(:*)" for t in tools)

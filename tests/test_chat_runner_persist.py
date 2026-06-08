@@ -227,3 +227,52 @@ def test_no_result_event_yields_and_persists_error(
     persisted = chat_transcript.read_events(task_id)
     persisted_err = [e for e in persisted if e.get("kind") == "error"]
     assert persisted_err and persisted_err[0]["role"] == "error"
+
+
+# ─── Blocked-tool notice: the graceful dead-end ──────────────────────────────
+
+def test_blocked_tool_yields_and_persists_notice(tasks_root, stub_model, monkeypatch):
+    """When a tool is denied (headless can't prompt for approval), run_turn must
+    surface a human `notice` that explains it and points to the board buttons —
+    instead of leaving the user with the model's misleading "approve in terminal"
+    narration. Driven off the result event's `permission_denials` (verified shape).
+    """
+    lines = [
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "name": "Bash",
+             "input": {"command": "curl https://example.com/send"}}]}}) + "\n",
+        json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "is_error": True,
+             "content": "This command requires approval"}]}}) + "\n",
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "text", "text": "This requires your approval to run."}]}}) + "\n",
+        json.dumps({"type": "result", "subtype": "success", "session_id": "s",
+                    "usage": {}, "permission_denials": [
+                        {"tool_name": "Bash", "tool_use_id": "t1",
+                         "tool_input": {"command": "curl https://example.com/send"}}]}) + "\n",
+    ]
+    monkeypatch.setattr(cr, "_spawn", lambda cmd, exit_holder=None: iter(lines))
+
+    task_id = _make_task()
+    events = list(cr.run_turn(task_id, "send it"))
+
+    notice = [e for e in events if e.get("kind") == "notice"]
+    assert notice, "expected a notice event when a tool was blocked"
+    n = notice[0]
+    assert n["role"] == "notice"
+    assert n["origin"] == "chat" and n["run_id"]
+    # The message steers the user to the task-detail action buttons.
+    assert "button" in n["text"].lower()
+    # The result event is still yielded for the UI to finalize.
+    assert [e for e in events if e.get("kind") == "result"]
+
+    # Persisted so a transcript reload shows the notice (parallels error path).
+    persisted = chat_transcript.read_events(task_id)
+    assert [e for e in persisted if e.get("kind") == "notice"]
+
+
+def test_no_notice_when_nothing_blocked(tasks_root, stub_spawn, stub_model):
+    """A clean turn (the committed fixture has no denials) yields no notice."""
+    task_id = _make_task()
+    events = list(cr.run_turn(task_id, "ping"))
+    assert not [e for e in events if e.get("kind") == "notice"]

@@ -36,3 +36,24 @@ def test_system_and_tool_result_events_yield_nothing():
 def test_missing_content_does_not_raise():
     assert cr.normalize({"type": "assistant"}) == []
     assert cr.normalize({"type": "assistant", "message": {}}) == []
+
+
+def test_result_carries_permission_denials():
+    # A real headless result event lists every tool the session was NOT allowed
+    # to run in `permission_denials` (verified against the CLI). normalize must
+    # surface it so run_turn can tell the user what got blocked.
+    raw = {
+        "type": "result", "subtype": "success", "session_id": "s", "usage": {},
+        "permission_denials": [
+            {"tool_name": "Bash", "tool_use_id": "t1",
+             "tool_input": {"command": "./scripts/task.sh inbox"}},
+        ],
+    }
+    out = cr.normalize(raw)
+    assert len(out) == 1 and out[0]["kind"] == "result"
+    assert out[0]["permission_denials"][0]["tool_name"] == "Bash"
+
+
+def test_result_without_denials_defaults_to_empty_list():
+    out = cr.normalize({"type": "result", "session_id": "s", "usage": {}})
+    assert out[0]["permission_denials"] == []

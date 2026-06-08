@@ -1137,6 +1137,24 @@
   .turn-result svg { width: 13px; height: 13px; }
   .turn-error .turn-text { color: var(--danger); }
 
+  /* Notice — an advisory "I can't do that from here, use the button" card. Not
+     an error (no danger hue): a calm accent-tinted aside. Token-only so it
+     tracks every Mood (invariant #3). */
+  .turn-notice .notice-inner {
+    display: flex; gap: 8px; align-items: flex-start;
+    background: var(--accent-soft); border: 1px solid var(--border-soft);
+    border-left: 2px solid var(--accent); border-radius: 9px; padding: 9px 12px;
+  }
+  .turn-notice .notice-icon { flex-shrink: 0; width: 15px; height: 15px; color: var(--accent); margin-top: 2px; }
+  .turn-notice .notice-text { font-size: 13px; line-height: 1.6; color: var(--text-muted); }
+  .turn-notice .notice-text p { margin: 0 0 8px; }
+  .turn-notice .notice-text p:last-child { margin-bottom: 0; }
+  .turn-notice .notice-text code {
+    font-family: var(--mono, ui-monospace, monospace); font-size: 12px;
+    background: var(--surface-hover); border: 1px solid var(--border-soft);
+    border-radius: 5px; padding: 1px 5px;
+  }
+
   /* Footer — fades in LAST, after both panes have settled. */
   .chat-footer { flex-shrink: 0; padding: 14px 16px 16px; border-top: 1px solid var(--border-soft); opacity: 0; }
   .modal-overlay.visible .chat-footer { opacity: 1; transition: opacity .4s ease .48s; }

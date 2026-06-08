@@ -233,6 +233,11 @@ function groupEventsIntoTurns(events) {
       turns.push({ role: 'error', text: ev.text || '' });
       continue;
     }
+    if (kind === 'notice') {
+      flush();
+      turns.push({ role: 'notice', text: ev.text || '' });
+      continue;
+    }
     // assistant think / tool_step / text — assemble into one turn per run_id.
     if (current && current.run_id !== ev.run_id) flush();
     if (!current) current = { role: 'assistant', text: '', steps: [], run_id: ev.run_id };
@@ -264,6 +269,15 @@ function renderTurn(turn, instant) {
     t.className = 'turn-text';
     t.textContent = turn.text || 'The chat run failed. You can retry.';
     el.appendChild(t);
+    return el;
+  }
+  if (turn.role === 'notice') {
+    // An advisory aside ("I can't do that from here — use the button"), NOT a
+    // failure. Distinct calm styling; the message itself is ours, so rendering
+    // it through the XSS-safe markdown renderer is fine (and shows the blocked
+    // command in a code span).
+    el.className = `chat-turn turn-notice${instant ? ' show' : ''}`;
+    el.innerHTML = `<div class="notice-inner">${NOTICE_SVG}<div class="notice-text">${renderMarkdown(turn.text || '')}</div></div>`;
     return el;
   }
   const stepsBox = document.createElement('div');
@@ -298,6 +312,9 @@ function toolKind(verb) {
 const STEP_COLLAPSE_AT = 5;
 const CHEV_SVG = '<svg class="chev-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg>';
 const CHECK_SVG = '<svg class="step-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-6.5"/></svg>';
+// Info glyph for the blocked-tool notice card (rendered in renderTurn at call
+// time, so a forward reference from a function body declared earlier is fine).
+const NOTICE_SVG = '<svg class="notice-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.5v3.5"/><circle cx="8" cy="5" r="0.6" fill="currentColor" stroke="none"/></svg>';
 
 function elFromHTML(html) { const h = document.createElement('div'); h.innerHTML = html; return h.firstChild; }
 
@@ -435,6 +452,13 @@ async function sendChat() {
       clearTyping();
       textBox.textContent = ev.text || 'The chat run failed. You can retry.';
       a.classList.add('turn-error');
+    } else if (ev.kind === 'notice') {
+      // A blocked-tool advisory. The model's own (possibly misleading) prose may
+      // already be in `a`; the notice appears as its own calm card right after,
+      // matching how history replay renders it (a separate notice turn).
+      clearTyping();
+      const n = renderTurn({ role: 'notice', text: ev.text || '' }, false);
+      thread.appendChild(n); revealNow(n, 'show'); scrollThread();
     } else if (ev.kind === 'result') {
       // turn complete — settle the left detail from real persisted state
       settleDetailFromServer();

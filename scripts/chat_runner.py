@@ -35,9 +35,36 @@ from task_dispatch import _kill_process_group
 # Repo root — the cwd `claude` runs in, mirroring task_dispatch.PM_OS_DIR.
 PM_OS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# A conservative read-only default for now. Task 7 replaces this with the
-# locked-down allowlist constant CHAT_ALLOWED_TOOLS.
-DEFAULT_ALLOWED_TOOLS = "Read,Grep,Glob"
+# ─── Tier-2 safety boundary: the chat session's tool allowlist ───────────────
+#
+# This is the load-bearing Tier-2 gate for the chat panel (invariant #5).
+# The dispatcher runs `claude` with bypassPermissions, so Claude's permission
+# MODE is NOT the gate — the gate is that the chat session is simply never
+# GRANTED any external-write tool. The chat can read/search/draft/edit LOCAL
+# artifacts; when the operator says "send it", the FRONTEND surfaces a confirm
+# and calls the existing gated board endpoint (e.g. /api/tasks/{id}/send-message),
+# which runs the Tier-2 publish() confirm. So: chat prepares/drafts, the board
+# publishes. The headless session can NEVER itself fire an external write.
+#
+# Therefore this allowlist DELIBERATELY EXCLUDES:
+#   - the broad `mcp__*` wildcard (would grant every MCP write — Jira/Teams/
+#     Slack/M365/calendar/Asana sends),
+#   - every external-write MCP tool (createIssue, sendMessage, createEvent, …),
+#   - `Bash(*)` / unrestricted Bash (could `curl`/`gh`/`mail` an external send).
+# Bash is scoped to read-only git inspection subcommands only.
+#
+# Err on the side of fewer tools. To add a tool, prove it cannot write to the
+# outside world.
+CHAT_ALLOWED_TOOLS = [
+    # Local artifact read / search / draft / edit — the whole point of the panel.
+    "Read", "Grep", "Glob", "Write", "Edit",
+    # Read-only git inspection only — narrowly scoped so Bash cannot shell out
+    # to send (no plain `Bash`, no `Bash(*)`).
+    "Bash(git log:*)", "Bash(git show:*)", "Bash(git diff:*)", "Bash(git status:*)",
+    # Read-only semantic search over the local PM-OS corpus (qmd). These query/
+    # fetch only — qmd has no write surface.
+    "mcp__qmd__query", "mcp__qmd__get", "mcp__qmd__multi_get", "mcp__qmd__status",
+]
 
 
 def build_chat_cmd(session_id, message, model, new_session=False, allowed_tools=None):
@@ -51,7 +78,7 @@ def build_chat_cmd(session_id, message, model, new_session=False, allowed_tools=
     new_session=True  -> start a fresh session with --session-id <id>.
     new_session=False -> resume an existing session with --resume <id>.
     """
-    tools = allowed_tools or DEFAULT_ALLOWED_TOOLS
+    tools = allowed_tools or ",".join(CHAT_ALLOWED_TOOLS)
     session_flag = "--session-id" if new_session else "--resume"
     return [
         "claude",

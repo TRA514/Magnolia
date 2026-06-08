@@ -8,7 +8,7 @@
 
 ## What Magnolia is
 
-Magnolia is a **chief of staff that happens to be software.** It is not a task board you operate, a dashboard you check, or a bot you prompt. It is a standing system that does the legwork of product management — researching, drafting, triaging your inbox, watching quality, taking small actions — and then walks into your office with only two kinds of things:
+Magnolia is a **chief of staff that happens to be software.** It is not a task board you operate, a dashboard you check, or a bot you prompt. It is a standing system that does the legwork that piles up around you — researching, drafting, triaging your inbox, watching quality, taking small actions — and then walks into your office with only two kinds of things:
 
 - *"Here's what I need you to decide or own."*
 - *"Here's what I already handled. FYI."*
@@ -17,11 +17,23 @@ Everything in Magnolia serves that one relationship. A good chief of staff is me
 
 Underneath, it is deliberately humble plumbing: markdown files, git, a little Python, and a headless Claude harness. Work is broken into **skills** (auto-discovered units of know-how) run by **workers** (scoped agents), tracked as **cards** on a board, and improved by a **judge** that learns your taste over time. No heavy framework. Nothing you can't read.
 
+**Who it's for.** Magnolia is built for the product manager first — but PM is only the *first* user, not the only one. It's for anyone at Vantaca carrying a heavy meeting load whose real job keeps getting buried under the tasks, work, and follow-ups those meetings throw off. If your calendar generates more to-dos than you can keep up with, you're who this is for.
+
+---
+
+## Where the work comes from: your meetings
+
+Most of your work doesn't start as a tidy task you typed into a list — it starts in a **meeting.** So that's where Magnolia starts too.
+
+Magnolia connects to your **Otter or Granola** and pulls your meetings down automatically. It reads each transcript and parses it for **work, tasks, and follow-ups** — the "I'll send that over," the "someone should look into this," the decision that quietly implies three next steps — and turns each one into a tracked card on your board. You don't transcribe, and you don't translate notes into a to-do list by hand. The meeting *becomes* the work, on its own.
+
+This is the front door of the whole system: **your meetings are where most of your tasks are born.** Everything downstream — the judge scoring, the trust ladder, the receipts — exists to handle that incoming stream. And over time, through the trust ladder and the card system, Magnolia learns how *you* handle each kind of follow-up and starts doing more of it for you — until the routine work that comes out of your meetings is handled before you'd have gotten to it.
+
 ---
 
 ## Why it was built
 
-Most "AI for PMs" tooling fails the same way: it generates a pile of output and hands you all of it, equally, with no sense of what's good or what matters. You end up managing the AI instead of the AI managing the work. The pile just moves from your inbox to a new app.
+Most AI productivity tooling fails the same way: it generates a pile of output and hands you all of it, equally, with no sense of what's good or what matters. You end up managing the AI instead of the AI managing the work. The pile just moves from your inbox to a new app.
 
 Magnolia exists to close three gaps that turn a clever demo into something you can actually live inside:
 

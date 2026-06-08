@@ -122,10 +122,10 @@ async function renderQuality() {
 
   data.groups.forEach(g => {
     const tone = _qTone(g.avg_score);
-    // g.phase is the REAL ladder tier from build_quality: shadow / gated / autonomous.
+    // g.phase is the REAL ladder tier from build_quality: shadow / supervised / autonomous.
     // Render it as a calm trust badge with a friendly, honest label.
     const tier = (g.phase || 'shadow').toLowerCase();
-    const _PHASE_LABEL = { shadow: 'observe-only', gated: 'gated', autonomous: 'autonomous' };
+    const _PHASE_LABEL = { shadow: 'observe-only', supervised: 'supervised', autonomous: 'autonomous' };
     const phase = _PHASE_LABEL[tier] || tier;
     html += `
       <div class="card q-card ${tone}">

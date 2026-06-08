@@ -144,7 +144,7 @@ Its own tab, split from **Engine**: Engine is *how the machine is wired* (worker
 | **Now / Recommendations** | control | accept / reject rubric and promotion changes |
 
 **What the Quality tab shows** (all read-only):
-- **Scoreboard / promotion board** — a row per task-type: score trend, judge↔you agreement %, phase (Shadow / Gated), and trajectory toward graduate-or-demote. Answers "can I trust it more or less than last week" at a glance.
+- **Scoreboard / promotion board** — a row per task-type: score trend, judge↔you agreement %, phase (Shadow / Supervised), and trajectory toward graduate-or-demote. Answers "can I trust it more or less than last week" at a glance. (Tiers are **shadow → supervised → autonomous**: in *shadow* the judge only watches; at *supervised* the judge actively supervises quality — gating low-scored output back for revision — while you still approve any external action via collab; at *autonomous* it ships as a receipt. "Supervised" is the judge supervising, distinct from the collab approval gate.)
 - **Drill into a type** — its score distribution; the **disagreement list** (the biggest judge-vs-you divergences, each linking back to the card where it happened). This is the "queue" — kept as *evidence behind the agreement %*, not a place you work.
 - **The judge itself** — current rubric version + history, the draft → critique → revise traces when inline gating fired, and any **pending rubric change** shown as status ("PRD-draft: v4→v5 proposed → act on Now").
 

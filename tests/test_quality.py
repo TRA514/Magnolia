@@ -20,9 +20,9 @@ def test_build_quality_agreement_from_frontmatter(tasks_root):
 def test_build_quality_tier_label_from_ladder(tasks_root, tmp_path):
     import task_server, task_lib, ladder_lib
     p = str(tmp_path / "ladder.json")
-    ladder_lib.set_tier("prd-draft", "gated", path=p)
+    ladder_lib.set_tier("prd-draft", "supervised", path=p)
     a, _ = task_lib.create_task("a", queue="agent", task_type="prd-draft")
     task_lib.update_task(a, changes={"judge_score": 9, "judge_kind": "document"})
     result = task_server.build_quality(ladder_path=p)
     grp = next(g for g in result["groups"] if g["task_type"] == "prd-draft")
-    assert grp["phase"] == "gated"
+    assert grp["phase"] == "supervised"

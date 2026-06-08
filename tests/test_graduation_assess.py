@@ -15,10 +15,10 @@ def test_ready_type_gets_graduation_card(tasks_root, tmp_path):
     p = str(tmp_path / "ladder.json")
     _judged(task_lib, "prd-draft", 9, react="up", n=8)  # >=6, 100% approval+agreement
     created = graduation_assess.assess(ladder_path=p, now_iso="2026-06-10T00:00:00Z")
-    assert any(c["task_type"] == "prd-draft" and c["proposed_tier"] == "gated" for c in created)
+    assert any(c["task_type"] == "prd-draft" and c["proposed_tier"] == "supervised" for c in created)
     cards = [t for t in task_lib.list_tasks() if t.get("card_type") == "graduation"]
     assert len(cards) == 1
-    assert cards[0].get("grad_proposed_tier") == "gated"
+    assert cards[0].get("grad_proposed_tier") == "supervised"
 
 
 def test_not_ready_no_card(tasks_root, tmp_path):
@@ -42,10 +42,10 @@ def test_idempotent_no_duplicate_card(tasks_root, tmp_path):
 def test_auto_demote_after_consecutive_bad_windows(tasks_root, tmp_path):
     import task_lib, graduation_assess, ladder_lib
     p = str(tmp_path / "ladder.json")
-    ladder_lib.set_tier("prd-draft", "gated", path=p)
-    _judged(task_lib, "prd-draft", 3, react="down", n=8)  # approval 0% << gated entry bar
+    ladder_lib.set_tier("prd-draft", "supervised", path=p)
+    _judged(task_lib, "prd-draft", 3, react="down", n=8)  # approval 0% << supervised entry bar
     graduation_assess.assess(ladder_path=p, now_iso="2026-06-10T00:00:00Z")
-    assert ladder_lib.tier_of("prd-draft", path=p) == "gated"   # 1st bad window: no demote yet
+    assert ladder_lib.tier_of("prd-draft", path=p) == "supervised"   # 1st bad window: no demote yet
     graduation_assess.assess(ladder_path=p, now_iso="2026-06-17T00:00:00Z")
     assert ladder_lib.tier_of("prd-draft", path=p) == "shadow"  # 2nd consecutive: demoted
 
@@ -53,8 +53,8 @@ def test_auto_demote_after_consecutive_bad_windows(tasks_root, tmp_path):
 def test_no_demote_on_insufficient_data(tasks_root, tmp_path):
     import task_lib, graduation_assess, ladder_lib
     p = str(tmp_path / "ladder.json")
-    ladder_lib.set_tier("prd-draft", "gated", path=p)
-    _judged(task_lib, "prd-draft", 3, react="down", n=2)  # n=2 < min_judged 6 for the gated entry bar
+    ladder_lib.set_tier("prd-draft", "supervised", path=p)
+    _judged(task_lib, "prd-draft", 3, react="down", n=2)  # n=2 < min_judged 6 for the supervised entry bar
     graduation_assess.assess(ladder_path=p, now_iso="2026-06-10T00:00:00Z")
     graduation_assess.assess(ladder_path=p, now_iso="2026-06-17T00:00:00Z")
-    assert ladder_lib.tier_of("prd-draft", path=p) == "gated"  # sparse window must NOT demote
+    assert ladder_lib.tier_of("prd-draft", path=p) == "supervised"  # sparse window must NOT demote

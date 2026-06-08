@@ -152,12 +152,12 @@ const KIND_META = {
   // other families (calendar/doc_sync) later, so this PM-specific glyph is a placeholder.
   confirm:        { label: 'confirm',    icon: 'jira',   cls: 'kind-confirm' },
 };
-const _TIER_WORD = { shadow: 'observe-only', gated: 'gated', autonomous: 'autonomous' };
+const _TIER_WORD = { shadow: 'observe-only', supervised: 'supervised', autonomous: 'autonomous' };
 function _tierWord(t) { return _TIER_WORD[(t || '').toLowerCase()] || (t || 'observe-only'); }
 function _gradNote(proposed, type) {
   const ty = type || 'this task-type';
-  if ((proposed || '').toLowerCase() === 'gated')
-    return `Gated means ${ty} runs on its own but waits for your yes before anything leaves. If quality slips, it returns to observe-only automatically.`;
+  if ((proposed || '').toLowerCase() === 'supervised')
+    return `Supervised means ${ty} runs on its own but waits for your yes before anything leaves. If quality slips, it returns to observe-only automatically.`;
   if ((proposed || '').toLowerCase() === 'autonomous')
     return `Autonomous means ${ty} completes and ships without waiting — you can still review anything. It steps back down if quality drops.`;
   return `If quality later drops, ${ty} steps back down on its own.`;

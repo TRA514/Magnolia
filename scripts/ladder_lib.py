@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ladder_lib — per-task-type trust-tier store for the graduation ladder.
 
-Tiers climb shadow -> gated -> autonomous. State lives in datasets/evals/ladder.json
+Tiers climb shadow -> supervised -> autonomous. State lives in datasets/evals/ladder.json
 (runtime, gitignored). Tiers are ADVISORY in Phase 4: displayed and managed, but they
 do not yet change dispatch/review behavior (that enforcement is deferred to the Review
 surface work). Thresholds are config in the same file with moderate defaults here.
@@ -16,13 +16,24 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PM_OS_DIR = os.path.dirname(SCRIPT_DIR)
 LADDER_FILE = os.path.join(PM_OS_DIR, "datasets", "evals", "ladder.json")
 
-TIERS = ["shadow", "gated", "autonomous"]
+TIERS = ["shadow", "supervised", "autonomous"]
 
 DEFAULT_THRESHOLDS = {
     "window_days": 60,
-    "shadow_to_gated": {"min_judged": 6, "min_approval": 0.75, "min_agreement": 0.70},
-    "gated_to_autonomous": {"min_judged": 12, "min_approval": 0.85, "min_agreement": 0.80},
+    "shadow_to_supervised": {"min_judged": 6, "min_approval": 0.75, "min_agreement": 0.70},
+    "supervised_to_autonomous": {"min_judged": 12, "min_approval": 0.85, "min_agreement": 0.80},
     "demote_consecutive": 2,
+}
+
+# The middle tier was renamed "gated" -> "supervised" (the judge supervises the
+# work; "gated" collided with the collab approval gate and the green-gates). This
+# engine is team-portable, so a teammate's gitignored ladder.json may still hold
+# the old vocabulary. Normalize legacy values on read so their store keeps working;
+# the next _save persists the new form.
+_LEGACY_TIERS = {"gated": "supervised"}
+_LEGACY_THRESHOLD_KEYS = {
+    "shadow_to_gated": "shadow_to_supervised",
+    "gated_to_autonomous": "supervised_to_autonomous",
 }
 
 
@@ -42,7 +53,18 @@ def _load(path):
     d.setdefault("tiers", {})
     d.setdefault("thresholds", {})
     d.setdefault("demote_signals", {})
+    _migrate_legacy(d)
     return d
+
+
+def _migrate_legacy(d):
+    """In-place upgrade of any pre-rename ('gated') vocabulary to the current names."""
+    for tt, tier in list(d["tiers"].items()):
+        if tier in _LEGACY_TIERS:
+            d["tiers"][tt] = _LEGACY_TIERS[tier]
+    for old, new in _LEGACY_THRESHOLD_KEYS.items():
+        if old in d["thresholds"] and new not in d["thresholds"]:
+            d["thresholds"][new] = d["thresholds"].pop(old)
 
 
 def _save(d, path):

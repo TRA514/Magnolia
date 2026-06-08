@@ -102,12 +102,12 @@ def test_resume_handoff_reorients_background_to_live_and_includes_body(monkeypat
     task = {"id": "T-9", "title": "PRD draft", "status": "open",
             "priority": "high", "queue": "agent"}
     p = cr.build_resume_prompt(task, "what's your take?", first_interactive=True,
-                               body="## Decision\nGraduate the PRD to gated.")
+                               body="## Decision\nGraduate the PRD to supervised.")
     # Transparent about the background → live transition (the grounding device).
     assert "background" in p.lower()
     assert "chief of staff" in p.lower()
     # The current card body is re-injected for the catch-up.
-    assert "Graduate the PRD to gated." in p
+    assert "Graduate the PRD to supervised." in p
     assert "what's your take?" in p
     assert "Dana Cole" in p
 
@@ -119,6 +119,6 @@ def test_resume_steady_state_has_no_handoff_language(monkeypatch):
     task = {"id": "T-9", "title": "PRD draft", "status": "open",
             "priority": "high", "queue": "agent"}
     p = cr.build_resume_prompt(task, "next?", first_interactive=False,
-                               body="## Decision\nGraduate the PRD to gated.")
-    assert "Graduate the PRD to gated." not in p   # body not re-sent
+                               body="## Decision\nGraduate the PRD to supervised.")
+    assert "Graduate the PRD to supervised." not in p   # body not re-sent
     assert "## Current task state" in p

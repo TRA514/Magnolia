@@ -18,8 +18,8 @@ import task_lib       # noqa: E402
 import ladder_lib     # noqa: E402
 
 JUDGE_GOOD_THRESHOLD = 7
-NEXT = {"shadow": "gated", "gated": "autonomous"}
-ENTRY_KEY = {"gated": "shadow_to_gated", "autonomous": "gated_to_autonomous"}
+NEXT = {"shadow": "supervised", "supervised": "autonomous"}
+ENTRY_KEY = {"supervised": "shadow_to_supervised", "autonomous": "supervised_to_autonomous"}
 
 
 def _metrics(tasks):

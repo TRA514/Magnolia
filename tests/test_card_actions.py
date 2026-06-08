@@ -75,9 +75,9 @@ def test_graduate_advances_tier(tasks_root, tmp_path):
     import task_server, task_lib, ladder_lib
     p = str(tmp_path / "ladder.json")
     tid, _ = task_lib.create_task("grad", queue="collab", card_type="graduation")
-    task_lib.update_task(tid, changes={"grad_task_type": "prd-draft", "grad_proposed_tier": "gated"})
+    task_lib.update_task(tid, changes={"grad_task_type": "prd-draft", "grad_proposed_tier": "supervised"})
     task_server.graduate_card(tid, ladder_path=p)
-    assert ladder_lib.tier_of("prd-draft", path=p) == "gated"
+    assert ladder_lib.tier_of("prd-draft", path=p) == "supervised"
 
 
 def test_accepted_recommendation_is_archived(tasks_root, tmp_path, monkeypatch):
@@ -97,7 +97,7 @@ def test_graduated_card_is_archived(tasks_root, tmp_path):
     import task_server, task_lib, ladder_lib
     p = str(tmp_path / "ladder.json")
     tid, _ = task_lib.create_task("grad", queue="collab", card_type="graduation")
-    task_lib.update_task(tid, changes={"grad_task_type": "prd-draft", "grad_proposed_tier": "gated"})
+    task_lib.update_task(tid, changes={"grad_task_type": "prd-draft", "grad_proposed_tier": "supervised"})
     task_server.graduate_card(tid, ladder_path=p)
     assert tid not in [t["id"] for t in task_lib.list_tasks()]
 

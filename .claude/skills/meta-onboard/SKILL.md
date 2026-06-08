@@ -41,7 +41,22 @@ is visible on the board once it spawns), mark it in-progress as you begin, done 
 0. **Bootstrap** — if `profile/` is absent: `cp -R profile.example profile`. (So the engine reads
    the live profile from here on.)
 1. **Identity** — ask name, email, company, persona (pm/exec), timezone → write `profile/profile.yaml`.
-2. **Existing install?** — ask if they already run a PM-OS. If yes, locate it (read-only) and ADOPT
+2. **Existing setup & inherited connectors** —
+   **First, are they already a Claude Code user?** If yes, their corporate integrations
+   (Granola, Microsoft 365, Jira, Pendo, Databricks, …) are almost certainly **claude.ai account
+   connectors** — attached to their authenticated claude.ai org, NOT to any folder or to
+   `.claude.json`. They come "for free" and should be inherited here. **Verify it:** check which
+   `mcp__claude_ai_*` tools are actually available in THIS session. If the ones they expect are
+   present — great, say so warmly and move on (we get them for free). If an expected connector is
+   **missing**, do NOT send them to re-authorize from scratch (it's already set up at the account
+   level) — the cause is almost always that Magnolia was opened in a fresh/untrusted project
+   folder. Walk them through: **trust this folder and enable the connector via `/mcp`**. If it
+   still won't appear, the likely fix is that Magnolia was cloned somewhere their Claude Code
+   config doesn't reach — guide them to **relocate the Magnolia folder alongside their existing
+   Claude Code workspace** (do NOT make them re-architect their folders — just move Magnolia into
+   the place where their Claude Code already works), then re-check. The install guide
+   (`docs/INSTALL.md`) covers landing it in the right place up front.
+   **Then, do they already run a PM-OS?** If yes, locate it (read-only) and ADOPT
    its content non-destructively: copy `datasets/`, copy legacy voice into `profile/voice/`, copy
    custom skills (not already in the engine) into `.claude/skills/`. For diverged engine skills,
    keep the engine's and note the difference for them to reconcile later — never silently merge.
@@ -71,8 +86,13 @@ is visible on the board once it spawns), mark it in-progress as you begin, done 
      warmly that any of these can be left blank for now and filled in later — I'll just leave those
      bits of the ticket open until they're ready, nothing breaks.
 4. **Doctor pass** — invoke the `workflow-doctor` skill; it runs `python3 scripts/doctor.py detect`
-   and remediates conversationally. Continue even if some capabilities can't be fixed — degraded
-   features just stay disabled with a reason; onboarding never blocks.
+   and remediates conversationally. **Treat qmd, pandoc, and mgc as strongly recommended, not
+   optional** — offer to install each now and say plainly what it unlocks: qmd → semantic search
+   (the killer feature); pandoc → Word-doc creation / publish-package; mgc → Outlook + Teams send
+   and calendar invites. Posture: "you don't have to, but you really should." qmd installs with
+   **`npm install -g @tobilu/qmd`** (https://github.com/tobi/qmd, Node ≥ 22) — never `brew install
+   qmd` or any other "qmd" repo. Still: if a tool can't be fixed, degraded features just stay
+   disabled with a reason; onboarding never blocks.
 5. **Spin up the board** — pick a free port with `server_lib.free_port()` if 8742 is taken, and
    record it in `profile/config.yaml` `server.port` BEFORE launching (the server reads its port from
    config). Launch with `server_lib.start(cmd=server_lib.default_cmd())` and verify it serves —

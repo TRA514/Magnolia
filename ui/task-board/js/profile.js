@@ -214,28 +214,59 @@ async function pfTogglePack(id) {
 }
 
 /* ── 5 · Model posture ────────────────────────────────────────────────── */
+// Each worker declares a tier (light/standard/deep); the resolved model is the
+// tier shifted by the current posture (low −1 / balanced 0 / high +1) and
+// clamped. We show both — the tier is the worker's intent, the model is what
+// actually runs, so it visibly changes when the posture toggle flips.
+function _pfWorkerRows(workers) {
+  return (workers || []).map(w =>
+    `<div class="pf-worker"><span class="pf-worker-name">${escapeHtml(w.name)}</span>` +
+    `<span class="pf-worker-meta"><span class="pf-tier ${escapeHtml(w.tier)}">${escapeHtml(w.tier)}</span>` +
+    `<span class="pf-worker-model">${escapeHtml(w.model || '—')}</span></span></div>`).join('');
+}
+
 function _pfPosture(mp) {
   const seg = ['low', 'balanced', 'high'].map(l =>
     `<button class="${mp.level === l ? 'active' : ''}" onclick="pfSetPosture('${l}')">${l[0].toUpperCase() + l.slice(1)}</button>`).join('');
-  const workers = mp.workers.map(w =>
-    `<div class="pf-worker"><span class="pf-worker-name">${escapeHtml(w.name)}</span><span class="pf-tier ${w.tier}">${escapeHtml(w.tier)}</span></div>`).join('');
   return `<section class="pf-section">
     <div class="pf-section-head"><span class="pf-section-title">Model posture</span><span class="pf-section-hint">Cost ↔ horsepower</span></div>
     <div class="pf-posture">
-      <div class="pf-seg" id="pf-seg">${seg}</div>
+      <div class="pf-seg-row"><div class="pf-seg" id="pf-seg">${seg}</div><span class="pf-saved" id="pf-saved-posture">Saved</span></div>
       <div class="pf-posture-explain" id="pf-posture-explain">${PF_POSTURE_COPY[mp.level]}</div>
       <div class="pf-workers-label">Per worker</div>
-      <div class="pf-workers">${workers}</div>
+      <div class="pf-workers" id="pf-workers-list">${_pfWorkerRows(mp.workers)}</div>
     </div>
   </section>`;
 }
 
-async function pfSetPosture(level) {
-  _profile.model_posture.level = level;
+function _pfPaintPosture(level) {
   document.querySelectorAll('#pf-seg button').forEach(b => b.classList.toggle('active', b.textContent.toLowerCase() === level));
   const ex = document.getElementById('pf-posture-explain');
   if (ex) ex.textContent = PF_POSTURE_COPY[level];
-  await fetch(`${API}/profile/model-posture`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ level }) });
+}
+
+async function pfSetPosture(level) {
+  const prev = _profile.model_posture.level;
+  if (level === prev) return;
+  // Paint the new level optimistically, then persist. On success re-fetch so the
+  // per-worker resolved models reflect the new posture (e.g. light→standard:
+  // Haiku jumps to Sonnet). On failure, roll the UI back to where it was.
+  _profile.model_posture.level = level;
+  _pfPaintPosture(level);
+  try {
+    const res = await fetch(`${API}/profile/model-posture`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ level }) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const pr = await fetch(`${API}/profile`);
+    if (pr.ok) {
+      _profile = await pr.json();
+      const list = document.getElementById('pf-workers-list');
+      if (list) list.innerHTML = _pfWorkerRows(_profile.model_posture.workers);
+    }
+    _flashSaved('pf-saved-posture');
+  } catch (err) {
+    _profile.model_posture.level = prev;
+    _pfPaintPosture(prev);
+  }
 }
 
 /* ── shared ───────────────────────────────────────────────────────────── */

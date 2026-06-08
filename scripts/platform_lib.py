@@ -9,6 +9,8 @@ RUN-VALIDATED (no Windows box available).
 """
 import os
 import platform
+import shutil
+import signal
 import subprocess
 
 
@@ -61,3 +63,63 @@ def launch_agents_dir():
     if os_kind() == "darwin":
         return os.path.join(os.path.expanduser("~"), "Library", "LaunchAgents")
     return None  # Windows uses Task Scheduler (no directory); Linux unsupported for persistence v1
+
+
+# POSIX install locations to prefer ahead of the inherited PATH.
+_CLAUDE_PREPEND_DIRS = [
+    os.path.join(os.path.expanduser("~"), ".local", "bin"),
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+]
+
+
+def headless_claude_env(base=None):
+    """Env for a headless `claude` subprocess, cross-platform.
+
+    Strips CLAUDE*/CMUX_CLAUDE* (avoid nested-session detection). On POSIX,
+    prepends common claude install dirs that actually exist. On Windows the
+    inherited PATH is kept verbatim (claude resolves via shutil.which/PATHEXT) —
+    never inject unix dirs or ':'-join onto a ';'-separated PATH.
+    """
+    src = os.environ if base is None else base
+    env = {k: v for k, v in src.items()
+           if not k.startswith(("CLAUDE", "CMUX_CLAUDE"))}
+    cur = env.get("PATH", os.defpath)
+    if os_kind() != "windows":
+        prepend = [d for d in _CLAUDE_PREPEND_DIRS if os.path.isdir(d)]
+        if prepend:
+            env["PATH"] = os.pathsep.join(prepend + [cur])
+    return env
+
+
+def resolve_claude(path=None):
+    """Absolute path to the claude CLI, or the bare name as a last resort.
+
+    shutil.which honors PATHEXT on Windows (finds claude.exe / claude.cmd).
+    """
+    found = shutil.which("claude", path=path)
+    if found:
+        return found
+    for d in _CLAUDE_PREPEND_DIRS:
+        cand = os.path.join(d, "claude")
+        if os.path.isfile(cand):
+            return cand
+    return "claude"
+
+
+def process_group_kwargs():
+    """Popen kwargs giving the child its own killable process group."""
+    if os_kind() == "windows":
+        return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)}
+    return {"start_new_session": True}
+
+
+def kill_process_group(proc):
+    """Best-effort kill of a child and its group, cross-platform."""
+    try:
+        if os_kind() == "windows":
+            proc.terminate()
+        else:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, OSError):
+        pass

@@ -22,6 +22,9 @@ import subprocess
 import sys
 import os
 import atexit
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import platform_lib
 from datetime import date
 
 # ─── LangFuse flush registration (graceful degradation) ─────────────────────
@@ -112,17 +115,6 @@ def _get_system_prompt():
 
 # ─── LLM Calls ──────────────────────────────────────────────────────────────
 
-def _claude_bin() -> str:
-    """Resolve the claude CLI path (same lookup as jira_publish.py)."""
-    cand = os.path.join(os.path.expanduser("~"), ".local", "bin", "claude")
-    if os.path.exists(cand):
-        return cand
-    cand = "/opt/homebrew/bin/claude"
-    if os.path.exists(cand):
-        return cand
-    return "claude"  # fall back to PATH lookup
-
-
 def call_claude(system: str, user: str, model: str = PARSER_MODEL, timeout: int = 120) -> str:
     """Run a one-shot headless `claude -p` call and return the printed result.
 
@@ -140,16 +132,10 @@ def call_claude(system: str, user: str, model: str = PARSER_MODEL, timeout: int 
     """
     # Strip Claude env vars to prevent nested-session detection; ensure the
     # claude binary's dirs are on PATH (important under cron / task_server).
-    env = {k: v for k, v in os.environ.items()
-           if not k.startswith(("CLAUDE", "CMUX_CLAUDE"))}
-    env["PATH"] = (
-        os.path.join(os.path.expanduser("~"), ".local", "bin")
-        + ":/opt/homebrew/bin"
-        + ":" + env.get("PATH", "/usr/bin:/bin")
-    )
+    env = platform_lib.headless_claude_env()
 
     cmd = [
-        _claude_bin(), "-p", user or system,
+        platform_lib.resolve_claude(), "-p", user or system,
         "--model", model,
         "--max-turns", "2",
         "--tools", "",
@@ -341,7 +327,7 @@ def main():
     pm_os_dir = os.path.dirname(pm_os_dir)  # scripts/ -> pm-os/
 
     result = subprocess.run(
-        ["/opt/homebrew/bin/python3", os.path.join(pm_os_dir, "scripts", "task_cli.py"), "add"] + cli_args,
+        [sys.executable, os.path.join(pm_os_dir, "scripts", "task_cli.py"), "add"] + cli_args,
         capture_output=True,
         text=True,
         cwd=pm_os_dir,

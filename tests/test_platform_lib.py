@@ -35,3 +35,35 @@ def test_launch_agents_dir(monkeypatch):
     assert platform_lib.launch_agents_dir().endswith("/Library/LaunchAgents")
     monkeypatch.setattr(platform_lib, "os_kind", lambda: "windows")
     assert platform_lib.launch_agents_dir() is None  # Task Scheduler has no dir
+
+
+def test_headless_claude_env_strips_claude_vars():
+    base = {"CLAUDE_CODE_X": "1", "CMUX_CLAUDE_Y": "1", "PATH": "/usr/bin", "HOME": "/h"}
+    env = platform_lib.headless_claude_env(base=base)
+    assert not any(k.startswith(("CLAUDE", "CMUX_CLAUDE")) for k in env)
+    assert "HOME" in env
+
+
+def test_headless_claude_env_keeps_windows_path_untouched(monkeypatch):
+    monkeypatch.setattr(platform_lib, "os_kind", lambda: "windows")
+    base = {"PATH": r"C:\Windows;C:\tools"}
+    env = platform_lib.headless_claude_env(base=base)
+    assert env["PATH"] == r"C:\Windows;C:\tools"
+
+
+def test_resolve_claude_uses_which(monkeypatch):
+    monkeypatch.setattr(platform_lib.shutil, "which", lambda n, path=None: "/found/claude")
+    assert platform_lib.resolve_claude() == "/found/claude"
+
+
+def test_resolve_claude_falls_back_to_bare_name(monkeypatch):
+    monkeypatch.setattr(platform_lib.shutil, "which", lambda n, path=None: None)
+    monkeypatch.setattr(platform_lib.os.path, "isfile", lambda p: False)
+    assert platform_lib.resolve_claude() == "claude"
+
+
+def test_process_group_kwargs_per_os(monkeypatch):
+    monkeypatch.setattr(platform_lib, "os_kind", lambda: "windows")
+    assert "creationflags" in platform_lib.process_group_kwargs()
+    monkeypatch.setattr(platform_lib, "os_kind", lambda: "darwin")
+    assert platform_lib.process_group_kwargs() == {"start_new_session": True}

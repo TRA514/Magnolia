@@ -15,6 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import platform_lib
 import profile_lib
 
 PM_OS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -217,18 +218,10 @@ def publish_to_jira(draft):
     """
     prompt = build_claude_prompt(draft)
 
-    # Strip Claude env vars (same pattern as handle_dispatch_task)
-    env = {k: v for k, v in os.environ.items()
-           if not k.startswith(("CLAUDE", "CMUX_CLAUDE"))}
-    env["PATH"] = (
-        os.path.join(os.path.expanduser("~"), ".local", "bin")
-        + ":/opt/homebrew/bin"
-        + ":" + env.get("PATH", "/usr/bin:/bin")
-    )
+    # Strip Claude env vars + fix PATH per-OS (same pattern as handle_dispatch_task)
+    env = platform_lib.headless_claude_env()
 
-    claude_bin = os.path.join(os.path.expanduser("~"), ".local", "bin", "claude")
-    if not os.path.exists(claude_bin):
-        claude_bin = "/opt/homebrew/bin/claude"
+    claude_bin = platform_lib.resolve_claude()
 
     try:
         result = subprocess.run(

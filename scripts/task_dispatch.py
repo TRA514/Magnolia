@@ -25,6 +25,7 @@ import glob as globmod
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import platform_lib
 import task_lib
 import packs_lib
 import profile_lib
@@ -571,18 +572,25 @@ def build_prompt_for_worker(task_id, worker, rerun=False):
 # ─── Task Dispatch ────────────────────────────────────────────────────────────
 
 def _kill_process_group(proc):
-    """Send SIGTERM to the process group, escalate to SIGKILL if needed."""
-    try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-    except OSError:
-        pass
+    """Terminate the child's process group, escalate if it doesn't exit.
+
+    The first (graceful) signal goes through the cross-platform seam
+    (SIGTERM on POSIX, terminate() on Windows). On POSIX we keep the
+    reap + SIGKILL escalation exactly as before so macOS behavior does
+    not regress; on Windows there is no group-SIGKILL equivalent, so a
+    second seam call (terminate) is the best-effort escalation.
+    """
+    platform_lib.kill_process_group(proc)
     try:
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        except OSError:
-            pass
+        if platform_lib.os_kind() == "windows":
+            platform_lib.kill_process_group(proc)
+        else:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except OSError:
+                pass
         proc.wait()
 
 
@@ -794,31 +802,30 @@ def dispatch_task(task, dry_run=False, rerun=False, workers=None):
     # Interactive mode (no -p) gets cloud MCPs (Pendo, Jira, M365, etc.)
     # Use `script` to provide a pseudo-TTY for the interactive TUI
     claude_cmd, claude_session_id = build_claude_cmd(prompt, model, tools_str, max_turns)
+    claude_cmd[0] = platform_lib.resolve_claude()
 
-    # Wrap in `script -q` to provide pseudo-TTY
-    cmd = ["script", "-q", output_file] + claude_cmd
+    if platform_lib.os_kind() == "windows":
+        # No `script` (pty) on Windows: run claude directly and tee stdout to the
+        # output_file ourselves (the pty is what wrote it on POSIX).
+        cmd = claude_cmd
+        stdout_target = open(output_file, "wb")
+    else:
+        cmd = ["script", "-q", output_file] + claude_cmd
+        stdout_target = subprocess.DEVNULL
 
-    # Strip ALL Claude-related env vars to prevent nested-session detection,
-    # and ensure ~/.local/bin (claude) and /opt/homebrew/bin are in PATH for cron
-    env = {k: v for k, v in os.environ.items()
-           if not k.startswith(("CLAUDE", "CMUX_CLAUDE"))}
-    env["PATH"] = (
-        os.path.join(os.path.expanduser("~"), ".local", "bin")
-        + ":/opt/homebrew/bin"
-        + ":" + env.get("PATH", "/usr/bin:/bin")
-    )
+    env = platform_lib.headless_claude_env()
 
     try:
         proc = subprocess.Popen(
             cmd,
-            stdout=subprocess.DEVNULL,
+            stdout=stdout_target,
             stderr=subprocess.DEVNULL,
             cwd=PM_OS_DIR,
             env=env,
-            start_new_session=True,  # own process group for clean kill
+            **platform_lib.process_group_kwargs(),
         )
     except FileNotFoundError:
-        log("ERROR: 'claude' or 'script' command not found in PATH", task_id=task_id)
+        log("ERROR: 'claude' (or 'script' on POSIX) not found in PATH", task_id=task_id)
         return {"task_id": task_id, "success": False, "output": None, "error": "claude not found"}
 
     # best-effort: persist resumable session id; never let this break dispatch.
@@ -866,6 +873,15 @@ def dispatch_task(task, dry_run=False, rerun=False, workers=None):
                 pass
 
         time.sleep(POLL_INTERVAL)
+
+    # Windows: close our inherited write handle now that the process is done, so
+    # the read-back below sees a complete, flushed file. (POSIX used the `script`
+    # pty + DEVNULL — there's no handle of ours to close.)
+    if stdout_target is not subprocess.DEVNULL:
+        try:
+            stdout_target.close()
+        except OSError:
+            pass
 
     # Read output from the script log file
     task_output = None

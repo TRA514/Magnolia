@@ -8,6 +8,8 @@ frontmatter + transcript writes, and only stub the subprocess seam + model
 resolution (no real `claude`).
 """
 import json
+import subprocess
+import time
 
 import pytest
 
@@ -31,7 +33,7 @@ def _fixture_lines():
 @pytest.fixture
 def stub_spawn(monkeypatch):
     """Replay the fixture lines instead of spawning claude."""
-    monkeypatch.setattr(cr, "_spawn", lambda cmd: iter(_fixture_lines()))
+    monkeypatch.setattr(cr, "_spawn", lambda cmd, exit_holder=None: iter(_fixture_lines()))
 
 
 @pytest.fixture
@@ -53,7 +55,7 @@ def test_new_session_tags_post_run_false_and_persists_session(
 ):
     # Capture the argv handed to _spawn so we can assert new_session=True.
     seen = {}
-    monkeypatch.setattr(cr, "_spawn", lambda cmd: seen.setdefault("cmd", cmd) or iter(_fixture_lines()))
+    monkeypatch.setattr(cr, "_spawn", lambda cmd, exit_holder=None: seen.setdefault("cmd", cmd) or iter(_fixture_lines()))
 
     task_id = _make_task()  # brand-new: no session, agent_status None
     events = list(cr.run_turn(task_id, "ping"))
@@ -79,7 +81,7 @@ def test_new_session_tags_post_run_false_and_persists_session(
 
 def test_resumed_session_tags_post_run_true(tasks_root, stub_spawn, stub_model, monkeypatch):
     seen = {}
-    monkeypatch.setattr(cr, "_spawn", lambda cmd: seen.setdefault("cmd", cmd) or iter(_fixture_lines()))
+    monkeypatch.setattr(cr, "_spawn", lambda cmd, exit_holder=None: seen.setdefault("cmd", cmd) or iter(_fixture_lines()))
 
     task_id = _make_task(claude_session_id="EXISTING-SID", session_origin="background_agent")
     list(cr.run_turn(task_id, "follow up"))
@@ -144,3 +146,77 @@ def test_result_not_persisted_as_assistant_message(tasks_root, stub_spawn, stub_
     persisted = chat_transcript.read_events(task_id)
     # result is metadata: yielded but never written to the transcript.
     assert not [e for e in persisted if e.get("kind") == "result"]
+
+
+# ─── M3: regression coverage for C1 (lifecycle) and I1 (error event) ─────────
+
+def test_spawn_kills_process_on_early_generator_close():
+    """C1: closing the generator early must terminate the real subprocess.
+
+    This is the test that proves the fix. We spawn a REAL short-lived process
+    via `_spawn` — it emits one line then sleeps 30s — consume exactly ONE line,
+    then close the generator (the GeneratorExit path the SSE consumer triggers
+    on disconnect). The finally-block must SIGTERM→SIGKILL the process group, so
+    the process must be dead shortly after. Without the lifecycle ownership the
+    `sleep 30` would linger as an orphan.
+    """
+    # Bypass the real `claude` argv builder — feed _spawn a plain shell command.
+    cmd = ["sh", "-c", "printf '%s\\n' '{\"type\":\"system\"}'; sleep 30"]
+    holder = {}
+    gen = cr._spawn(cmd, holder)
+
+    first = next(gen)  # consume one line, leaving the process alive (sleeping)
+    assert first.strip() == '{"type":"system"}'
+
+    gen.close()  # GeneratorExit -> finally -> _kill_process_group
+
+    # The process must die promptly (well under the 30s sleep). Poll briefly.
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        if holder.get("returncode") is not None:
+            break
+        time.sleep(0.05)
+    assert holder.get("returncode") is not None, "process was not reaped (orphaned)"
+    # A SIGTERM/SIGKILL of the group yields a negative (signal) return code.
+    assert holder["returncode"] != 0
+
+
+def test_no_result_event_yields_and_persists_error(
+    tasks_root, stub_model, monkeypatch
+):
+    """I1: a stream that ends without a `result` event surfaces an error.
+
+    Replay a couple of assistant lines but NO result event (claude died mid-run).
+    run_turn must yield a final normalized error event AND persist it to the
+    transcript so a reload shows the failure with a retry affordance.
+    """
+    no_result_lines = [
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "text", "text": "working on it"}]}}) + "\n",
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "name": "Read", "input": {"file_path": "x.md"}}]}}) + "\n",
+        # no result event — stream just ends
+    ]
+    monkeypatch.setattr(
+        cr, "_spawn",
+        lambda cmd, exit_holder=None: iter(no_result_lines),
+    )
+
+    task_id = _make_task()
+    events = list(cr.run_turn(task_id, "ping"))
+
+    # The LAST yielded event is the recoverable error event.
+    err = [e for e in events if e.get("kind") == "error"]
+    assert err, "expected an error event when no result was seen"
+    assert events[-1]["kind"] == "error"
+    assert err[0]["role"] == "error"
+    assert err[0]["origin"] == "chat"
+    assert err[0]["run_id"]
+    assert "retry" in err[0]["text"].lower()
+    # No result event should have been yielded.
+    assert not [e for e in events if e.get("kind") == "result"]
+
+    # And it's persisted to the transcript (reload shows the error bubble).
+    persisted = chat_transcript.read_events(task_id)
+    persisted_err = [e for e in persisted if e.get("kind") == "error"]
+    assert persisted_err and persisted_err[0]["role"] == "error"

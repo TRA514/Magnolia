@@ -18,12 +18,19 @@ frontmatter, and yields each normalized event for the SSE route to stream.
 import datetime
 import json
 import os
+import signal
 import subprocess
 import uuid
 
 import profile_lib
 import task_lib
 import chat_transcript
+
+# Reuse dispatch's process-group teardown verbatim so chat and background runs
+# share one battle-tested kill path (SIGTERM → wait(timeout=5) → SIGKILL the
+# whole group). The import is side-effect-free: task_dispatch's module body is
+# only imports + constant assignments, and the server already imports it.
+from task_dispatch import _kill_process_group
 
 # Repo root — the cwd `claude` runs in, mirroring task_dispatch.PM_OS_DIR.
 PM_OS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -198,12 +205,24 @@ def _chat_env():
     return env
 
 
-def _spawn(cmd):
-    """Spawn `claude` and yield its stdout lines.
+def _spawn(cmd, exit_holder=None):
+    """Spawn `claude` and yield its stdout lines, owning the process lifecycle.
 
     Thin, monkeypatchable seam so run_turn's logic is testable without invoking
     the real CLI. stderr is discarded; we iterate stdout line-by-line so the SSE
     route can stream events as they arrive.
+
+    Lifecycle ownership (C1): the child is launched in its OWN session/process
+    group (start_new_session=True) so the whole `claude` process TREE can be
+    killed as a unit. A try/finally guarantees teardown even when the consumer
+    closes the generator early — the normal SSE case, where the browser
+    disconnects and the generator receives GeneratorExit at the `yield`. On any
+    exit we close the pipe and, if the process is still running, SIGTERM →
+    wait → SIGKILL the group via the shared dispatch helper. This is what
+    prevents orphaned/zombie `claude` trees under the long-lived server.
+
+    The subprocess return code is written into ``exit_holder['returncode']``
+    (when a dict is supplied) so run_turn can detect abnormal termination (I1).
     """
     proc = subprocess.Popen(
         cmd,
@@ -212,21 +231,36 @@ def _spawn(cmd):
         text=True,
         cwd=PM_OS_DIR,
         env=_chat_env(),
+        start_new_session=True,  # own process group for clean kill (C1)
     )
-    yield from proc.stdout
-    proc.wait()
+    try:
+        yield from proc.stdout
+    finally:
+        try:
+            proc.stdout.close()
+        except Exception:
+            pass
+        # Normal end-of-stream: reap. Early close / mid-stream: kill the group.
+        if proc.poll() is None:
+            _kill_process_group(proc)
+        if exit_holder is not None:
+            exit_holder["returncode"] = proc.returncode
 
 
 def _persist_chat_session(task_id, session_id):
-    """Best-effort: record the resumable chat session id on the task.
+    """Best-effort: record the resumable chat session id + last-active on the task.
 
     Mirrors task_dispatch._persist_session_id — persistence must never crash a
-    turn that is already streaming, so swallow everything.
+    turn that is already streaming, so swallow everything. Folds the
+    chat_last_active stamp into the SAME read-modify-write as the session fields
+    (I2): on the new-session path we already know we're rewriting frontmatter,
+    so there's no reason to do a second full cycle just to touch last-active.
     """
     try:
         task_lib.update_task(task_id, {
             "claude_session_id": session_id,
             "session_origin": "human_chat",
+            "chat_last_active": _now_iso(),
         })
     except Exception:
         pass
@@ -298,7 +332,9 @@ def run_turn(task_id, message):
     )
 
     result_sid = None
-    for line in _spawn(cmd):
+    saw_result = False
+    exit_holder = {}
+    for line in _spawn(cmd, exit_holder):
         if not line or not line.strip():
             continue
         try:
@@ -314,6 +350,7 @@ def run_turn(task_id, message):
 
             if kind == "result":
                 # Metadata: yield it for the UI, but do not append as a message.
+                saw_result = True
                 result_sid = event.get("session_id") or result_sid
                 if new_session and result_sid:
                     _persist_chat_session(task_id, result_sid)
@@ -327,8 +364,32 @@ def run_turn(task_id, message):
             yield event
 
     # New session: ensure the resumable id is on the task even if the result
-    # carried no session_id (fall back to the minted id).
+    # carried no session_id (fall back to the minted id). This call also stamps
+    # chat_last_active in the SAME write (I2), so the new-session path needs no
+    # separate _touch_last_active.
     if new_session and not result_sid:
         _persist_chat_session(task_id, minted_sid)
 
-    _touch_last_active(task_id)
+    # I1: a clean run ALWAYS ends with a `result` event. If we never saw one —
+    # claude died, was killed, or the stream ended abnormally (a non-zero exit
+    # is a strong corroborating signal but not required) — surface a final,
+    # recoverable error event so the SSE layer can emit an error frame and the
+    # frontend can offer retry. Persist it too so a transcript reload shows it.
+    if not saw_result:
+        error_event = {
+            "kind": "error",
+            "role": "error",
+            "text": "The assistant run ended unexpectedly. You can retry.",
+            "run_id": run_id,
+            "origin": "chat",
+        }
+        try:
+            chat_transcript.append_event(task_id, dict(error_event))
+        except Exception:
+            pass
+        yield error_event
+
+    # Resume path: stamp last-active on its own (the new-session path already
+    # folded this into _persist_chat_session, I2).
+    if not new_session:
+        _touch_last_active(task_id)

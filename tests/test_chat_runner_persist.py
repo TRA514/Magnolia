@@ -105,6 +105,29 @@ def test_resumed_session_tags_post_run_true(tasks_root, stub_spawn, stub_model, 
     assert fm["claude_session_id"] == "EXISTING-SID"
 
 
+def test_resume_path_injects_current_task_state_into_prompt(
+    tasks_root, stub_spawn, stub_model, monkeypatch
+):
+    # The resumed-session prompt (argv message, cmd[1]) carries the fresh task
+    # state block AND the operator's message, so the model never tool-calls for
+    # metadata. The PERSISTED user event still stores the bare original message.
+    seen = {}
+    monkeypatch.setattr(cr, "_spawn", lambda cmd, exit_holder=None: seen.setdefault("cmd", cmd) or iter(_fixture_lines()))
+
+    task_id = _make_task(claude_session_id="EXISTING-SID", status="in_progress",
+                         priority="high")
+    list(cr.run_turn(task_id, "what's left?"))
+
+    sent = seen["cmd"][1]  # build_chat_cmd puts the prompt first positional
+    assert "## Current task state" in sent
+    assert "- status: in_progress" in sent
+    assert "what's left?" in sent
+
+    # The transcript keeps the operator's ORIGINAL text, not the wrapped prompt.
+    user = [e for e in chat_transcript.read_events(task_id) if e.get("role") == "user"]
+    assert user[0]["text"] == "what's left?"
+
+
 def test_post_run_true_when_agent_complete_without_session(
     tasks_root, stub_spawn, stub_model
 ):

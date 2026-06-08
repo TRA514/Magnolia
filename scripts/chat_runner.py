@@ -100,24 +100,17 @@ def build_chat_cmd(session_id, message, model, new_session=False, allowed_tools=
     ]
 
 
-def build_context_prompt(task, user_message):
-    """Build the first-turn system/context prompt for a NEW chat session.
+def _task_context_block(task, *, include_description=True, heading="## Task context"):
+    """Build the bulleted task-context block (pure; no framing, no message).
 
-    Only the FIRST turn of a new session gets this prompt: it frames the
-    assistant and embeds the task context plus the operator's message. Resumed
-    sessions send the user message alone — Claude Code owns the resumed context,
-    so we never replay chat history here.
-
-    Identity is read ONLY via profile_lib (display_name / company / persona) —
-    never a hardcoded person literal (invariant #1).
+    Always-present fields first, then any truthy optional ones. ``heading`` lets
+    callers label it ("## Task context" for a fresh session vs. "## Current task
+    state" on resume). ``include_description=False`` drops the (potentially long)
+    body — used on resume, where the body already lives in session history and
+    only the volatile metadata is worth re-sending each turn.
     """
-    name = profile_lib.display_name()
-    company = profile_lib.company()
-    persona = profile_lib.persona()
-
-    # Task-context block. Always-present fields first, then any optional ones.
     lines = [
-        "## Task context",
+        heading,
         f"- id: {task.get('id', '(none)')}",
         f"- title: {task.get('title', '(untitled)')}",
         f"- status: {task.get('status', '(unknown)')}",
@@ -128,12 +121,31 @@ def build_context_prompt(task, user_message):
         ("project", task.get("project")),
         ("domain", task.get("domain")),
         ("due", task.get("due")),
-        ("description", task.get("description") or task.get("body")),
     ]
+    if include_description:
+        optional.append(("description", task.get("description") or task.get("body")))
     for label, value in optional:
         if value:
             lines.append(f"- {label}: {value}")
-    task_block = "\n".join(lines)
+    return "\n".join(lines)
+
+
+def build_context_prompt(task, user_message):
+    """Build the first-turn system/context prompt for a NEW chat session.
+
+    Only the FIRST turn of a new session gets this prompt: it frames the
+    assistant and embeds the task context plus the operator's message. Resumed
+    sessions get a lighter prompt (see ``build_resume_prompt``) — Claude Code
+    owns the resumed conversation, so we never replay chat history here.
+
+    Identity is read ONLY via profile_lib (display_name / company / persona) —
+    never a hardcoded person literal (invariant #1).
+    """
+    name = profile_lib.display_name()
+    company = profile_lib.company()
+    persona = profile_lib.persona()
+
+    task_block = _task_context_block(task)
 
     where = f" at {company}" if company else ""
     return (
@@ -149,6 +161,33 @@ def build_context_prompt(task, user_message):
         f"plainly and point to the button; never claim the user can 'approve it "
         f"in the terminal'.\n\n"
         f"{task_block}\n\n"
+        f"## {name}'s message\n"
+        f"{user_message}"
+    )
+
+
+def build_resume_prompt(task, user_message):
+    """Build the prompt for a RESUMED session's turn.
+
+    The resumed session already carries its framing and history (from the first
+    chat turn, or from the background worker's run), so we DON'T replay the
+    persona preamble. We DO re-inject a compact, CURRENT task-state block every
+    turn: the volatile fields (status / priority / queue / due) can change
+    between turns, and giving them inline means the model reads live state for
+    free instead of spending a tool call to re-fetch metadata we already hold.
+    The long body is omitted (``include_description=False``) — it's already in
+    session history from the first turn.
+
+    Identity via profile_lib only (invariant #1).
+    """
+    name = profile_lib.display_name()
+    state_block = _task_context_block(
+        task, include_description=False, heading="## Current task state"
+    )
+    return (
+        f"{state_block}\n"
+        f"(These are the task's current values — they may have changed since the "
+        f"last turn; trust them over anything earlier in the conversation.)\n\n"
         f"## {name}'s message\n"
         f"{user_message}"
     )
@@ -392,7 +431,10 @@ def run_turn(task_id, message):
     else:
         minted_sid = None
         sid = existing_sid
-        sent_message = message
+        # Re-inject the current task state so the model reads live metadata inline
+        # rather than spending a tool call to re-fetch it (the body stays in
+        # session history). The ORIGINAL message is what we persist below.
+        sent_message = build_resume_prompt(fm, message)
 
     # 1) Persist the USER turn first — the operator's ORIGINAL message.
     chat_transcript.append_event(task_id, {

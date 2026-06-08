@@ -37,6 +37,7 @@ def run_downstream(txt_path, item_id, state, log):
     """Classify the txt, record domain/final_path in state[item_id], fire the
     task-extract + qmd hooks. Returns final_path (or txt_path if classify absent).
     Mirrors the Otter post-write block exactly; provider-agnostic via item_id."""
+    txt_path = Path(txt_path)
     final_path = str(txt_path)
     try:
         process_file = _classify_fn()

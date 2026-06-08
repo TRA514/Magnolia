@@ -25,6 +25,136 @@ let chatState = null; // { task, busy }
 // hidden baseline, so adding the class animates to the shown state.
 function revealNow(el, cls) { void el.offsetWidth; el.classList.add(cls); }
 
+// ── Markdown rendering for assistant prose (dependency-free, XSS-safe) ─────────
+// The board has NO build step and NO libraries, so this is a small vanilla
+// renderer for the common markdown subset assistant replies use.
+//
+// SAFETY MODEL — escape-first: every raw character from the model is
+// HTML-escaped (& < >) BEFORE any tag is emitted, so the ONLY live HTML in the
+// output is the handful of tags this function generates itself. Assistant text
+// can never inject markup: a literal "<script>" arrives as "&lt;script&gt;".
+// Links are additionally scheme-gated to http/https/mailto so a
+// "[x](javascript:…)" can't produce an executable href — it degrades to plain
+// text. This is safe to call on PARTIAL text mid-stream: an unclosed token like
+// a lone "**" simply renders literally until its pair arrives, because we
+// re-render the whole accumulated buffer on each token.
+//
+// Code is handled by SPLITTING, never by placeholder/sentinel substitution
+// (which collides with real prose like "step 3 of 5"): fenced blocks are found
+// by a line-by-line ``` toggle pass, and inline code by splitting each line on
+// /(`[^`]+`)/ and formatting only the non-code segments.
+
+function mdEscape(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+// Inline formatting for a single already-context-safe line. Operates on RAW
+// (un-escaped) text: it splits out inline-code spans first, then escapes +
+// formats the prose between them, then escapes (no further formatting) the code.
+function mdInline(line) {
+  return line
+    .split(/(`[^`]+`)/)
+    .map(seg => {
+      if (seg.length >= 2 && seg[0] === '`' && seg[seg.length - 1] === '`') {
+        return `<code>${mdEscape(seg.slice(1, -1))}</code>`;
+      }
+      return mdFormatProse(seg);
+    })
+    .join('');
+}
+
+// Escape FIRST, then apply emphasis/link tags to the now-safe string. Order:
+// bold (** / __) and strike (~~) before italic (* / _) so the single-char
+// emphasis doesn't eat the inner chars of the double-char markers.
+function mdFormatProse(seg) {
+  let s = mdEscape(seg);
+  // links: [label](url) — only safe schemes; otherwise emit the label as text.
+  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, label, url) => {
+    if (/^(https?:|mailto:)/i.test(url)) {
+      // url came through mdEscape already, so quotes/brackets are inert.
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    }
+    return label; // block javascript: and other schemes — render label only
+  });
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+  s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+  s = s.replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, '$1<em>$2</em>');
+  s = s.replace(/(^|[^_])_([^_\s][^_]*?)_/g, '$1<em>$2</em>');
+  return s;
+}
+
+function renderMarkdown(src) {
+  const lines = String(src == null ? '' : src).split('\n');
+  const out = [];
+  let i = 0;
+  let para = [];      // buffer of inline-rendered lines for the current paragraph
+  let list = null;    // { tag: 'ul'|'ol', items: [] } for the current list
+
+  const flushPara = () => {
+    if (para.length) { out.push(`<p>${para.join('<br>')}</p>`); para = []; }
+  };
+  const flushList = () => {
+    if (list) { out.push(`<${list.tag}>${list.items.map(it => `<li>${it}</li>`).join('')}</${list.tag}>`); list = null; }
+  };
+
+  while (i < lines.length) {
+    const raw = lines[i];
+
+    // Fenced code block — find the ``` toggle and accumulate the body verbatim.
+    const fence = raw.match(/^\s*```(.*)$/);
+    if (fence) {
+      flushPara(); flushList();
+      i += 1;
+      const body = [];
+      while (i < lines.length && !/^\s*```/.test(lines[i])) { body.push(lines[i]); i += 1; }
+      i += 1; // consume the closing fence (if present; end-of-input is fine)
+      out.push(`<pre><code>${mdEscape(body.join('\n'))}</code></pre>`);
+      continue;
+    }
+
+    // Blank line — paragraph / list break.
+    if (/^\s*$/.test(raw)) { flushPara(); flushList(); i += 1; continue; }
+
+    // Headings (#, ##, ###) → small headings.
+    const h = raw.match(/^\s*(#{1,3})\s+(.*)$/);
+    if (h) {
+      flushPara(); flushList();
+      const level = h[1].length;
+      out.push(`<h${level} class="md-h">${mdInline(h[2])}</h${level}>`);
+      i += 1; continue;
+    }
+
+    // Unordered list item (-, *, +).
+    const ul = raw.match(/^\s*[-*+]\s+(.*)$/);
+    if (ul) {
+      flushPara();
+      if (!list || list.tag !== 'ul') { flushList(); list = { tag: 'ul', items: [] }; }
+      list.items.push(mdInline(ul[1]));
+      i += 1; continue;
+    }
+
+    // Ordered list item (1.).
+    const ol = raw.match(/^\s*\d+\.\s+(.*)$/);
+    if (ol) {
+      flushPara();
+      if (!list || list.tag !== 'ol') { flushList(); list = { tag: 'ol', items: [] }; }
+      list.items.push(mdInline(ol[1]));
+      i += 1; continue;
+    }
+
+    // Plain prose line — accumulate; single newlines become <br> within a <p>.
+    flushList();
+    para.push(mdInline(raw));
+    i += 1;
+  }
+  flushPara(); flushList();
+  return out.join('');
+}
+
 async function buildChat(task) {
   chatState = { task, busy: false };
 
@@ -142,7 +272,7 @@ function renderTurn(turn, instant) {
   el.appendChild(stepsBox);
   const txt = document.createElement('div');
   txt.className = 'turn-text';
-  txt.textContent = turn.text || '';
+  txt.innerHTML = renderMarkdown(turn.text || '');
   el.appendChild(txt);
   return el;
 }
@@ -236,7 +366,7 @@ async function sendChat() {
   thread.appendChild(a); scrollThread();
   const stepsBox = a.querySelector('.turn-steps');
   const textBox = a.querySelector('.turn-text');
-  let typingCleared = false, liveGroup = null, toolCount = 0, sawText = false, streamDone = false;
+  let typingCleared = false, liveGroup = null, toolCount = 0, sawText = false, streamDone = false, rawText = '';
   const clearTyping = () => { if (!typingCleared) { textBox.innerHTML = ''; typingCleared = true; } };
 
   try {
@@ -296,7 +426,10 @@ async function sendChat() {
     } else if (ev.kind === 'text') {
       clearTyping();
       if (!sawText) { sawText = true; textBox.textContent = ''; }
-      textBox.textContent += ev.text || '';
+      // Accumulate the raw streamed markdown and re-render the whole buffer each
+      // token so partial markdown resolves correctly once a pair closes.
+      rawText += ev.text || '';
+      textBox.innerHTML = renderMarkdown(rawText);
       scrollThread();
     } else if (ev.kind === 'error') {
       clearTyping();

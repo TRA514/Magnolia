@@ -1061,6 +1061,31 @@
   .turn-text.streaming::after { content: '▍'; margin-left: 1px; color: var(--accent); animation: caret 1.05s steps(1) infinite; }
   @keyframes caret { 50% { opacity: 0; } }
 
+  /* Rendered markdown in assistant prose — block tags now carry the spacing, so
+     reset pre-wrap and let margins do the work. Theme tokens only. */
+  .turn-assistant .turn-text { white-space: normal; }
+  .turn-text p { margin: 0 0 10px; }
+  .turn-text p:last-child { margin-bottom: 0; }
+  .turn-text .md-h { margin: 14px 0 6px; line-height: 1.35; color: var(--text); font-weight: 600; }
+  .turn-text .md-h:first-child { margin-top: 0; }
+  .turn-text h1.md-h { font-size: 15px; }
+  .turn-text h2.md-h { font-size: 14px; }
+  .turn-text h3.md-h { font-size: 13.5px; color: var(--text-muted); }
+  .turn-text ul, .turn-text ol { margin: 6px 0 10px; padding-left: 20px; }
+  .turn-text li { margin: 2px 0; }
+  .turn-text a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+  .turn-text code {
+    font-family: var(--mono, ui-monospace, monospace); font-size: 12px;
+    background: var(--surface-hover); border: 1px solid var(--border-soft);
+    border-radius: 5px; padding: 1px 5px;
+  }
+  .turn-text pre {
+    margin: 8px 0 10px; padding: 10px 12px; overflow-x: auto;
+    background: var(--surface-hover); border: 1px solid var(--border-soft);
+    border-radius: 9px;
+  }
+  .turn-text pre code { background: none; border: none; padding: 0; font-size: 12px; line-height: 1.5; }
+
   /* Quiet meta lines — "thinking" + tool calls, like "Searched the web ›". */
   .turn-steps { display: flex; flex-direction: column; align-items: flex-start; gap: 11px; margin-bottom: 14px; }
   .turn-steps:empty { display: none; }

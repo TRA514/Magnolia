@@ -34,7 +34,10 @@ function shortArtifactPath(p) {
   return s;
 }
 
-async function openTask(taskId) {
+// keepChat: when true (a left-detail refresh, e.g. after a chat turn settles or
+// a comment is added), rebuild only the task pane and DON'T re-run buildChat —
+// that would wipe the live conversation. Default false = a fresh open.
+async function openTask(taskId, keepChat) {
   currentTaskId = taskId;
   const overlay = document.getElementById('modal-overlay');
   const modalBody = document.getElementById('modal-body');
@@ -42,6 +45,8 @@ async function openTask(taskId) {
   const modalActions = document.getElementById('modal-actions');
 
   overlay.classList.add('active');
+  overlay.classList.remove('no-chat', 'closing');   // task detail = split workspace (with chat)
+  document.body.classList.add('ws-open');
   modalBody.innerHTML = '<div class="loading">Loading...</div>';
   modalTitle.textContent = taskId;
   modalActions.innerHTML = '';
@@ -342,14 +347,53 @@ async function openTask(taskId) {
     rightHtml += `<button class="btn btn-success" onclick="markDone()">${doneLabel}</button>`;
 
     modalActions.innerHTML = `<div class="dt-foot-left">${leftHtml}</div><div class="dt-foot-right">${rightHtml}</div>`;
+
+    // Build the linked chat for this task, mark the source card, then let the
+    // whole workspace materialize (blur→sharp + sweet-spot spring). On a
+    // keepChat refresh (post-settle / post-comment), skip all three: the
+    // workspace is already visible and the chat thread must be preserved.
+    if (!keepChat) {
+      if (typeof buildChat === 'function') buildChat(task);
+      markSourceCard(taskId);
+      revealWorkspace();
+    }
   } catch (err) {
     modalBody.innerHTML = `<div class="loading">Error: ${err.message}</div>`;
   }
 }
 
+// Reveal the workspace: paint the diffuse (blurred/scaled) start state, then
+// flip on .visible so the spring + blur-clear transitions fire. Double rAF
+// guarantees the start state is painted first, so the browser animates.
+function revealWorkspace() {
+  const overlay = document.getElementById('modal-overlay');
+  requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('visible')));
+}
+
+function markSourceCard(taskId) {
+  document.querySelectorAll('.card-source-open').forEach(c => c.classList.remove('card-source-open'));
+  const card = document.querySelector(`.card[data-task-id="${taskId}"]`);
+  if (card) card.classList.add('card-source-open');
+}
+
+// Close: reverse is faster and simpler — container scales to 94% and fades on a
+// standard ease (no blur, which would feel sluggish); the tile list fades back
+// simultaneously. Then we tear down the active/visible state.
 function closeModal() {
-  document.getElementById('modal-overlay').classList.remove('active');
-  currentTaskId = null;
+  const overlay = document.getElementById('modal-overlay');
+  if (!overlay.classList.contains('active') || overlay.classList.contains('closing')) {
+    overlay.classList.remove('active', 'visible', 'no-chat');
+    document.body.classList.remove('ws-open');
+    currentTaskId = null;
+    return;
+  }
+  overlay.classList.add('closing');
+  document.body.classList.remove('ws-open');
+  setTimeout(() => {
+    overlay.classList.remove('active', 'visible', 'closing', 'no-chat');
+    document.querySelectorAll('.card-source-open').forEach(c => c.classList.remove('card-source-open'));
+    currentTaskId = null;
+  }, 300);
 }
 
 async function markDone() {
@@ -397,7 +441,7 @@ async function addComment() {
       body: JSON.stringify({ content }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    openTask(currentTaskId); // refresh modal
+    openTask(currentTaskId, true); // refresh modal (keep the open chat)
   } catch (err) {
     toast(`Error: ${err.message}`);
   }
@@ -416,7 +460,7 @@ async function reactTask(id, react) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     // No success banner — the board treats a click as its own confirmation
     // (toast() suppresses non-error types). Re-render shows the active state.
-    openTask(id); // refresh modal to reflect active state
+    openTask(id, true); // refresh modal to reflect active state (keep the open chat)
   } catch (e) { toast(`React failed: ${e.message}`); }
 }
 
@@ -519,7 +563,7 @@ async function startAgent(taskId) {
     }
     // Refresh modal to show in-progress state
     if (btn) btn.textContent = 'Agent started';
-    setTimeout(() => { if (currentTaskId === taskId) openTask(taskId); fetchTasks(); }, 2000);
+    setTimeout(() => { if (currentTaskId === taskId) openTask(taskId, true); fetchTasks(); }, 2000);
   } catch (err) {
     toast(`Error dispatching agent: ${err.message}`);
     if (btn) {
@@ -551,7 +595,7 @@ async function rerunAgent(taskId) {
       throw new Error(data.error || `HTTP ${res.status}`);
     }
     if (btn) btn.textContent = 'Agent restarted';
-    setTimeout(() => { if (currentTaskId === taskId) openTask(taskId); fetchTasks(); }, 2000);
+    setTimeout(() => { if (currentTaskId === taskId) openTask(taskId, true); fetchTasks(); }, 2000);
   } catch (err) {
     toast(`Error rerunning agent: ${err.message}`);
     if (btn) {
@@ -915,7 +959,7 @@ async function saveDescription() {
       body: JSON.stringify({ description }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    openTask(currentTaskId); // refresh modal
+    openTask(currentTaskId, true); // refresh modal (keep the open chat)
     fetchTasks(); // refresh board in background
   } catch (err) {
     toast(`Error saving description: ${err.message}`);

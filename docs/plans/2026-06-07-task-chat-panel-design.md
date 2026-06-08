@@ -116,10 +116,21 @@ is mid-run (background *or* chat), return `409`; the UI disables the composer wi
 "Agent is currently working." No queueing in v1.
 
 ### (e) Tier-2 — non-negotiable
-External writes from chat (send message, publish Jira, create meeting) route
-through the existing `publish(family, draft)` gate, which raises
-`NeedsConfirmation` on first external action → surfaced as an inline confirm in
-chat. The demo's free-firing handlers get rewired to the real gated path.
+Dispatch runs `claude` with `bypassPermissions`, so Claude's permission mode
+cannot be the gate. The system's real pattern is **agent drafts → board
+publishes through a gated verb after one plain-language confirm.** The chat
+preserves this:
+- The chat runner's **allowed-tools exclude external-write MCP tools** (no Jira
+  create, no message send, no calendar write). Chat can read/search/draft/edit
+  task artifacts — it cannot fire an external write itself.
+- When the user says "send it"/"file it", chat surfaces an **inline confirm** that
+  routes to the existing **gated board endpoints** (`send-message` / `publish-jira`
+  / `schedule-meeting`), which already run through `publish(family, draft)` →
+  `NeedsConfirmation` (invariant #5). The demo's free-firing handlers
+  (`doSendMessage`, `doPublishJira`, `doCreateMeeting`) get rewired to that path.
+
+This means the chat is structurally incapable of a silent external write — the
+gate lives in code the chat must go through, not in the headless session's trust.
 
 ### Cost / rehydration note
 Per-turn `claude -p --resume` pays: (1) local spawn + JSONL read (~1–2s, no

@@ -1,13 +1,13 @@
 ---
 name: quality-prd-validation
-description: Use when creating or reviewing PRDs - enforces 6-point rubric ensuring PRDs have clear objectives, defined use cases, structured requirements, timeline, measurable success criteria, and DACE assignment
+description: Use when creating or reviewing PRDs - enforces 5-point rubric ensuring PRDs have clear objectives, defined use cases, structured requirements, timeline, and measurable success criteria
 ---
 
 # PRD Validation
 
 ## The Iron Law
 
-**NO PRD BECOMES ACTIONABLE WITHOUT PASSING ALL 6 RUBRIC CHECKS**
+**NO PRD BECOMES ACTIONABLE WITHOUT PASSING ALL 5 RUBRIC CHECKS**
 
 If a PRD fails any rubric criterion, it must be:
 1. Refined until it passes, OR
@@ -25,7 +25,6 @@ Ensure all PRDs maintain consistent quality standards:
 - Structured requirements with priorities
 - Timeline with milestones
 - Measurable success criteria
-- Assigned ownership (DACE)
 
 ## When to Use This Skill
 
@@ -41,13 +40,13 @@ Activate automatically when:
 | Status | Validation Requirement |
 |--------|----------------------|
 | 🚧 Drafting | Warnings allowed, no blockers. Must have: Project name, description, at least one objective |
-| 🏃 Actionable | **ALL 6 criteria must pass**. No TBD in critical fields |
+| 🏃 Actionable | **ALL 5 criteria must pass**. No TBD in critical fields |
 | 🔒 Closed | All criteria passed + reflects actual delivery |
 | ❗ Abandoned | No validation required |
 
-## The 6-Point PRD Rubric
+## The 5-Point PRD Rubric
 
-All PRDs must pass **all six criteria** to become Actionable:
+All PRDs must pass **all five criteria** to become Actionable:
 
 ### 1. Objectives Clear
 **Requirement**: PRD has a well-defined customer statement with problem and desired outcome
@@ -151,25 +150,6 @@ Opportunity Sizing: 500 customers affected, ~$50K ARR at risk from churn
 - Company-level or north-star metrics without feature-specific metrics alongside them
 - Metrics requiring instrumentation that nobody has committed to building
 
-### 6. DACE Assigned
-**Requirement**: PRD has Driver, Approver, and key Contributors identified
-
-**Pass**:
-```
-| Role        | Person/Team         |
-|-------------|---------------------|
-| Driver      | Jane Smith (PM)     |
-| Approver    | John Doe (VP Prod)  |
-| Contributors| Platform team, Design |
-| Escalation  | VP Engineering      |
-```
-
-**Fail**:
-- "Driver: TBD"
-- No approval authority identified
-- No team ownership
-- Missing escalation path
-
 ## Validation Process
 
 ### 1. Load PRD
@@ -189,7 +169,6 @@ Check each criterion sequentially:
 ✓ Requirements Structured? [Yes/No] → [Has milestones with priorities]
 ✓ Timeline Present? [Yes/No] → [Has delivery expectations]
 ✓ Success Measurable? [Yes/No] → [Has metrics/opportunity sizing]
-✓ DACE Assigned? [Yes/No] → [Has Driver, Approver identified]
 ```
 
 ### 3. Generate Report
@@ -207,7 +186,6 @@ Check each criterion sequentially:
 ✓ Requirements Structured: N milestones, N requirements with priorities
 ✓ Timeline Present: Milestones with delivery dates
 ✓ Success Measurable: N metrics defined, opportunity sized
-✓ DACE Assigned: Driver: [name], Approver: [name]
 
 **Recommendation**: Approve for Actionable status
 ```
@@ -266,14 +244,13 @@ User can invoke validation on existing PRDs:
 ## Success Criteria
 
 PRD validation passes when:
-- All 6 rubric criteria satisfied
+- All 5 rubric criteria satisfied
 - Validation report shows PASS status
 - Customer statement is complete
 - Scope boundaries are clear
 - Requirements have priorities and milestones
 - Timeline is defined
 - Success metrics exist
-- DACE is assigned
 
 ## Common Mistakes
 
@@ -284,7 +261,6 @@ PRD validation passes when:
 | Flat requirements list | Organize by milestone with P0/P1/P2 |
 | No timeline | Add milestones table with delivery expectations |
 | No metrics | Define specific success signals and measurements |
-| TBD for Driver/Approver | Assign specific people or roles |
 
 ## Quality Gate Failures
 
@@ -310,10 +286,6 @@ PRD validation passes when:
    - Example: "It will be better"
    - Fix: Define measurable success criteria
 
-6. **No DACE**
-   - Example: "Team owns it"
-   - Fix: Name specific Driver and Approver
-
 ## Related Skills
 
 - **meeting-synthesis**: Gathers evidence from meeting transcripts
@@ -329,9 +301,8 @@ Common excuses that are **explicitly rejected**:
 | "We can fill in details later" | Actionable PRDs need complete critical fields |
 | "Everyone knows what this means" | Make it explicit and documented |
 | "Timeline will become clear" | Timeline required for Actionable status |
-| "DACE can be assigned later" | Driver and Approver required for Actionable |
 | "Out of scope is obvious" | Explicitly state exclusions |
-| "Close enough to pass" | All 6 criteria or remain in Draft |
+| "Close enough to pass" | All 5 criteria or remain in Draft |
 
 
 

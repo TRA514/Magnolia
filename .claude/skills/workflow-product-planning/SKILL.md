@@ -10,7 +10,7 @@ description: Use when transforming meeting transcripts into roadmap PRDs - synth
 Transform meeting signals into actionable PRDs:
 - Synthesize product signals from meeting transcripts
 - Cluster semantically into PRD themes
-- Validate PRD quality (6-point rubric)
+- Validate PRD quality (5-point rubric)
 - Generate PRD proposals and update roadmap
 
 ## When to Use
@@ -93,8 +93,8 @@ Fill in what's known from signals:
 **Invoke:** `prd-validation` skill
 
 **For each PRD proposal:**
-- Apply 6-point rubric
-- Drafting PRDs may have warnings (missing DACE, timeline, etc.)
+- Apply 5-point rubric
+- Drafting PRDs may have warnings (missing timeline, metrics, etc.)
 - Note required additions for Actionable status
 - If fundamentally incomplete: flag for interactive completion
 

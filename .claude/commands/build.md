@@ -68,7 +68,7 @@ Before starting, verify these artifacts exist in the package folder:
 > - `{package}/PRD_{slug}.md`
 > - `datasets/product/prds/{YYYY}/PRD_{slug}.md`
 >
-> **PM interaction**: YES — confirm pre-populated sections are accurate, fill genuinely missing sections (DACE ownership, timeline, links). Do NOT re-ask for information already in upstream artifacts.
+> **PM interaction**: YES — confirm pre-populated sections are accurate, fill genuinely missing sections (timeline, links). Do NOT re-ask for information already in upstream artifacts.
 >
 > **Important**: Inherit every item from the Living FAQ's "Open Questions for PM" section that remains UNANSWERED into the PRD Open Questions.
 >

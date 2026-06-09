@@ -72,6 +72,14 @@ def test_min_reacted_floor_blocks_promotion(tasks_root, tmp_path):
     assert created == []
 
 
+def test_first_hop_fires_at_four_judged(tasks_root, tmp_path):
+    import task_lib, graduation_assess
+    p = str(tmp_path / "ladder.json")
+    _judged(task_lib, "prd-draft", 9, react="up", n=4)   # exactly min_judged=4, reacted=4>=3
+    created = graduation_assess.assess(ladder_path=p, now_iso="2026-06-10T00:00:00Z")
+    assert any(c["task_type"] == "prd-draft" for c in created)
+
+
 def test_ready_type_gets_graduation_card(tasks_root, tmp_path):
     import task_lib, graduation_assess, ladder_lib
     p = str(tmp_path / "ladder.json")

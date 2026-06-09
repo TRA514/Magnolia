@@ -44,6 +44,22 @@ The default eval stack is native files + git + board: prompts live in files (git
 
 **Canonical source:** `docs/plans/2026-06-06-phase-4-eval-substrate-design.md`.
 
+### Trust ladder — the enforcement layer (no longer advisory)
+
+Each task-type climbs a per-type trust tier in `scripts/ladder_lib.py` (`shadow → supervised → autonomous`), graduated by the twice-weekly assessor (`scripts/graduation_assess.py`). The tier now **enforces** (it was advisory through the 2026-06-09 passive-signal work): the judge is the enforcement seam — after it scores a completed task (`judge.py` `_finalize` → `enforce_lib.apply_post_judge`), `scripts/enforce_lib.py` runs a tier × score policy:
+
+| Tier | Judge `< bar` (revisions remaining) | Judge `>= bar` |
+|---|---|---|
+| **shadow** | park (advisory — human reviews everything) | park |
+| **supervised** | **revise** — reset + re-dispatch `--rerun` carrying `judge_why` (bounded by `max_revisions`) | park for human approval |
+| **autonomous** *(action type + global flag ON)* | revise | **auto-ship** via the Tier-2-gated `shipper.autoship` + a never-deleted Keep/Undo receipt |
+
+Three composing gates, none collapsible: **(1)** auto-ship is **judge-gated** — only a passing score ships; unscored/below-bar work never ships (fail-safe to *park*). **(2)** the **action/artifact split** is enforced in code — only `ACTION_TYPES` (`send-message`, `publish-ticket`) can auto-ship; artifacts (PRDs, research, memos) hard-stop at supervised regardless of tier. **(3)** Tier-2 composition — `shipper.autoship` calls the same `adapters.publish()`, so an unconfirmed integration still raises `NeedsConfirmation` → the one-time confirm card (autonomy never bypasses invariant #5's first-write confirm).
+
+Auto-ship runs **only in trusted backend processes** (the judge), never the headless LLM agent session (which has no send tools — `chat_runner` boundary). It ships behind a global default-OFF posture flag `autonomy_enforcement` (`profile/config.yaml`, surfaced as the **Autonomous Mode** toggle in the top-bar settings cog). The brake is the Quality-tab **kill switch** (`POST /api/tasks/{type}/demote` → `ladder_lib.kill_to_supervised`), which instantly drops a type out of autonomous without waiting for the assessor. The supervised revision loop performs no external write and is opt-in via graduation, so it is *not* behind the global flag — the flag guards only the externally-risky auto-ship.
+
+**Canonical source:** `scripts/enforce_lib.py`, `scripts/shipper.py`, `scripts/ladder_lib.py`; `docs/plans/2026-06-09-trust-ladder-enforcement-design.md`.
+
 ## 8. Cron
 
 Recurring jobs live in `datasets/cron/jobs.json` with an atomic counter at `datasets/cron/_counter`. A daemon thread in `task_server.py` ticks them; created tasks flow through the normal dispatch pipeline. Title/description template vars (`{date}`, `{week}`, `{month}`, `{year}`) resolve at execution time.

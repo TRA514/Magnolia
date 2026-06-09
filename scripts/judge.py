@@ -497,12 +497,15 @@ def _post_judge(task_id, verdict):
 
 def _finalize(task_id, verdict, rubric_version, kind):
     """Persist the verdict, then run trust-ladder enforcement. Strictly additive:
-    an enforcement failure never breaks judging (judge exits 0)."""
+    enforcement runs only after a successful write-back, and any enforcement failure
+    is logged but never breaks judging (judge exits 0)."""
     ok = write_back(task_id, verdict, rubric_version, kind)
-    try:
-        _post_judge(task_id, verdict)
-    except Exception as e:
-        log(f"post-judge enforcement failed for {task_id} (non-fatal): {e}")
+    if ok:
+        try:
+            outcome = _post_judge(task_id, verdict)
+            log(f"trust-ladder enforcement for {task_id}: {outcome}")
+        except Exception as e:
+            log(f"post-judge enforcement failed for {task_id} (non-fatal): {e}")
     return ok
 
 

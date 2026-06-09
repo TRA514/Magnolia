@@ -5,7 +5,7 @@ import judge
 def test_finalize_calls_post_judge(monkeypatch):
     calls = []
     monkeypatch.setattr(judge, "write_back", lambda tid, v, rv, k: True)
-    monkeypatch.setattr(judge, "_post_judge", lambda tid, v: calls.append((tid, v)))
+    monkeypatch.setattr(judge, "_post_judge", lambda tid, v: calls.append((tid, v)) or "park")
     judge._finalize("T-9", {"score": 8, "why": "ok", "dimensions": {}}, "rubric-v1", "message")
     assert calls and calls[0][0] == "T-9"
 
@@ -14,7 +14,18 @@ def test_finalize_swallows_enforcement_error(monkeypatch):
     def boom(tid, v): raise RuntimeError("boom")
     monkeypatch.setattr(judge, "_post_judge", boom)
     # must NOT raise — judge stays additive / exit 0
-    judge._finalize("T-9", {"score": 8, "why": "ok", "dimensions": {}}, "rubric-v1", "message")
+    result = judge._finalize("T-9", {"score": 8, "why": "ok", "dimensions": {}}, "rubric-v1", "message")
+    # _finalize returns the write_back result even when enforcement raises
+    assert result is True
+
+def test_finalize_skips_enforcement_when_writeback_fails(monkeypatch):
+    calls = []
+    monkeypatch.setattr(judge, "write_back", lambda tid, v, rv, k: False)
+    monkeypatch.setattr(judge, "_post_judge", lambda tid, v: calls.append((tid, v)))
+    result = judge._finalize("T-9", {"score": 8, "why": "ok", "dimensions": {}}, "rubric-v1", "message")
+    # enforcement must NOT run when write-back fails, and _finalize returns False
+    assert calls == []
+    assert result is False
 
 def test_post_judge_delegates_to_enforce_lib(monkeypatch):
     import enforce_lib

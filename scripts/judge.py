@@ -280,7 +280,7 @@ def fetch_voice():
 
 
 def detect_kind(fm):
-    """Classify the deliverable form. Returns 'meeting' | 'message' | 'document' | None.
+    """Classify the deliverable form. Returns 'meeting' | 'message' | 'document' | 'ticket' | None.
 
     None means there is no single deliverable to grade (skip) — e.g. a meeting
     task that hasn't been scheduled yet, or an action that left only a prose note.

@@ -59,8 +59,8 @@ DEFAULTS = [
     },
     {
         "name": "Graduation ladder",
-        "cron_expr": "30 9 * * 1",  # Monday 09:30, after the digest pass
-        "cron_human": "Every Monday at 9:30am",
+        "cron_expr": "30 9 * * 1,4",  # Mon + Thu 09:30 (twice-weekly so the ladder shows up fast)
+        "cron_human": "Every Monday and Thursday at 9:30am",
         "task_template": {
             "title": "Trust-ladder graduation assessment {date}",
             "queue": "agent", "priority": "low", "domain": "ops",

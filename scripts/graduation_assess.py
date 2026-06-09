@@ -16,17 +16,53 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import task_lib       # noqa: E402
 import ladder_lib     # noqa: E402
+import chat_transcript  # noqa: E402
 
 JUDGE_GOOD_THRESHOLD = 7
 NEXT = {"shadow": "supervised", "supervised": "autonomous"}
 ENTRY_KEY = {"supervised": "shadow_to_supervised", "autonomous": "supervised_to_autonomous"}
 
+FRICTION_MAX = 1  # a clean accept tolerates at most one follow-up chat turn
+
+
+def user_chat_turns(task_id):
+    """Count the operator's chat turns on a card (role == 'user' events)."""
+    try:
+        events = chat_transcript.read_events(task_id)
+    except Exception:
+        return 0
+    return sum(1 for e in events if e.get("role") == "user")
+
+
+def effective_react(t):
+    """The operator's reaction to a task, explicit or passively inferred.
+
+    Explicit 👍/👎 always wins. Otherwise a terminally *accepted* card
+    (status 'done' is set only by a human action — Done / Send / Publish;
+    agent:complete leaves status 'open') with at most FRICTION_MAX follow-up
+    chat turns is read as an implicit 'up'. Never infers a 'down': abandonment
+    and heavy iteration are too ambiguous to punish, so explicit 👎 stays the
+    only hard negative. Returns 'up' | 'down' | None.
+    """
+    react = t.get("human_react")
+    if react in ("up", "down"):
+        return react
+    if t.get("id") and t.get("status") == "done" and user_chat_turns(t["id"]) <= FRICTION_MAX:
+        return "up"
+    return None
+
 
 def _metrics(tasks):
-    """Return (n, approval_rate, agreement_rate) for a list of judged tasks."""
+    """Return (n, approval_rate, agreement_rate, reacted) for judged tasks.
+
+    Uses effective_react (explicit 👍/👎, else inferred from a clean accept).
+    Approval = effective_react == 'up' (no judge self-vote). Agreement is over
+    tasks with any (explicit or implicit) reaction. reacted is the denominator
+    for the min_reacted floor.
+    """
     n = len(tasks)
     if n == 0:
-        return 0, 0.0, 0.0
+        return 0, 0.0, 0.0, 0
     approvals = 0
     agree = reacted = 0
     for t in tasks:
@@ -34,9 +70,9 @@ def _metrics(tasks):
             score = float(t.get("judge_score"))
         except (TypeError, ValueError):
             score = None
-        react = t.get("human_react")
         judge_pos = score is not None and score >= JUDGE_GOOD_THRESHOLD
-        if react == "up" or (react is None and judge_pos):
+        react = effective_react(t)
+        if react == "up":
             approvals += 1
         if react in ("up", "down"):
             reacted += 1
@@ -44,7 +80,7 @@ def _metrics(tasks):
                 agree += 1
     approval_rate = approvals / n
     agreement_rate = (agree / reacted) if reacted else 0.0
-    return n, approval_rate, agreement_rate
+    return n, approval_rate, agreement_rate, reacted
 
 
 def _within(t, cutoff_iso):
@@ -73,14 +109,18 @@ def assess(ladder_path=None, now_iso=None):
     created = []
     for task_type, tasks in by_type.items():
         cur = ladder_lib.tier_of(task_type, path=ladder_path)
-        n, approval, agreement = _metrics(tasks)
+        n, approval, agreement, reacted = _metrics(tasks)
 
         # --- promotion check ---
         nxt = NEXT.get(cur)
         if nxt:
             bar = th[ENTRY_KEY[nxt]]
-            ready = (n >= bar["min_judged"] and approval >= bar["min_approval"]
-                     and agreement >= bar["min_agreement"])
+            # min_reacted is a belt-and-suspenders floor: at the default thresholds it
+            # is redundant with min_approval (approval counts only real 'up's, so passing
+            # min_approval already forces reacted >= min_reacted). It binds only when a
+            # user lowers min_approval via a datasets/evals/ladder.json override.
+            ready = (n >= bar["min_judged"] and reacted >= bar["min_reacted"]
+                     and approval >= bar["min_approval"] and agreement >= bar["min_agreement"])
             if ready and task_type not in existing_grad:
                 _create_graduation_card(task_type, cur, nxt, n, approval, agreement,
                                         [t["id"] for t in tasks[:5]])

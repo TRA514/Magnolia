@@ -37,6 +37,14 @@ def test_doctor_cron_is_monday_9am(monkeypatch):
     assert doctor["cron_expr"] == "0 9 * * 1"  # min hour dom mon dow(Mon=1)
 
 
+def test_graduation_cron_is_twice_weekly(monkeypatch):
+    import cron_lib as cl
+    monkeypatch.setattr(cl, "list_jobs", lambda: [])
+    monkeypatch.setattr(cl, "create_job", lambda **kw: kw)
+    grad = next(d for d in seed_default_crons.DEFAULTS if d["name"] == "Graduation ladder")
+    assert grad["cron_expr"] == "30 9 * * 1,4"   # Mon + Thu 09:30
+
+
 def test_seed_cold_against_real_cron_lib(tmp_path, monkeypatch):
     # Exercises the REAL cron_lib path (no mocks) against an EMPTY tmp dir to
     # simulate a fresh Magnolia clone where _counter / jobs.json don't exist yet.

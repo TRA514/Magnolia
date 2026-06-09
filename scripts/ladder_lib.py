@@ -20,8 +20,8 @@ TIERS = ["shadow", "supervised", "autonomous"]
 
 DEFAULT_THRESHOLDS = {
     "window_days": 60,
-    "shadow_to_supervised": {"min_judged": 6, "min_approval": 0.75, "min_agreement": 0.70},
-    "supervised_to_autonomous": {"min_judged": 12, "min_approval": 0.85, "min_agreement": 0.80},
+    "shadow_to_supervised": {"min_judged": 4, "min_approval": 0.75, "min_agreement": 0.70, "min_reacted": 3},
+    "supervised_to_autonomous": {"min_judged": 12, "min_approval": 0.85, "min_agreement": 0.80, "min_reacted": 6},
     "demote_consecutive": 2,
 }
 

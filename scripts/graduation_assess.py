@@ -53,10 +53,16 @@ def effective_react(t):
 
 
 def _metrics(tasks):
-    """Return (n, approval_rate, agreement_rate) for a list of judged tasks."""
+    """Return (n, approval_rate, agreement_rate, reacted) for judged tasks.
+
+    Uses effective_react (explicit 👍/👎, else inferred from a clean accept).
+    Approval = effective_react == 'up' (no judge self-vote). Agreement is over
+    tasks with any (explicit or implicit) reaction. reacted is the denominator
+    for the min_reacted floor.
+    """
     n = len(tasks)
     if n == 0:
-        return 0, 0.0, 0.0
+        return 0, 0.0, 0.0, 0
     approvals = 0
     agree = reacted = 0
     for t in tasks:
@@ -64,9 +70,9 @@ def _metrics(tasks):
             score = float(t.get("judge_score"))
         except (TypeError, ValueError):
             score = None
-        react = t.get("human_react")
         judge_pos = score is not None and score >= JUDGE_GOOD_THRESHOLD
-        if react == "up" or (react is None and judge_pos):
+        react = effective_react(t)
+        if react == "up":
             approvals += 1
         if react in ("up", "down"):
             reacted += 1
@@ -74,7 +80,7 @@ def _metrics(tasks):
                 agree += 1
     approval_rate = approvals / n
     agreement_rate = (agree / reacted) if reacted else 0.0
-    return n, approval_rate, agreement_rate
+    return n, approval_rate, agreement_rate, reacted
 
 
 def _within(t, cutoff_iso):
@@ -103,7 +109,7 @@ def assess(ladder_path=None, now_iso=None):
     created = []
     for task_type, tasks in by_type.items():
         cur = ladder_lib.tier_of(task_type, path=ladder_path)
-        n, approval, agreement = _metrics(tasks)
+        n, approval, agreement, reacted = _metrics(tasks)
 
         # --- promotion check ---
         nxt = NEXT.get(cur)

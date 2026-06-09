@@ -42,6 +42,26 @@ def test_effective_react_none_when_open_or_high_friction(tasks_root):
     assert g.effective_react({"id": tid, "status": "done"}) is None    # 2 turns > FRICTION_MAX
 
 
+def test_metrics_no_self_vote_in_approval(tasks_root):
+    # A judged-good task with NO reaction and status open must NOT count as approval.
+    import graduation_assess as g
+    tasks = [{"id": "A", "judge_score": 9, "status": "open"},
+             {"id": "B", "judge_score": 9, "status": "open"}]
+    n, approval, agreement, reacted = g._metrics(tasks)
+    assert n == 2
+    assert approval == 0.0       # judge≥7 alone no longer approves
+    assert reacted == 0
+
+
+def test_metrics_counts_implicit_up(tasks_root):
+    import graduation_assess as g
+    tasks = [{"id": "A", "judge_score": 9, "status": "done"}]   # clean accept -> implicit up
+    n, approval, agreement, reacted = g._metrics(tasks)
+    assert approval == 1.0
+    assert reacted == 1
+    assert agreement == 1.0      # judge_pos == implicit up
+
+
 def test_ready_type_gets_graduation_card(tasks_root, tmp_path):
     import task_lib, graduation_assess, ladder_lib
     p = str(tmp_path / "ladder.json")

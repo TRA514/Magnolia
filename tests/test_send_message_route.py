@@ -5,6 +5,8 @@ import json
 
 import pytest
 
+import shipper
+
 
 @pytest.fixture
 def srv(tasks_root, profile_root, monkeypatch):
@@ -48,8 +50,8 @@ class _FakeHandler:
 # ── draft build ──────────────────────────────────────────────────────────────
 
 def test_message_draft_resolves_recipient_and_channel(srv, monkeypatch):
-    monkeypatch.setattr(srv, "_load_email_cache", lambda: {"Dana": "dana@co.com"})
-    d = srv._message_draft_from_task(_send_task(channel="Teams", to="Dana", body="ping"))
+    monkeypatch.setattr(shipper, "_load_email_cache", lambda: {"Dana": "dana@co.com"})
+    d = shipper._message_draft_from_task(_send_task(channel="Teams", to="Dana", body="ping"))
     assert d["channel"] == "teams"
     assert d["to"] == ["dana@co.com"]
     assert d["to_display"] == "Dana"
@@ -57,8 +59,8 @@ def test_message_draft_resolves_recipient_and_channel(srv, monkeypatch):
 
 
 def test_message_draft_email_keeps_subject_and_literal_address(srv, monkeypatch):
-    monkeypatch.setattr(srv, "_load_email_cache", lambda: {})
-    d = srv._message_draft_from_task(_send_task(channel="Email", to="x@y.com", subject="Hi", body="b"))
+    monkeypatch.setattr(shipper, "_load_email_cache", lambda: {})
+    d = shipper._message_draft_from_task(_send_task(channel="Email", to="x@y.com", subject="Hi", body="b"))
     assert d["channel"] == "email" and d["subject"] == "Hi" and d["to"] == ["x@y.com"]
 
 

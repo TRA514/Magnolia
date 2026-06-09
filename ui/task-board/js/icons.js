@@ -39,6 +39,9 @@ const ICON = {
   patch: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.6h5l3 3v7.8H4Z"/><path d="M9 2.6v3h3"/><path d="M8 7.4v3.4M6.3 9.1h3.4"/></svg>`,
   undo: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 6.2H3.2V4M3.5 6A5 5 0 1 1 3 9.2"/></svg>`,
   arrowRight: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 8h9.2M9 4.4 12.6 8 9 11.6"/></svg>`,
+
+  // settings — a calm gear that matches the line-mark family above
+  gear: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.1"/><path d="M8 1.6v1.7M8 12.7v1.7M14.4 8h-1.7M3.3 8H1.6M12.5 3.5l-1.2 1.2M4.7 11.3l-1.2 1.2M12.5 12.5l-1.2-1.2M4.7 4.7 3.5 3.5"/></svg>`,
 };
 
 function svgIcon(name) { return ICON[name] || ''; }

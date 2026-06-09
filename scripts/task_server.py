@@ -1287,28 +1287,10 @@ def handle_rerun_task(handler, task_id):
         _error_response(handler, f"Failed to reset task: {e}", status=500)
         return
 
-    # Dispatch the agent (same logic as handle_dispatch_task)
-    dispatch_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "task_dispatch.py")
-    # Strip ALL Claude-related env vars to prevent nested-session detection
-    env = {k: v for k, v in os.environ.items()
-           if not k.startswith(("CLAUDE", "CMUX_CLAUDE"))}
-    env["PATH"] = (
-        os.path.join(os.path.expanduser("~"), ".local", "bin")
-        + ":/opt/homebrew/bin"
-        + ":" + env.get("PATH", "/usr/bin:/bin")
-    )
-
-    try:
-        subprocess.Popen(
-            [sys.executable, dispatch_script, "--task", task_id, "--rerun"],
-            cwd=PM_OS_DIR,
-            env=env,
-            start_new_session=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except Exception as e:
-        _error_response(handler, f"Reset succeeded but dispatch failed: {e}", status=500)
+    # Dispatch the agent through the shared OS-aware respawn path.
+    import task_dispatch
+    if task_dispatch.respawn(task_id, rerun=True) is None:
+        _error_response(handler, "Reset succeeded but dispatch failed", status=500)
         return
 
     _json_response(handler, {

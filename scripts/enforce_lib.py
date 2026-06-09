@@ -8,7 +8,6 @@ always through the Tier-2-gated shipper, so the per-integration first-write conf
 still fires. Artifact types are hard-stopped from ever auto-shipping.
 """
 import os
-import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -67,23 +66,24 @@ def _read_fm(task_id):
 
 def _trigger_revision(task_id, judge_why, revision_count):
     """Bounce a below-bar task back to the agent, carrying the judge's feedback.
-    Reuses the rerun path: reset agent fields + status open, append the judge's
-    'why' as a revision comment, bump revision_count, then re-dispatch --rerun
-    (detached, Claude env stripped — mirrors task_server.handle_rerun_task)."""
+
+    Safe against racing the dispatcher: the judge fires strictly AFTER the run that
+    produced the artifact has completed, so resetting the task's agent state here
+    cannot clobber a live dispatch. Bumps revision_count (the loop bound) before
+    re-dispatching via the shared respawn path."""
     import task_lib
+    import task_dispatch
     task_lib.update_task(task_id, changes={
         "status": "open", "agent_status": "", "agent_error": "",
         "agent_output": "", "agent_started": "", "agent_completed": "",
         "revision_count": revision_count + 1,
     }, comment=f"[revision] Judge sent this back for revision: {judge_why}", actor="judge")
-    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "task_dispatch.py")
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "CMUX_CLAUDE"))}
-    env["PATH"] = (os.path.join(os.path.expanduser("~"), ".local", "bin")
-                   + ":/opt/homebrew/bin:" + env.get("PATH", "/usr/bin:/bin"))
-    subprocess.Popen([sys.executable, script, "--task", task_id, "--rerun"],
-                     cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                     env=env, start_new_session=True,
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if task_dispatch.respawn(task_id, rerun=True) is None:
+        # Re-dispatch failed; the task is left status=open so the dispatcher cron
+        # re-picks it. Make the failure visible rather than silently stranding it.
+        task_lib.update_task(task_id, changes={},
+            comment="[revision] Re-dispatch failed; left open for the next dispatch cycle.",
+            actor="judge")
 
 
 def _autoship(task_id, action_type):

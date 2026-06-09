@@ -215,7 +215,7 @@ def autoship(task_id, action_type):
         draft = _message_draft_from_task(task_id)
         status, payload = _attempt_send_message(task_id, draft)
         family = "messaging"
-        what = f"Sent {draft.get('channel')} to {draft.get('to_display')}"
+        what = f"Sent {draft.get('channel') or 'message'} to {draft.get('to_display') or 'recipient'}"
     elif action_type == "publish-ticket":
         import jira_publish
         body = task_lib.read_task(task_id).get("body", "")

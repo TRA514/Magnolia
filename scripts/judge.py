@@ -136,11 +136,34 @@ Return ONLY a single JSON object, no prose around it, no markdown fences:
 {"score": <1-10 int>, "why": "<one paragraph>"}"""
 
 
+DEFAULT_RUBRIC_TICKET = """You are the PM-OS shadow judge. You score a DRAFTED TICKET a worker agent \
+prepared to file in the team's issue tracker. Judge ONLY the drafted ticket below.
+
+Score on a 1-10 integer scale across four dimensions:
+- completeness  — clear summary plus enough description to act on, with acceptance criteria or \
+repro steps where relevant.
+- clarity       — unambiguous and well-scoped: one issue, not many tangled together.
+- actionability — an engineer could pick it up and start without a follow-up question.
+- format        — correct fields and issue type for the tracker; no placeholders or TBDs left in.
+
+Then give an overall score (1-10): would you, as a demanding PM lead, let this ticket be filed as-is? \
+Calibration: 9-10 = file untouched. 7-8 = file after a small tweak. 5-6 = usable but needs real edits. \
+3-4 = significant rework. 1-2 = off-target or empty.
+
+For each weak dimension, point to the concrete gap and what would raise it. Write the rationale as ONE \
+substantive paragraph (3-5 sentences) — specific and measured, no superlatives, no filler.
+
+Return ONLY a single JSON object, no prose around it, no markdown fences:
+{"score": <1-10 int>, "dimensions": {"completeness": <1-10>, "clarity": <1-10>, \
+"actionability": <1-10>, "format": <1-10>}, "why": "<one paragraph>"}"""
+
+
 # deliverable kind → (LangFuse prompt name, inline fallback)
 RUBRICS = {
     "document": ("judge-rubric-document", DEFAULT_RUBRIC_DOCUMENT),
     "message": ("judge-rubric-message", DEFAULT_RUBRIC_MESSAGE),
     "meeting": ("judge-rubric-meeting", DEFAULT_RUBRIC_MEETING),
+    "ticket": ("judge-rubric-ticket", DEFAULT_RUBRIC_TICKET),
 }
 
 # Per-kind dimension keys the verdict carries (meeting = none; paragraph only).
@@ -148,6 +171,7 @@ DIMENSIONS_BY_KIND = {
     "document": ["context", "reasoning", "evidence", "format"],
     "message": ["voice", "format", "fulfils_ask", "clarity"],
     "meeting": [],
+    "ticket": ["completeness", "clarity", "actionability", "format"],
 }
 
 # Back-compat alias (langfuse_setup imported DEFAULT_RUBRIC for the v1 prompt).
@@ -262,6 +286,8 @@ def detect_kind(fm):
     task that hasn't been scheduled yet, or an action that left only a prose note.
     """
     task_type = fm.get("task_type")
+    if task_type == "publish-ticket":
+        return "ticket"
     if task_type == "schedule-meeting":
         if fm.get("meeting_selected_slot") or fm.get("meeting_event_id"):
             return "meeting"
@@ -316,6 +342,25 @@ def gather_evidence(kind, fm, body, task_id):
             block += f"\n- Activity log: {act}"
         return block, "meeting fields"
 
+    if kind == "ticket":
+        # The drafted ticket lives as a JIRA_DRAFT block in the task body.
+        # Defensive local import: jira_publish isn't imported at module top.
+        import jira_publish
+        draft = jira_publish.parse_jira_draft(body)
+        if not draft:
+            return None, "no JIRA_DRAFT block found"
+        labels = ", ".join(draft.get("labels") or []) or "(none)"
+        fields = [
+            ("Type", draft.get("type") or "(none)"),
+            ("Summary", draft.get("summary") or "(none)"),
+            ("Description", (draft.get("description") or "").strip() or "(none)"),
+            ("Priority", draft.get("priority") or "(default)"),
+            ("Labels", labels),
+            ("Parent", draft.get("parent") or "(none)"),
+        ]
+        block = "\n".join(f"- {k}: {v}" for k, v in fields)
+        return block, "ticket draft fields"
+
     return None, "unknown kind"
 
 
@@ -323,6 +368,7 @@ KIND_EVIDENCE_LABEL = {
     "document": "OUTPUT DOCUMENT (score this)",
     "message": "DRAFTED MESSAGE (score this)",
     "meeting": "SCHEDULED MEETING (score this)",
+    "ticket": "DRAFTED TICKET (score this)",
 }
 
 

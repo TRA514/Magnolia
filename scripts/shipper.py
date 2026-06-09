@@ -206,6 +206,57 @@ def _emit_confirm_card(family, source_task):
     return cid
 
 
+def autoship(task_id, action_type):
+    """Auto-ship an autonomous action-type's terminal action (Tier-2 gated).
+    Returns 'shipped' | 'needs_confirm' | 'error'. On needs_confirm, emits the
+    one-time Tier-2 confirm card (autonomy never bypasses the first-write confirm)
+    and leaves the task parked. On success, emits a Keep/Undo receipt."""
+    if action_type == "send-message":
+        draft = _message_draft_from_task(task_id)
+        status, payload = _attempt_send_message(task_id, draft)
+        family = "messaging"
+        what = f"Sent {draft.get('channel')} to {draft.get('to_display')}"
+    elif action_type == "publish-ticket":
+        import jira_publish
+        body = task_lib.read_task(task_id).get("body", "")
+        draft = jira_publish.parse_jira_draft(body)
+        status, payload = _attempt_publish(task_id, draft)
+        family = "project_management"
+        what = f"Published {payload[0]}" if status == "ok" and payload else "Published ticket"
+    else:
+        return "error"
+    if status == "needs_confirm":
+        _emit_confirm_card(family, task_id)
+        return "needs_confirm"
+    if status == "ok":
+        _emit_autoship_receipt(task_id, action_type, what)
+        return "shipped"
+    if status in ("already_sent", "already_published"):
+        return "shipped"
+    return "error"
+
+
+def _emit_autoship_receipt(source_task_id, action_type, what):
+    """A never-deleted Keep/Undo receipt for an auto-shipped action. Undo demotes
+    the type to supervised (it cannot un-send — the receipt copy says so)."""
+    src = task_lib.read_task(source_task_id).get("frontmatter") or {}
+    cid, _ = task_lib.create_task(
+        f"Auto-shipped: {what}", queue="collab", domain="ops", creator="agent",
+        description=(f"Autonomous Mode shipped this without a per-instance approve.\n\n"
+                     f"**{what}**\n\nThe external action already happened. **Keep** to "
+                     f"acknowledge, or **Undo** to stop auto-shipping '{action_type}' "
+                     f"(drops it back to supervised — it cannot un-send)."),
+        card_type="receipt")
+    task_lib.update_task(cid, changes={
+        "receipt_kind": "autoship",
+        "autoship_task_type": action_type,
+        "receipt_summary": what,
+        "judge_score": src.get("judge_score"),
+        "judge_why": src.get("judge_why"),
+    })
+    return cid
+
+
 def _load_email_cache():
     """Load the people email cache (name → email mapping)."""
     email_cache_path = os.path.join(PM_OS_DIR, "datasets", "people", "email_cache.json")

@@ -351,7 +351,7 @@
   text-transform: uppercase; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
 }
 .q-trust.tier-shadow     { color: var(--text-muted); background: var(--surface-hover); }
-.q-trust.tier-gated      { color: var(--warning); background: var(--warning-soft); }
+.q-trust.tier-supervised { color: var(--warning); background: var(--warning-soft); }
 .q-trust.tier-autonomous { color: var(--success); background: var(--success-soft); }
 
 /* Kill switch — the calm brake in a card foot. Reads as a clear, deliberate

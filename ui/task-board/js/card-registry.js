@@ -191,8 +191,8 @@ const bodyRenderers = {
     }
     // Honest revert copy. An auto-ship already left the building (email/ticket
     // sent) — "Undo" can't unsend it; what it CAN do is stop this type from
-    // auto-shipping again. Branch on receipt_kind (passed through on the task
-    // detail object; absent on the list projection → safe default).
+    // auto-shipping again. Branch on receipt_kind (projected onto the list face
+    // and the detail object; missing → safe default).
     const revert = task.receipt_kind === 'autoship'
       ? `Already sent — <b>Undo</b> stops auto-shipping this type.`
       : `Applied — <b>Undo</b> reverts this change.`;

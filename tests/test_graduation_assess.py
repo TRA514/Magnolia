@@ -10,6 +10,38 @@ def _judged(task_lib, task_type, score, react=None, n=1, when="2026-06-01T00:00:
     return ids
 
 
+def test_user_chat_turns_counts_only_user_events(tasks_root):
+    import task_lib, graduation_assess, chat_transcript
+    tid, _ = task_lib.create_task("t", queue="agent", task_type="prd-draft")
+    assert graduation_assess.user_chat_turns(tid) == 0  # no transcript yet
+    chat_transcript.append_event(tid, {"role": "user", "kind": "msg", "text": "hi"})
+    chat_transcript.append_event(tid, {"role": "assistant", "kind": "msg", "text": "ok"})
+    chat_transcript.append_event(tid, {"role": "user", "kind": "msg", "text": "tweak it"})
+    assert graduation_assess.user_chat_turns(tid) == 2
+
+
+def test_effective_react_explicit_wins(tasks_root):
+    import graduation_assess as g
+    assert g.effective_react({"id": "X", "human_react": "down", "status": "done"}) == "down"
+    assert g.effective_react({"id": "X", "human_react": "up", "status": "open"}) == "up"
+
+
+def test_effective_react_implicit_up_on_clean_accept(tasks_root):
+    import task_lib, graduation_assess as g
+    tid, _ = task_lib.create_task("t", queue="agent", task_type="prd-draft")
+    # done + zero chat turns -> implicit up
+    assert g.effective_react({"id": tid, "status": "done"}) == "up"
+
+
+def test_effective_react_none_when_open_or_high_friction(tasks_root):
+    import task_lib, graduation_assess as g, chat_transcript
+    tid, _ = task_lib.create_task("t", queue="agent", task_type="prd-draft")
+    assert g.effective_react({"id": tid, "status": "open"}) is None   # not accepted
+    for _ in range(2):
+        chat_transcript.append_event(tid, {"role": "user", "kind": "msg", "text": "redo"})
+    assert g.effective_react({"id": tid, "status": "done"}) is None    # 2 turns > FRICTION_MAX
+
+
 def test_ready_type_gets_graduation_card(tasks_root, tmp_path):
     import task_lib, graduation_assess, ladder_lib
     p = str(tmp_path / "ladder.json")

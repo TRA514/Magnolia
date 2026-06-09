@@ -16,10 +16,40 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import task_lib       # noqa: E402
 import ladder_lib     # noqa: E402
+import chat_transcript  # noqa: E402
 
 JUDGE_GOOD_THRESHOLD = 7
 NEXT = {"shadow": "supervised", "supervised": "autonomous"}
 ENTRY_KEY = {"supervised": "shadow_to_supervised", "autonomous": "supervised_to_autonomous"}
+
+FRICTION_MAX = 1  # a clean accept tolerates at most one follow-up chat turn
+
+
+def user_chat_turns(task_id):
+    """Count the operator's chat turns on a card (role == 'user' events)."""
+    try:
+        events = chat_transcript.read_events(task_id)
+    except Exception:
+        return 0
+    return sum(1 for e in events if e.get("role") == "user")
+
+
+def effective_react(t):
+    """The operator's reaction to a task, explicit or passively inferred.
+
+    Explicit 👍/👎 always wins. Otherwise a terminally *accepted* card
+    (status 'done' is set only by a human action — Done / Send / Publish;
+    agent:complete leaves status 'open') with at most FRICTION_MAX follow-up
+    chat turns is read as an implicit 'up'. Never infers a 'down': abandonment
+    and heavy iteration are too ambiguous to punish, so explicit 👎 stays the
+    only hard negative. Returns 'up' | 'down' | None.
+    """
+    react = t.get("human_react")
+    if react in ("up", "down"):
+        return react
+    if t.get("status") == "done" and user_chat_turns(t.get("id")) <= FRICTION_MAX:
+        return "up"
+    return None
 
 
 def _metrics(tasks):

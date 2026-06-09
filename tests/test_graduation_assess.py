@@ -62,6 +62,16 @@ def test_metrics_counts_implicit_up(tasks_root):
     assert agreement == 1.0      # judge_pos == implicit up
 
 
+def test_min_reacted_floor_blocks_promotion(tasks_root, tmp_path):
+    import task_lib, graduation_assess
+    p = str(tmp_path / "ladder.json")
+    # 6 judged, but only 2 explicit reactions -> reacted(2) < min_reacted(3) -> no card.
+    _judged(task_lib, "prd-draft", 9, react="up", n=2)
+    _judged(task_lib, "prd-draft", 9, react=None, n=4)   # no reaction, status open -> not reacted
+    created = graduation_assess.assess(ladder_path=p, now_iso="2026-06-10T00:00:00Z")
+    assert created == []
+
+
 def test_ready_type_gets_graduation_card(tasks_root, tmp_path):
     import task_lib, graduation_assess, ladder_lib
     p = str(tmp_path / "ladder.json")

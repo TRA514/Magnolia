@@ -34,12 +34,18 @@ def test_all_tiers_roundtrips(tmp_path):
 
 def test_thresholds_have_moderate_defaults(tmp_path):
     th = ladder_lib.thresholds(path=_ladder(tmp_path))
-    assert th["shadow_to_supervised"]["min_judged"] == 6
+    assert th["shadow_to_supervised"]["min_judged"] == 4
     assert th["shadow_to_supervised"]["min_approval"] == 0.75
     assert th["shadow_to_supervised"]["min_agreement"] == 0.70
     assert th["supervised_to_autonomous"]["min_judged"] == 12
     assert th["supervised_to_autonomous"]["min_approval"] == 0.85
     assert th["supervised_to_autonomous"]["min_agreement"] == 0.80
+
+
+def test_thresholds_include_min_reacted(tmp_path):
+    th = ladder_lib.thresholds(path=_ladder(tmp_path))
+    assert th["shadow_to_supervised"]["min_reacted"] == 3
+    assert th["supervised_to_autonomous"]["min_reacted"] == 6
 
 
 def test_thresholds_overridable_in_file(tmp_path):

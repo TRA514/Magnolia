@@ -115,8 +115,8 @@ def assess(ladder_path=None, now_iso=None):
         nxt = NEXT.get(cur)
         if nxt:
             bar = th[ENTRY_KEY[nxt]]
-            ready = (n >= bar["min_judged"] and approval >= bar["min_approval"]
-                     and agreement >= bar["min_agreement"])
+            ready = (n >= bar["min_judged"] and reacted >= bar["min_reacted"]
+                     and approval >= bar["min_approval"] and agreement >= bar["min_agreement"])
             if ready and task_type not in existing_grad:
                 _create_graduation_card(task_type, cur, nxt, n, approval, agreement,
                                         [t["id"] for t in tasks[:5]])

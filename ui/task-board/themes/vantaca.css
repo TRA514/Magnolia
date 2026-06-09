@@ -102,6 +102,16 @@
   background: rgba(255, 255, 255, 0.18); color: #ffffff; border-color: rgba(255, 255, 255, 0.28);
 }
 
+/* Quick Add + lives in the brand-gradient top bar — neutral tokens would render
+   it as a faint grey ghost, so give it white controls like .mood-btn above. */
+[data-theme="vantaca"] .qa-trigger {
+  color: rgba(255, 255, 255, 0.92);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+[data-theme="vantaca"] .qa-trigger:hover {
+  background: rgba(255, 255, 255, 0.18); color: #fff; border-color: rgba(255, 255, 255, 0.4);
+}
+
 /* top-left mark — the Vantaca "V" on a white tile (blue stroke stays legible) */
 [data-theme="vantaca"] .leaf-mark {
   width: 26px; height: 26px;

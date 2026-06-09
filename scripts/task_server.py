@@ -1125,7 +1125,10 @@ def handle_set_autonomy(handler):
     except (json.JSONDecodeError, ValueError) as e:
         _error_response(handler, f"Invalid JSON body: {e}", status=400)
         return
-    enabled = bool(body.get("enabled"))
+    if not isinstance(body.get("enabled"), bool):
+        _error_response(handler, "Body must include boolean 'enabled'", status=400)
+        return
+    enabled = body["enabled"]
     profile_lib.set_autonomy_enforcement(enabled)
     _json_response(handler, {"ok": True, "enabled": enabled})
 
@@ -1135,7 +1138,11 @@ def handle_demote(handler, task_type):
     if not task_type:
         _error_response(handler, "Missing task_type", status=400)
         return
-    tier = ladder_lib.kill_to_supervised(task_type)
+    try:
+        tier = ladder_lib.kill_to_supervised(task_type)
+    except Exception as e:
+        _error_response(handler, f"Demote failed: {e}", status=500)
+        return
     _json_response(handler, {"ok": True, "task_type": task_type, "tier": tier})
 
 

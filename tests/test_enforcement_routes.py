@@ -98,6 +98,22 @@ def test_set_autonomy_bad_body_is_400(srv):
     assert h.status == 400
 
 
+def test_set_autonomy_missing_enabled_is_400(srv):
+    task_server, _, _, _ = srv
+    # no 'enabled' key — must not silently coerce to disabled
+    h = _FakeHandler({})
+    task_server.handle_set_autonomy(h)
+    assert h.status == 400
+
+
+def test_set_autonomy_non_bool_enabled_is_400(srv):
+    task_server, _, _, _ = srv
+    # truthy-string 'enabled' is not a bool — reject rather than coerce
+    h = _FakeHandler({"enabled": "yes"})
+    task_server.handle_set_autonomy(h)
+    assert h.status == 400
+
+
 # ── kill-switch demote ──────────────────────────────────────────────────────
 
 def test_demote_kills_to_supervised(srv):

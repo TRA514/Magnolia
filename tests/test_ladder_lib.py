@@ -74,3 +74,20 @@ def test_demote_record_tracks_consecutive(tmp_path):
     assert ladder_lib.note_demotion_signal("a", below=True, path=p) == 1
     assert ladder_lib.note_demotion_signal("a", below=True, path=p) == 2
     assert ladder_lib.note_demotion_signal("a", below=False, path=p) == 0  # resets
+
+
+def test_kill_to_supervised_sets_tier_and_resets_streak(tmp_path):
+    p = _ladder(tmp_path)
+    ladder_lib.set_tier("send-message", "autonomous", path=p)
+    ladder_lib.note_demotion_signal("send-message", True, path=p)  # streak = 1
+    ladder_lib.kill_to_supervised("send-message", path=p)
+    assert ladder_lib.tier_of("send-message", path=p) == "supervised"
+    d = json.load(open(p))
+    assert d["demote_signals"].get("send-message", 0) == 0
+
+
+def test_kill_to_supervised_idempotent(tmp_path):
+    p = _ladder(tmp_path)
+    ladder_lib.kill_to_supervised("send-message", path=p)
+    ladder_lib.kill_to_supervised("send-message", path=p)
+    assert ladder_lib.tier_of("send-message", path=p) == "supervised"

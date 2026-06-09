@@ -108,6 +108,17 @@ def demote(task_type, path=None):
     return set_tier(task_type, TIERS[i], path=path)
 
 
+def kill_to_supervised(task_type, path=None):
+    """Instant kill switch: drop a type to supervised and reset its demotion streak.
+
+    The manual, immediate counterpart to graduation_assess's twice-weekly
+    auto-demote — the brake that makes shipping autonomy safe. Resetting the streak
+    avoids the assessor double-counting this manual action."""
+    set_tier(task_type, "supervised", path=path)
+    note_demotion_signal(task_type, False, path=path)
+    return "supervised"
+
+
 def all_tiers(path=None):
     return dict(_load(path)["tiers"])
 

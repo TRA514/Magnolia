@@ -23,6 +23,8 @@ DEFAULT_THRESHOLDS = {
     "shadow_to_supervised": {"min_judged": 4, "min_approval": 0.75, "min_agreement": 0.70, "min_reacted": 3},
     "supervised_to_autonomous": {"min_judged": 12, "min_approval": 0.85, "min_agreement": 0.80, "min_reacted": 6},
     "demote_consecutive": 2,
+    "revision_bar": 7,      # judge score at/above which work passes (vs revises)
+    "max_revisions": 1,     # max judge-driven auto-revisions before parking for human
 }
 
 # The middle tier was renamed "gated" -> "supervised" (the judge supervises the

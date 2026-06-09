@@ -19,7 +19,7 @@ import ladder_lib    # noqa: E402
 ACTION_TYPES = {"send-message", "publish-ticket"}
 
 DEFAULT_MAX_REVISIONS = 1
-JUDGE_GOOD_THRESHOLD = 7  # mirrors judge.JUDGE_GOOD_THRESHOLD; the quality bar.
+JUDGE_GOOD_THRESHOLD = 7  # the quality bar (mirrors graduation_assess.JUDGE_GOOD_THRESHOLD)
 
 
 def action_type_of(fm):

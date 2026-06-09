@@ -236,6 +236,18 @@ def cmd_agent_complete(args):
         if sp_url:
             changes["sharepoint_url"] = sp_url
 
+    # Stamp the canonical action task_type for a Jira draft so the trust ladder,
+    # judge, and Quality tab all key on 'publish-ticket' (the draft is otherwise
+    # title-pattern-routed with no task_type). Never overwrite an explicit type.
+    try:
+        td = task_lib.read_task(args.task_id)
+        existing_fm = td.get("frontmatter") or {}
+        body = td.get("body", "") or ""
+        if not existing_fm.get("task_type") and "<!-- JIRA_DRAFT -->" in body:
+            changes["task_type"] = "publish-ticket"
+    except Exception:
+        pass
+
     comment = "Agent work complete."
     if args.output:
         comment += f" Output: {args.output}"

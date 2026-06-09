@@ -1049,7 +1049,19 @@ def apply_recommendation(task_id):
 
 def undo_receipt(task_id):
     """Undo a receipt: git revert the commit it recorded, mark the receipt done."""
-    t = task_lib.read_task(task_id)["frontmatter"]
+    t = task_lib.read_task(task_id)["frontmatter"] or {}
+    # Auto-shipped action (email/ticket): cannot be un-sent. Undo means "stop
+    # auto-shipping this type" — drop it to supervised and flag the card. Never
+    # attempt a git revert (there is no local commit to revert).
+    if t.get("receipt_kind") == "autoship":
+        at = t.get("autoship_task_type")
+        if at:
+            ladder_lib.kill_to_supervised(at)
+        task_lib.update_task(task_id, changes={"status": "done"},
+            comment=(f"Undo: stopped auto-shipping '{at}' (dropped to supervised). "
+                     "The external action already happened and cannot be un-sent."),
+            actor="human")
+        return
     rev = t.get("revert_commit")
     if not rev:
         raise ValueError("no revert_commit on this receipt")

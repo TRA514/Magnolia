@@ -961,12 +961,14 @@ def handle_add_comment(handler, task_id):
         _error_response(handler, f"Failed to add comment: {e}", status=500)
 
 
-def handle_dispatch_task(handler, task_id):
-    """POST /api/tasks/{id}/dispatch — Dispatch agent for a single task in background."""
-    dispatch_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "task_dispatch.py")
+def _spawn_task_dispatch(task_id):
+    """Fire task_dispatch.py --task {id} in the background (fire-and-forget).
 
-    # Fire and forget — dispatch runs in background
-    # Strip ALL Claude-related env vars to prevent nested-session detection
+    Strips CLAUDE_* env vars to dodge nested-session detection and keeps the
+    claude binary on PATH. Shared by the single-task dispatch route and Quick
+    Add so both spawn the dispatcher identically. Raises on Popen failure.
+    """
+    dispatch_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "task_dispatch.py")
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("CLAUDE", "CMUX_CLAUDE"))}
     env["PATH"] = (
@@ -974,16 +976,20 @@ def handle_dispatch_task(handler, task_id):
         + ":/opt/homebrew/bin"
         + ":" + env.get("PATH", "/usr/bin:/bin")
     )
+    subprocess.Popen(
+        [sys.executable, dispatch_script, "--task", task_id],
+        cwd=PM_OS_DIR,
+        env=env,
+        start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
+
+def handle_dispatch_task(handler, task_id):
+    """POST /api/tasks/{id}/dispatch — Dispatch agent for a single task in background."""
     try:
-        subprocess.Popen(
-            [sys.executable, dispatch_script, "--task", task_id],
-            cwd=PM_OS_DIR,
-            env=env,
-            start_new_session=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        _spawn_task_dispatch(task_id)
     except Exception as e:
         _error_response(handler, f"Failed to start dispatcher: {e}", status=500)
         return
@@ -992,6 +998,85 @@ def handle_dispatch_task(handler, task_id):
         "status": "ok",
         "message": f"Agent dispatched for {task_id}",
     })
+
+
+# ─── Quick Add: capture a task in plain language ─────────────────────────────
+# One line of free text -> the same create -> parse -> worker-match -> dispatch
+# pipeline meeting- and cron-spawned tasks ride. The parser classifies the lane;
+# agent-runnable lanes (agent, collab) auto-dispatch so the card lands in Now.
+
+# Parser fields that map straight onto task_lib.create_task kwargs.
+_QUICK_ADD_FIELDS = (
+    "title", "queue", "priority", "domain", "description", "due", "project",
+    "waiting_on", "task_type", "meeting_attendees", "meeting_duration",
+    "meeting_title", "meeting_description", "message_channel", "message_to",
+    "message_subject",
+)
+
+# Lanes the dispatcher actually services (see task_dispatch.get_actionable_tasks).
+_DISPATCHABLE_QUEUES = ("agent", "collab")
+
+
+def _parse_task_fields(text):
+    """NL-parse free text into structured task fields (the pipeline's task parser)."""
+    from parse_task_input import parse_task
+    return parse_task(text)
+
+
+def quick_add_task(text, auto_dispatch=True):
+    """Quick Add core: NL-parse free text, create the task, optionally dispatch.
+
+    Returns (face, dispatched) where face is the created task's frontmatter — the
+    same projection /api/tasks returns — and dispatched is whether the dispatcher
+    was spawned. A failed dispatch spawn does not fail the create; the task is
+    already in its queue and the human can start it.
+    """
+    parsed = _parse_task_fields(text) or {}
+    kwargs = {k: parsed[k] for k in _QUICK_ADD_FIELDS if parsed.get(k) is not None}
+    if not kwargs.get("title"):
+        kwargs["title"] = text.strip()[:120]
+    kwargs.setdefault("queue", "agent")
+
+    tags = parsed.get("tags") or []
+    if isinstance(tags, str):
+        tags = [t.strip() for t in tags.split(",") if t.strip()]
+    if "quick-add" not in tags:
+        tags = ["quick-add"] + list(tags)
+    kwargs["tags"] = tags
+    kwargs["creator"] = "human"
+
+    task_id, _ = task_lib.create_task(**kwargs)
+
+    dispatched = False
+    if auto_dispatch and kwargs["queue"] in _DISPATCHABLE_QUEUES:
+        try:
+            _spawn_task_dispatch(task_id)
+            dispatched = True
+        except Exception:
+            pass  # task is created and queued; the human can start it manually
+
+    face = task_lib.read_task(task_id)["frontmatter"]
+    return face, dispatched
+
+
+def handle_quick_add(handler):
+    """POST /api/tasks/quick-add — create a task from one line of plain language.
+
+    Body: {"text": "...", "auto_dispatch": true}. Returns {"ok": true, "task": <face>}
+    so the client can land the card in Now; errors surface as {"error": "..."}.
+    """
+    body = _read_request_body(handler)
+    text = (body.get("text") or "").strip()
+    if not text:
+        _error_response(handler, "Missing 'text' field", status=400)
+        return
+    auto_dispatch = body.get("auto_dispatch", True)
+    try:
+        face, _ = quick_add_task(text, auto_dispatch=auto_dispatch)
+    except Exception as e:
+        _error_response(handler, f"Quick add failed: {e}", status=500)
+        return
+    _json_response(handler, {"ok": True, "task": face})
 
 
 # ─── Card actions: accept → apply → receipt → undo, and graduate ─────────────
@@ -2190,6 +2275,12 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
         # ─── Task API routes ───────────────────────────────────────────
         if path == "/api/tasks" and method == "GET":
             handle_list_tasks(self, query_params)
+            return True
+
+        # Quick Add — capture a task in plain language (exact path; must precede
+        # the /api/tasks/{id}/... patterns below).
+        if path == "/api/tasks/quick-add" and method == "POST":
+            handle_quick_add(self)
             return True
 
         # Archived/completed tasks (Activity surface)

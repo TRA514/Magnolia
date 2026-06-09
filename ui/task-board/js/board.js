@@ -112,6 +112,9 @@ function statusMark(task) {
 }
 
 function outputLink(task) {
+  // Send-message cards carry no file artifact — the message in the card is the
+  // deliverable — so they never show an "Open output" / "Open in Word" action.
+  if (task.task_type === 'send-message') return null;
   if (task.agent_output) {
     const v = String(task.agent_output).trim();
     if (v.endsWith('.md')) return { href: obsidianUri(v), label: 'Open output', external: false };

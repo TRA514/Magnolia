@@ -60,7 +60,7 @@ Task {task_id}. Follow these steps:
    `profile/voice/email.md` — subject that states the point, light greeting +
    sign-off, 1-3 sentence paragraphs). If a voice file is empty or absent, the
    operator hasn't set their voice yet — draft in a clean, neutral, professional
-   voice and note that in the Context block. Honor the shared rules — especially
+   voice. Honor the shared rules — especially
    **no em dashes** (use a period, comma, or parentheses) and no corporate filler.
 
 3. Mark it started:
@@ -70,72 +70,45 @@ Task {task_id}. Follow these steps:
    Use `mcp__qmd__*` to confirm who the recipient is or pull relevant background
    (prior meetings, the topic) if the task is thin. Don't over-research a message.
 
-5. Draft BOTH versions, each in the matching voice from the guide:
-   - **Teams / short message** — the operator's live work-chat voice. Tight, direct, a few
+5. Pick the channel and draft the message in that channel's voice:
+   First decide the best channel — **Teams** unless email clearly fits better
+   (a formal record, an external recipient, or a longer ask). Then draft ONE
+   message in the matching voice from the guide:
+   - **Teams** — the operator's live work-chat voice. Tight, direct, a few
      sentences at most. Lowercase starts and fragments are fine. No em dashes.
-   - **Email version** — subject line that states the point, light greeting, body
-     in 1-3 sentence paragraphs, ask up front or clearly marked, light sign-off
+   - **Email** — subject line that states the point, light greeting, body in
+     1-3 sentence paragraphs, ask up front or clearly marked, light sign-off
      ("{operator sign-off}"). No em dashes.
-   Keep the actual request accurate and addressed to the right person.
+   Keep the request accurate and addressed to the right person. The message goes
+   straight into the card — there is no draft file and no Word document.
 
-6. Write the draft to a date-first file in `datasets/product/agent-output/`
-   named `YYYY-MM-DD_msg-{recipient-slug}-{topic-slug}.md`, using this structure:
-
-   ```
-   # Message draft — {Recipient} ({topic})
-
-   **Task:** {task_id} · send-message · domain: {domain}
-   **To:** {Recipient} ({who they are / why them})
-   **Channel:** Teams or email (the operator's call)
-   **Status:** DRAFT — for the operator's review before sending. Nothing sent.
-
-   ---
-
-   ## Recommended: Teams / short message
-
-   > {Teams draft in the operator's Teams voice}
-
-   ---
-
-   ## Alternate: email version
-
-   **Subject:** {subject that states the point}
-
-   > {email draft in the operator's email voice}
-
-   ---
-
-   ## Context for the operator (not part of the message)
-
-   - {why this recipient, assumptions, anything to confirm before sending}
-   ```
-
-7. Populate the task so the board's Message card shows the draft inline:
-   Write the **recommended** version (Teams unless email clearly fits better) back
-   into the task's message fields so the card preview and the Send button work:
+6. Write the message into the task so the board's Message card shows it inline.
+   The card is the single source of truth: what's in these fields is exactly what
+   the operator reviews, edits, and sends.
    ```
    ./scripts/task.sh update {task_id} \
      --message-channel "Teams" \
      --message-to "{recipient}" \
-     --message-body "{the recommended draft, verbatim}" \
+     --message-body "{the message, verbatim}" \
      --actor agent
    ```
-   For an email recommendation, use `--message-channel "Email"` and add
-   `--message-subject "{subject}"`. The full two-version draft still lives in the
-   output file; this just surfaces the one the operator will most likely send.
+   For an email, use `--message-channel "Email"` and add `--message-subject "{subject}"`.
 
-8. Complete:
-   Run: `./scripts/task.sh agent:complete {task_id} --output "datasets/product/agent-output/YYYY-MM-DD_msg-...md"`
-   Then STOP. Do not send the message — the operator reviews and sends it themselves.
+7. Complete — WITHOUT an output file (the card holds the deliverable):
+   Run: `./scripts/task.sh agent:complete {task_id}`
+   Do NOT pass `--output` and do NOT write any file to `datasets/product/agent-output/`.
+   Passing `--output` would stamp `agent_output`, which spins up an Obsidian/Word
+   artifact the message card neither needs nor shows. Then STOP. Do not send the
+   message — the operator reviews and sends it themselves from the card.
 
-9. If you encounter an unrecoverable error:
+8. If you encounter an unrecoverable error:
    Run: `./scripts/task.sh agent:fail {task_id} --error "what went wrong"`
 
 {rerun_block}Important rules:
 - **Voice first.** Match the operator's voice files (`profile/voice/teams.md` +
   `profile/voice/email.md`) precisely. No em dashes anywhere. No
   corporate filler ("circle back", "per my last", "I hope this finds you well").
-- **Draft only — never send.** Sending is the operator's manual step; the file is always a DRAFT.
-- Keep the "Context for the operator" block out of the message itself.
-- Produce both a Teams and an email version so the operator can pick the channel.
+- **The card is the deliverable.** The message lives in the task's message fields —
+  no draft file, no Word document. Don't pass `--output` on complete.
+- **Draft only — never send.** Sending is the operator's manual step from the card.
 - Be concise. A message is not a memo.

@@ -81,8 +81,12 @@ async function openTask(taskId, keepChat) {
 
     // ── Output — prime real estate, same place on every card ──────────
     const isAgentish = task.queue === 'agent' || task.queue === 'collab';
+    // A send-message task's deliverable IS the message in the card below — it
+    // never carries an Obsidian/Word artifact, so suppress the file tiles even
+    // if agent_output got stamped (e.g. the "Sent via …" send-audit marker).
+    const isSendMessage = task.task_type === 'send-message';
     const artifacts = [];
-    if (task.agent_output) {
+    if (task.agent_output && !isSendMessage) {
       const v = String(task.agent_output).trim();
       if (v.endsWith('.md')) {
         artifacts.push({ icon: 'obsidian', cls: '', kind: 'Obsidian', name: v.split('/').pop(), path: shortArtifactPath(v), href: obsidianUri(v), label: 'Open in Obsidian', external: false });
@@ -92,7 +96,7 @@ async function openTask(taskId, keepChat) {
         else artifacts.push({ icon: 'output', cls: '', kind: 'Output', name: 'Agent output', path: v, href: null, label: '', external: false });
       }
     }
-    if (task.sharepoint_url || task.sharepoint_path) {
+    if ((task.sharepoint_url || task.sharepoint_path) && !isSendMessage) {
       const p = task.sharepoint_path || '';
       artifacts.push({ icon: 'doc', cls: 'doc', kind: 'Word', name: p ? p.split('/').pop() : 'Word document', path: p ? shortArtifactPath(p) : 'Word Online', href: task.sharepoint_url || `/open?file=${encodeURIComponent(task.sharepoint_path)}`, label: 'Open in Word', external: !!task.sharepoint_url });
     }

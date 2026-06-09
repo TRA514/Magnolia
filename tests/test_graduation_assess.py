@@ -62,14 +62,35 @@ def test_metrics_counts_implicit_up(tasks_root):
     assert agreement == 1.0      # judge_pos == implicit up
 
 
-def test_min_reacted_floor_blocks_promotion(tasks_root, tmp_path):
+def _write_thresholds(path, overrides):
+    import json, os
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump({"tiers": {}, "thresholds": overrides, "demote_signals": {}}, f)
+
+
+def test_min_reacted_floor_blocks_when_approval_lowered(tasks_root, tmp_path):
+    # Isolate the floor: drop min_approval/min_agreement to 0 so only min_reacted can block.
     import task_lib, graduation_assess
     p = str(tmp_path / "ladder.json")
-    # 6 judged, but only 2 explicit reactions -> reacted(2) < min_reacted(3) -> no card.
+    _write_thresholds(p, {"shadow_to_supervised":
+                          {"min_judged": 4, "min_approval": 0.0, "min_agreement": 0.0, "min_reacted": 3}})
+    # 4 judged (meets min_judged) but only 2 explicit reactions -> reacted(2) < min_reacted(3).
     _judged(task_lib, "prd-draft", 9, react="up", n=2)
-    _judged(task_lib, "prd-draft", 9, react=None, n=4)   # no reaction, status open -> not reacted
+    _judged(task_lib, "prd-draft", 3, react=None, n=2)  # no reaction, status open -> not reacted
     created = graduation_assess.assess(ladder_path=p, now_iso="2026-06-10T00:00:00Z")
-    assert created == []
+    assert created == []  # blocked solely by the min_reacted floor
+
+
+def test_min_reacted_floor_passes_at_threshold(tasks_root, tmp_path):
+    import task_lib, graduation_assess
+    p = str(tmp_path / "ladder.json")
+    _write_thresholds(p, {"shadow_to_supervised":
+                          {"min_judged": 4, "min_approval": 0.0, "min_agreement": 0.0, "min_reacted": 3}})
+    _judged(task_lib, "prd-draft", 9, react="up", n=3)   # reacted(3) == min_reacted(3)
+    _judged(task_lib, "prd-draft", 3, react=None, n=1)
+    created = graduation_assess.assess(ladder_path=p, now_iso="2026-06-10T00:00:00Z")
+    assert any(c["task_type"] == "prd-draft" for c in created)  # floor cleared
 
 
 def test_first_hop_fires_at_four_judged(tasks_root, tmp_path):
@@ -94,7 +115,7 @@ def test_ready_type_gets_graduation_card(tasks_root, tmp_path):
 def test_not_ready_no_card(tasks_root, tmp_path):
     import task_lib, graduation_assess
     p = str(tmp_path / "ladder.json")
-    _judged(task_lib, "prd-draft", 9, react="up", n=3)  # below min_judged=6
+    _judged(task_lib, "prd-draft", 9, react="up", n=3)  # below min_judged=4
     created = graduation_assess.assess(ladder_path=p, now_iso="2026-06-10T00:00:00Z")
     assert created == []
 
@@ -124,7 +145,7 @@ def test_no_demote_on_insufficient_data(tasks_root, tmp_path):
     import task_lib, graduation_assess, ladder_lib
     p = str(tmp_path / "ladder.json")
     ladder_lib.set_tier("prd-draft", "supervised", path=p)
-    _judged(task_lib, "prd-draft", 3, react="down", n=2)  # n=2 < min_judged 6 for the supervised entry bar
+    _judged(task_lib, "prd-draft", 3, react="down", n=2)  # n below the entry-bar min_judged for this tier
     graduation_assess.assess(ladder_path=p, now_iso="2026-06-10T00:00:00Z")
     graduation_assess.assess(ladder_path=p, now_iso="2026-06-17T00:00:00Z")
     assert ladder_lib.tier_of("prd-draft", path=p) == "supervised"  # sparse window must NOT demote

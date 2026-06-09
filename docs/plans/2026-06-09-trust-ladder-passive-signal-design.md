@@ -83,6 +83,13 @@ Add `min_reacted` to `DEFAULT_THRESHOLDS` per hop. Promotion requires
 Implicit-ups count toward `reacted` (that is the point — the floor becomes reachable
 passively).
 
+> **Note (post-review):** The real fix for the one-lucky-click problem is dropping the
+> judge self-vote (change #1) — approval now counts only real up's. At the default
+> thresholds the `min_reacted` floor is therefore *redundant* with `min_approval`: passing
+> `min_approval` already forces `reacted >= min_reacted`. The floor is retained as a
+> belt-and-suspenders guard for the one case where it still binds — a user who lowers
+> `min_approval` via a `datasets/evals/ladder.json` override.
+
 ### 3. `min_judged` 6 → 4 on the first hop
 
 `shadow_to_supervised.min_judged = 4` (was 6). Second hop unchanged at 12. Rationale: the

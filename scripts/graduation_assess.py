@@ -47,7 +47,7 @@ def effective_react(t):
     react = t.get("human_react")
     if react in ("up", "down"):
         return react
-    if t.get("status") == "done" and user_chat_turns(t.get("id")) <= FRICTION_MAX:
+    if t.get("id") and t.get("status") == "done" and user_chat_turns(t["id"]) <= FRICTION_MAX:
         return "up"
     return None
 
@@ -115,6 +115,10 @@ def assess(ladder_path=None, now_iso=None):
         nxt = NEXT.get(cur)
         if nxt:
             bar = th[ENTRY_KEY[nxt]]
+            # min_reacted is a belt-and-suspenders floor: at the default thresholds it
+            # is redundant with min_approval (approval counts only real 'up's, so passing
+            # min_approval already forces reacted >= min_reacted). It binds only when a
+            # user lowers min_approval via a datasets/evals/ladder.json override.
             ready = (n >= bar["min_judged"] and reacted >= bar["min_reacted"]
                      and approval >= bar["min_approval"] and agreement >= bar["min_agreement"])
             if ready and task_type not in existing_grad:

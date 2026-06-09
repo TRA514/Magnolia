@@ -369,7 +369,9 @@
    popover holding the global Autonomous Mode switch. Built by js/settings.js
    into the #settings-control mount; styled here TOKEN-ONLY so every mood
    inherits. The button mirrors .mood-btn; the popover mirrors .mood-menu;
-   the switch mirrors .cron-toggle (accent track when on).
+   the switch is self-styled below via .settings-switch* (an accent-track
+   toggle in the same spirit as the schedules .cron-toggle, but its own rules).
+   When autonomy is on, .settings-btn.autonomy-on arms the gear itself.
    ═══════════════════════════════════════════════════════════════════════ */
 .settings-control { position: relative; flex: 0 0 auto; }
 .settings-btn {
@@ -385,6 +387,19 @@
   background: var(--surface-hover); color: var(--text); border-color: var(--border-soft);
 }
 .settings-btn[aria-expanded="true"] svg { transform: rotate(35deg); }
+
+/* armed: autonomy is ON — the gear reads as active without opening the panel.
+   Accent gear + a soft accent ring; token-only so it stays legible in every mood. */
+.settings-btn.autonomy-on {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.settings-btn.autonomy-on:hover, .settings-btn.autonomy-on[aria-expanded="true"] {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
 
 .settings-menu {
   position: absolute; top: calc(100% + 8px); right: 0; min-width: 268px;
@@ -409,7 +424,7 @@
 .settings-row-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
 .settings-row-blurb { font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
 
-/* switch — token-only; reuses the cron-toggle look (accent track when on) */
+/* switch — token-only, self-styled (accent track when on; same idea as .cron-toggle) */
 .settings-switch { position: relative; width: 38px; height: 21px; flex: 0 0 auto; }
 .settings-switch input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
 .settings-switch-track {

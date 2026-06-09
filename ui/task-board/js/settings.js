@@ -72,9 +72,9 @@ function setAutonomy(toggle) {
   })
     .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
     .then(data => {
+      // The flipped switch + the persistent cog indicator are the confirmation;
+      // toast() only surfaces errors by design, so there's nothing to toast here.
       syncAutonomyUI(toggle, !!data.enabled);
-      // toast() only surfaces errors by design; the flipped switch is its own confirmation.
-      toast(`Autonomous Mode ${data.enabled ? 'on' : 'off'}`, 'success');
     })
     .catch(err => {
       syncAutonomyUI(toggle, !want);   // revert
@@ -86,6 +86,10 @@ function setAutonomy(toggle) {
 function syncAutonomyUI(toggle, enabled) {
   toggle.checked = enabled;
   toggle.setAttribute('aria-checked', String(enabled));
+  // Persistent at-a-glance signal: arm the cog itself when autonomy is on,
+  // so the operator sees auto-ship is live without opening the popover.
+  const cog = document.getElementById('settings-cog');
+  if (cog) cog.classList.toggle('autonomy-on', enabled);
 }
 
 function initSettings() { buildSettingsControl(); }

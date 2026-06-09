@@ -147,7 +147,7 @@ async function renderQuality() {
     const phase = _PHASE_LABEL[tier] || tier;
     // Kill switch shows ONLY for autonomous types — the one tier that auto-ships.
     const kill = tier === 'autonomous'
-      ? `<button class="q-kill" title="Drop this type to supervised — it stops shipping on its own and waits for your yes" onclick="event.stopPropagation();killAutoship('${escapeHtml(g.task_type)}')">${Q_ICON.brake}Stop auto-shipping</button>`
+      ? `<button class="q-kill" type="button" data-killtype="${escapeAttr(g.task_type)}" title="Drop this type to supervised — it stops shipping on its own and waits for your yes">${Q_ICON.brake}Stop auto-shipping</button>`
       : '';
     html += `
       <div class="card q-card ${tone}">
@@ -190,4 +190,14 @@ async function renderQuality() {
   }
 
   view.innerHTML = html;
+
+  // Wire the kill-switch buttons via listeners on the fresh nodes (no operator
+  // data in an executable onclick attribute). innerHTML reset above destroyed
+  // any prior buttons, so re-querying + binding here can't double-bind.
+  view.querySelectorAll('.q-kill').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      killAutoship(btn.dataset.killtype);
+    });
+  });
 }

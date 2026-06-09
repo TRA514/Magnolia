@@ -84,6 +84,14 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// Like escapeHtml but also escapes quotes so the value is safe in ANY attribute
+// context (escapeHtml only handles & < >, leaving " ' to break out of attrs).
+function escapeAttr(str) {
+  return escapeHtml(str)
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function obsidianUri(filePath) {
   // Convert to vault-relative path (strip absolute prefix if present)
   let rel = filePath.startsWith('/') ? filePath.replace(/^\/Users\/jayjenkins\/pm-os\//, '') : filePath;

@@ -88,6 +88,43 @@ def test_undo_autoship_no_git_revert(srv):
     ), git_calls
 
 
+def test_undo_autoship_no_task_type_stays_honest(srv):
+    """An autoship receipt MISSING autoship_task_type (defensive/unreachable):
+    undo must NOT demote anything, NOT git-revert, mark the card done, and the
+    comment must NOT claim it demoted 'None'."""
+    task_server, ladder_lib, task_lib, _, git_calls = srv
+    # Autoship receipt with NO autoship_task_type recorded.
+    cid, _ = task_lib.create_task(
+        "Auto-shipped: send the renewal nudge", queue="collab", domain="ops",
+        creator="agent", description="autoship receipt", card_type="receipt")
+    task_lib.update_task(cid, changes={
+        "receipt_kind": "autoship",
+        "receipt_summary": "send the renewal nudge",
+    })
+
+    demotions = []
+    real_kill = ladder_lib.kill_to_supervised
+
+    def _spy_kill(*a, **k):
+        demotions.append((a, k))
+        return real_kill(*a, **k)
+
+    import unittest.mock as _mock
+    with _mock.patch.object(ladder_lib, "kill_to_supervised", _spy_kill):
+        task_server.undo_receipt(cid)
+
+    # Nothing was demoted.
+    assert demotions == [], demotions
+    # No git revert attempted.
+    assert all("revert" not in c for c in git_calls), git_calls
+    # Card marked done with an honest comment — no literal 'None'.
+    read = task_lib.read_task(cid)
+    assert read["frontmatter"]["status"] == "done"
+    body = read["body"]
+    assert "cannot be un-sent" in body, body
+    assert "None" not in body, body
+
+
 def test_undo_non_autoship_takes_revert_path(srv):
     """A plain receipt (no receipt_kind) still hits the original revert path —
     proven by reaching the `revert_commit` ValueError when none is recorded."""

@@ -307,6 +307,19 @@ def set_cost_posture(level, root=None):
     _update_yaml("config.yaml", mutate, root)
 
 
+def autonomy_enforcement(root=None):
+    """Global posture flag: may an autonomous action-type auto-ship without a
+    per-instance human approve? Default False (auto-ship is opt-in per install)."""
+    return bool(config(root).get("autonomy_enforcement", False))
+
+
+def set_autonomy_enforcement(enabled, root=None):
+    """Set config.yaml['autonomy_enforcement'] (preserves siblings + comments)."""
+    def mutate(doc):
+        doc["autonomy_enforcement"] = bool(enabled)
+    _update_yaml("config.yaml", mutate, root)
+
+
 TIER_ORDER = ["light", "standard", "deep"]
 TIER_MODELS = {
     "light": "claude-haiku-4-5",

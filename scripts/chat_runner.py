@@ -175,6 +175,33 @@ def _capability_boundary(name):
     )
 
 
+# The "don't rebuild Magnolia from this chat" boundary, reused by the fresh-session
+# framing and the background→live handoff so both stay in sync. This is a behavioral
+# guardrail, not a tool lock: the chat carries Write/Edit (to draft this task's
+# artifacts), so it CAN edit engine files — and a headless session with a task's
+# context baked in builds the engine badly (it produces janky, half-wired changes).
+# So we intercept any request to change Magnolia ITSELF and redirect to the real
+# build path — `/magnolia-build` in Claude Code on the Magnolia folder — where the
+# brainstorm→plan→build→verify loop produces a far better result. It's role-agnostic
+# and carries no person/team identity (invariant #1 spirit).
+def _engine_change_boundary():
+    return (
+        "Where you are: this chat is the FRONT END of Magnolia — a place to work "
+        "the task in front of you, not to rebuild Magnolia itself. You can do this "
+        "task and draft/edit its artifacts freely. But if you're asked to change "
+        "how Magnolia WORKS — add a new worker type, add a new card type, add an "
+        "adapter or integration, or build any new capability into the system "
+        "itself (anything beyond executing THIS task and its artifacts) — do NOT "
+        "attempt it from here. A headless chat with one task's context baked in "
+        "builds the engine badly, and past in-chat attempts produced broken, "
+        "half-wired changes. Instead, take the idea seriously and point the way: "
+        "say something like \"Great idea — to change what Magnolia can do, open "
+        "Claude Code on the Magnolia folder, run /magnolia-build, and describe the "
+        "feature you want to build.\" That build path gives a far better result. "
+        "You can talk the idea through, but the building happens there, not here."
+    )
+
+
 def build_context_prompt(task, body, user_message):
     """Build the first-turn system/context prompt for a NEW chat session.
 
@@ -216,6 +243,7 @@ def build_context_prompt(task, body, user_message):
         f"- Ask a clarifying question only when you're genuinely blocked and "
         f"can't make a sensible assumption.\n\n"
         f"{_capability_boundary(name)}\n\n"
+        f"{_engine_change_boundary()}\n\n"
         f"{task_block}\n\n"
         f"{body_block}"
         f"## {name}'s message\n"
@@ -262,6 +290,7 @@ def build_resume_prompt(task, user_message, *, first_interactive=False, body=Non
             f"for the basics, and reach for your tools only to go deeper or to "
             f"act. Ask only when you're genuinely blocked.\n\n"
             f"{_capability_boundary(name)}\n\n"
+            f"{_engine_change_boundary()}\n\n"
             f"{state_block}\n\n"
             f"{_card_body_block(body, current=True)}"
             f"## {name}'s message\n"

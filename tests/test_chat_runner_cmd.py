@@ -122,3 +122,66 @@ def test_resume_steady_state_has_no_handoff_language(monkeypatch):
                                body="## Decision\nGraduate the PRD to supervised.")
     assert "Graduate the PRD to supervised." not in p   # body not re-sent
     assert "## Current task state" in p
+
+
+# ─── Engine-change guardrail: "don't rebuild Magnolia from the front-end chat" ──
+#
+# A chat session (fresh OR background→live handoff) carries Write/Edit and too
+# much baked-in task context to build the engine well. The guardrail intercepts
+# requests to change Magnolia ITSELF and redirects to the proper build path
+# (`/magnolia-build` in Claude Code) instead of monkeying with the code in-session.
+
+def _asserts_engine_guardrail(p):
+    low = p.lower()
+    # Names the proper build path so the model can hand it off precisely.
+    assert "/magnolia-build" in p
+    # Frames the chat as the front end (a place to work the task, not rebuild).
+    assert "front end" in low
+    # Names the change surfaces it must intercept, so the model recognizes them.
+    assert "worker type" in low
+    assert "card type" in low
+    assert "adapter" in low
+    # Tells the model NOT to attempt the build from here.
+    assert "do not attempt" in low or "don't attempt" in low or "not from here" in low
+
+
+def test_context_prompt_has_engine_change_guardrail(monkeypatch):
+    """A fresh human-opened chat must carry the guardrail too — it's just as
+    vulnerable as a post-background session."""
+    monkeypatch.setattr(cr.profile_lib, "display_name", lambda *a, **k: "Dana Cole")
+    monkeypatch.setattr(cr.profile_lib, "company", lambda *a, **k: "Acme")
+    task = {"id": "T-9", "title": "Draft the thing", "queue": "agent",
+            "status": "open", "priority": "high"}
+    p = cr.build_context_prompt(task, "the card body text", "do the thing")
+    _asserts_engine_guardrail(p)
+
+
+def test_handoff_prompt_has_engine_change_guardrail(monkeypatch):
+    """The background→live handoff (the prompt that fires after background work)
+    carries the guardrail."""
+    monkeypatch.setattr(cr.profile_lib, "display_name", lambda *a, **k: "Dana Cole")
+    task = {"id": "T-9", "title": "PRD draft", "status": "open",
+            "priority": "high", "queue": "agent"}
+    p = cr.build_resume_prompt(task, "add a new worker type", first_interactive=True,
+                               body="## Decision\nGraduate the PRD.")
+    _asserts_engine_guardrail(p)
+
+
+def test_steady_state_resume_stays_light_no_guardrail(monkeypatch):
+    """Steady-state follow-up turns stay light: the guardrail is in session
+    history from the framing turn, so we don't replay it (no wasted tokens)."""
+    monkeypatch.setattr(cr.profile_lib, "display_name", lambda *a, **k: "Dana Cole")
+    task = {"id": "T-9", "title": "PRD draft", "status": "open",
+            "priority": "high", "queue": "agent"}
+    p = cr.build_resume_prompt(task, "next?", first_interactive=False)
+    assert "/magnolia-build" not in p
+
+
+def test_engine_guardrail_is_depersonalized(monkeypatch):
+    """The guardrail names Magnolia + the build command but no person/team
+    identity literal (invariant #1 spirit)."""
+    monkeypatch.setattr(cr.profile_lib, "display_name", lambda *a, **k: "Dana Cole")
+    monkeypatch.setattr(cr.profile_lib, "company", lambda *a, **k: "Acme")
+    block = cr._engine_change_boundary()
+    assert "/magnolia-build" in block
+    assert "Jay" not in block

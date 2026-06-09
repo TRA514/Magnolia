@@ -103,10 +103,14 @@
 }
 
 /* Quick Add + lives in the brand-gradient top bar — neutral tokens would render
-   it as a faint grey ghost, so give it white controls like .mood-btn above. */
+   it as a faint grey ghost. Match the solid white of the other top-bar controls
+   (the active-tab text / stat dot are #fff); a thin two-stroke glyph needs the
+   full white to read with the same presence as the date and Mood text beside it,
+   and a slightly firmer border so the box itself doesn't disappear on the bright
+   blue→green gradient. */
 [data-theme="vantaca"] .qa-trigger {
-  color: rgba(255, 255, 255, 0.92);
-  border-color: rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.45);
 }
 [data-theme="vantaca"] .qa-trigger:hover {
   background: rgba(255, 255, 255, 0.18); color: #fff; border-color: rgba(255, 255, 255, 0.4);

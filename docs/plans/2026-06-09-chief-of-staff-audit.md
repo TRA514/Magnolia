@@ -131,3 +131,47 @@ These came up as "obvious" fixes during the audit and should be declined:
 **Data/profile/automation.** Per-person layers are gitignored, so live usage was unverifiable from this clone; structurally, the memory loops are designed but not yet closed: reactions are captured but produce no proposals (ROADMAP §1's missing half), voice files have no update path from real edits, archives are never synthesized, and the three seeded crons (doctor, self-improvement, graduation) are the only recurring jobs of the ~11 the roadmap names. The passive-approval signal (2026-06-09) makes `status: done` integrity load-bearing for graduation — see recommendation #8.
 
 **Suggested sequencing:** #1 + #4 + #8 (one "honesty" release) → #2 (the felt chief-of-staff release) → #5 (before beta invites) → #3 (the learning release) → #6 + #7 alongside.
+
+---
+
+# Part 4 — The capability leap (v2, added same day)
+
+Parts 1–3 harden the current frame. This part names the next frame. The diagnosis: **Magnolia's unit of work is the task, and a task is by definition something already known to need doing.** Every byte of agent work today is downstream of a human trigger or a clock tick. The judge, the ladder, the receipts all measure execution of *assigned* work. A chief of staff's defining property is being **upstream** of you — they hold your world, notice what's missing, and the work exists before you asked. In one line: **stop waiting to be asked.**
+
+Four frontiers, each grounded in primitives that already exist.
+
+## Frontier 1 — The Binder: a compounding world model
+
+A small set of living, git-versioned markdown files the system itself maintains and **every worker reads before acting**: person dossiers (`datasets/people/` exists, empty — this is its purpose), account dossiers, an active-threads file, a priorities file, a decision journal. Updated as a side-effect of every transcript ingestion and task completion — as append *proposals*, judge-scored, riding the existing trust machinery.
+
+Why this is the multiplier: `build_prompt` / `build_prompt_for_worker` (`task_dispatch.py:519-651`) injects worker + task + skills catalog and nothing else — **every dispatch starts amnesiac**, so output quality is capped at "smart contractor with no context." With a `## World` block injected from the binder, every output starts already knowing the renewal date, the thread history, the person's style. System value compounds with corpus size instead of staying linear in tasks executed. It is also the durable moat over any SaaS copilot: the binder is local, yours, portable. And it *is* simple files + git — the human chief of staff's literal binder, made of markdown.
+
+**First build:** person + account dossiers auto-maintained from meeting frontmatter (`participants` / `customer` are already structured fields) + the `## World` injection block in dispatch and chat prompts.
+
+## Frontier 2 — The calendar becomes the spine: anticipation, not reaction
+
+Event-shaped triggers, not just cron's clock. The defining deliverable: **a pre-meeting brief before every meeting, unprompted** — who you're meeting, what was said last time, open loops in both directions, what to push for; sitting on the meeting's card 30 minutes before it starts. Post-meeting: the follow-through drafts are ready before you're back at your desk. Pattern triggers beyond the calendar: "QBR Friday → `workflow-cs-prep` runs Wednesday," "no contact with a top account in 6 weeks," "renewal in 30 days."
+
+The reframe that makes this the natural next step: **the trust ladder is over-built for reactive work and exactly right for unprompted work.** Unprompted output is only tolerable because shadow scoring, receipts, and undo exist — the safety system was built for a capability that hasn't been switched on. Calendar is already a named future adapter family (`architecture.md` §4) and the M365 seam already exists (`find_meeting_times.py`).
+
+**First build:** calendar adapter + one trigger — T-30min brief per meeting, generated from binder + qmd, landing as a card. Then the trigger table (`datasets/triggers/`?) as a sibling of cron: *condition → worker*, same dispatch pipeline.
+
+## Frontier 3 — The Mirror: the chief of staff manages you, not just your work
+
+The system holds your **stated** priorities (rocks, roadmap) and your **revealed** behavior (calendar hours, decision latency, reschedule patterns, commitments *you* owe others going stale) and reconciles them — gently, as proposals: *"You said Home WAU is the rock; it got 40 minutes last week — decline these two recurring meetings?"* A decision journal closes the longest loop in knowledge work: *"30 days ago you decided X expecting Y — here's what actually happened."* Boundary-keeping: flag the 80%-meeting week before it happens, protect focus blocks.
+
+This is the only frontier aimed squarely at the stated emotional goal — be your best self at work. No commercial tool does priorities-vs-attention reconciliation; the data (meeting frontmatter + a priorities file) already exists locally. Tone is everything: weekly, accept/reject, never a nag — the system as the boundary-keeper *you* don't have to be.
+
+**First build:** a weekly priorities-vs-calendar reconciliation card.
+
+## Frontier 4 — Magnolia-to-Magnolia: the team protocol
+
+`waiting_on` stops being a string and becomes a handshake. My "waiting on ‹teammate›" files a card on the teammate's board; their completion flows back and closes my loop. A shared team commitments ledger (one markdown file in a shared `team/` repo) is read and written by every instance. The chiefs of staff coordinate so the humans never have to chase each other — nobody has to be the nag.
+
+This is the leap **only this architecture can make**: the engine was made identity-free from day one (invariant #1), so instances are protocol-compatible by construction, and git — already the transport for everything — is the bus. No server, no SaaS. First cross-board write is Tier-2, naturally.
+
+**First build:** when teammate #2 onboards — a shared repo with the commitments ledger; nudges become machine-to-machine cards.
+
+## Sequencing and the relationship to Parts 1–3
+
+Binder first (it multiplies every existing and future output), calendar spine second (the felt leap), mirror third, protocol when the second teammate onboards. Part 1 is not displaced — the reliability work is the *license* for anticipation: unprompted work that silently fails is worse than no anticipation at all.

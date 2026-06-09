@@ -354,6 +354,24 @@
 .q-trust.tier-gated      { color: var(--warning); background: var(--warning-soft); }
 .q-trust.tier-autonomous { color: var(--success); background: var(--success-soft); }
 
+/* Kill switch — the calm brake in a card foot. Reads as a clear, deliberate
+   control (an outlined chip with an accent edge) without alarming red. Pushed
+   to the end of the foot by the flex spacer. Token-only. */
+.q-foot-spacer { flex: 1 1 auto; }
+.q-kill {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap;
+  padding: 5px 10px; border-radius: var(--r-btn);
+  color: var(--text-muted); background: transparent;
+  border: 1px solid var(--border); cursor: pointer;
+  transition: color var(--ease), background var(--ease), border-color var(--ease);
+}
+.q-kill svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.q-kill:hover {
+  color: var(--accent); border-color: var(--accent);
+  background: var(--surface-hover);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    responsive — stack the two-up grids on narrow viewports
    ═══════════════════════════════════════════════════════════════════════ */

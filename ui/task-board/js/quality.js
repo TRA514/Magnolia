@@ -11,6 +11,8 @@
 const Q_ICON = {
   keep: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 8.2 7 10.6l4.5-5"/></svg>',
   flag: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 2.6v10.8"/><path d="M4.6 3.2h6.2l-1.3 2.2 1.3 2.2H4.6"/></svg>',
+  // brake — a calm "raised hand / pause" mark for the kill switch. currentColor.
+  brake: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.6"/><path d="M6.1 6.1v3.8M9.9 6.1v3.8"/></svg>',
 };
 
 function _qTone(s) {
@@ -86,6 +88,22 @@ function _qAgreement(g) {
   return `you agree ${g.agreement_pct}%`;
 }
 
+// Kill switch — the calm brake. Drops a task-type out of autonomous instantly
+// (POST .../demote → supervised), so it stops auto-shipping and waits for a yes
+// again. Success is silent by board convention (toast only surfaces errors), so
+// the confirmation is the re-render: the card drops to the supervised badge and
+// this button disappears. Only wired/rendered for autonomous types.
+async function killAutoship(taskType) {
+  try {
+    const res = await fetch(`${API}/tasks/${encodeURIComponent(taskType)}/demote`, { method: 'POST' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await res.json();
+    renderQuality();
+  } catch (err) {
+    toast(`Couldn't stop auto-shipping ${taskType}: ${err.message}`, 'error');
+  }
+}
+
 async function renderQuality() {
   const view = document.getElementById('quality-view');
   if (!view) return;
@@ -127,6 +145,10 @@ async function renderQuality() {
     const tier = (g.phase || 'shadow').toLowerCase();
     const _PHASE_LABEL = { shadow: 'observe-only', supervised: 'supervised', autonomous: 'autonomous' };
     const phase = _PHASE_LABEL[tier] || tier;
+    // Kill switch shows ONLY for autonomous types — the one tier that auto-ships.
+    const kill = tier === 'autonomous'
+      ? `<button class="q-kill" title="Drop this type to supervised — it stops shipping on its own and waits for your yes" onclick="event.stopPropagation();killAutoship('${escapeHtml(g.task_type)}')">${Q_ICON.brake}Stop auto-shipping</button>`
+      : '';
     html += `
       <div class="card q-card ${tone}">
         <div class="q-card-head">
@@ -138,7 +160,7 @@ async function renderQuality() {
           ${_qSpark(g)}
         </div>
         ${_qDims(g.dimensions)}
-        <div class="q-foot"><span>${g.count} reviewed</span><span class="q-foot-sep">·</span><span>${_qAgreement(g)}</span></div>
+        <div class="q-foot"><span>${g.count} reviewed</span><span class="q-foot-sep">·</span><span>${_qAgreement(g)}</span>${kill ? `<span class="q-foot-spacer"></span>${kill}` : ''}</div>
       </div>`;
   });
   html += `</div>`;

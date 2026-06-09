@@ -189,10 +189,17 @@ const bodyRenderers = {
       const band = task.judge_score >= 8 ? 'good' : (task.judge_score >= 5 ? 'mid' : 'low');
       how = `<div class="receipt-how"><span class="receipt-score ${band}">${task.judge_score}<span class="card-score-of">/10</span></span>${task.judge_why ? `<span class="receipt-why">${escapeHtml(task.judge_why)}</span>` : ''}</div>`;
     }
+    // Honest revert copy. An auto-ship already left the building (email/ticket
+    // sent) — "Undo" can't unsend it; what it CAN do is stop this type from
+    // auto-shipping again. Branch on receipt_kind (passed through on the task
+    // detail object; absent on the list projection → safe default).
+    const revert = task.receipt_kind === 'autoship'
+      ? `Already sent — <b>Undo</b> stops auto-shipping this type.`
+      : `Applied — <b>Undo</b> reverts this change.`;
     return `<div class="card-body card-kind-body receipt-body" data-card-body="preview">
       <div class="receipt-did">${did}</div>
       ${how}
-      <div class="receipt-revert">${svgIcon('undo')}<span>Applied — <b>Undo</b> reverts this change.</span></div>
+      <div class="receipt-revert">${svgIcon('undo')}<span>${revert}</span></div>
     </div>`;
   },
   // Graduation — the evidence, reassuringly: tier move · three numbers · what changes.

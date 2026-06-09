@@ -1,3 +1,6 @@
+import sys
+import types
+
 import platform_lib
 
 
@@ -67,3 +70,65 @@ def test_process_group_kwargs_per_os(monkeypatch):
     assert "creationflags" in platform_lib.process_group_kwargs()
     monkeypatch.setattr(platform_lib, "os_kind", lambda: "darwin")
     assert platform_lib.process_group_kwargs() == {"start_new_session": True}
+
+
+# ─── file-lock seam (cross-platform replacement for fcntl) ──────────────────
+
+def test_lock_unlock_roundtrip(tmp_path):
+    p = tmp_path / "counter"
+    p.write_text("0")
+    with open(p, "r+") as fd:
+        assert platform_lib.lock(fd) is True
+        platform_lib.unlock(fd)  # must not raise
+
+
+def test_lock_nonblocking_returns_false_when_held(tmp_path):
+    p = tmp_path / "lockfile"
+    p.write_text("")
+    fd1 = open(p, "w")
+    fd2 = open(p, "w")
+    try:
+        assert platform_lib.lock(fd1, blocking=False) is True
+        assert platform_lib.lock(fd2, blocking=False) is False
+    finally:
+        platform_lib.unlock(fd1)
+        fd1.close()
+        fd2.close()
+
+
+def test_unlock_never_raises_when_nothing_held(tmp_path):
+    p = tmp_path / "f"
+    p.write_text("x")
+    with open(p, "r+") as fd:
+        platform_lib.unlock(fd)  # no lock held → silent
+
+
+def _fake_msvcrt(locking):
+    return types.SimpleNamespace(LK_LOCK=1, LK_NBLCK=2, LK_UNLCK=0, locking=locking)
+
+
+def test_lock_windows_uses_msvcrt(monkeypatch, tmp_path):
+    monkeypatch.setattr(platform_lib, "os_kind", lambda: "windows")
+    calls = []
+    fake = _fake_msvcrt(lambda fileno, mode, n: calls.append((mode, n)))
+    monkeypatch.setitem(sys.modules, "msvcrt", fake)
+    p = tmp_path / "f"
+    p.write_text("0")
+    with open(p, "r+") as fd:
+        assert platform_lib.lock(fd) is True
+        assert calls[0] == (fake.LK_LOCK, 1)
+        platform_lib.unlock(fd)
+        assert calls[-1] == (fake.LK_UNLCK, 1)
+
+
+def test_lock_windows_nonblocking_contention_returns_false(monkeypatch, tmp_path):
+    monkeypatch.setattr(platform_lib, "os_kind", lambda: "windows")
+
+    def boom(fileno, mode, n):
+        raise OSError("already locked")
+
+    monkeypatch.setitem(sys.modules, "msvcrt", _fake_msvcrt(boom))
+    p = tmp_path / "f"
+    p.write_text("0")
+    with open(p, "r+") as fd:
+        assert platform_lib.lock(fd, blocking=False) is False

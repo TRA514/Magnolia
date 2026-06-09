@@ -17,7 +17,6 @@ import signal
 import subprocess
 import os
 import sys
-import fcntl
 import argparse
 import time
 import uuid
@@ -89,19 +88,22 @@ def acquire_lock():
     os.makedirs(os.path.dirname(LOCK_FILE), exist_ok=True)
     try:
         fd = open(LOCK_FILE, "w")
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        fd.write(str(os.getpid()))
-        fd.flush()
-        return fd
     except (OSError, IOError):
         return None
+    # non-blocking exclusive lock: another dispatcher holding it → None
+    if not platform_lib.lock(fd, blocking=False):
+        fd.close()
+        return None
+    fd.write(str(os.getpid()))
+    fd.flush()
+    return fd
 
 
 def release_lock(fd):
     """Release the dispatch lock."""
     if fd:
+        platform_lib.unlock(fd)
         try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
             fd.close()
         except (OSError, IOError):
             pass

@@ -123,3 +123,52 @@ def kill_process_group(proc):
             os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
     except (ProcessLookupError, PermissionError, OSError):
         pass
+
+
+def lock(fd, exclusive=True, blocking=True):
+    """Advisory lock on an open file object. Returns True if the lock was taken.
+
+    The single cross-platform replacement for direct `fcntl` use (which is
+    Unix-only and crashes at import on Windows). POSIX uses ``fcntl.flock`` and
+    honours both ``exclusive`` and ``blocking``. Windows uses ``msvcrt.locking``,
+    which only offers an exclusive byte-range lock — ``exclusive`` is ignored
+    there. A blocking lock is best-effort on Windows (proceeds unlocked rather
+    than crashing if the OS won't grant it); a non-blocking lock that can't be
+    taken returns False on both platforms (used as the single-instance guard).
+
+    Both imports are lazy so neither module is required at import time on the
+    other platform.
+    """
+    if os_kind() == "windows":
+        import msvcrt
+        mode = msvcrt.LK_LOCK if blocking else msvcrt.LK_NBLCK
+        try:
+            fd.seek(0)
+            msvcrt.locking(fd.fileno(), mode, 1)
+            return True
+        except OSError:
+            # blocking caller: proceed best-effort. non-blocking caller: report contention.
+            return bool(blocking)
+    import fcntl
+    flags = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+    if not blocking:
+        flags |= fcntl.LOCK_NB
+    try:
+        fcntl.flock(fd.fileno(), flags)
+        return True
+    except OSError:
+        return False
+
+
+def unlock(fd):
+    """Release a lock taken by lock(). Best-effort; never raises."""
+    try:
+        if os_kind() == "windows":
+            import msvcrt
+            fd.seek(0)
+            msvcrt.locking(fd.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+    except OSError:
+        pass

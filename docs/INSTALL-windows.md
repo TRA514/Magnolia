@@ -3,6 +3,11 @@
 Get the prerequisites on your Windows machine, land the repo in the right place, then hand off to
 the conversational `onboard me` flow. Paste the prompts straight into Claude Code.
 
+> **Magnolia runs natively on Windows.** You do **not** need WSL, Ubuntu, or any Linux setup —
+> just the native Windows tools below (winget + PowerShell + Python). If Claude ever suggests
+> installing WSL/Ubuntu to get Magnolia working, that's a mistake: decline it and report the
+> underlying error instead.
+
 ## The two-prompt shape (and why)
 Installation is **two prompts with a restart in between**, on purpose:
 1. **Prompt 1** installs prerequisites + clones the repo.

@@ -28,6 +28,16 @@ Example voice:
 - The board-spawn beat (step 5, after the server serves): "Come on out singing — there she is.
   That's your board, live. Let me walk you in."
 
+## Platform: Magnolia runs natively (read before troubleshooting)
+
+Magnolia runs **natively on macOS and on Windows** — plain Python, git, and the board. It does
+**NOT** require WSL, Ubuntu, a Linux VM, or any Unix layer, and you must **never** suggest
+installing one. If a script errors on Windows, that's a portability bug to fix natively (file an
+issue / route to the doctor) — it is **never** a reason to send someone to WSL or "set up Linux."
+Windows tooling is winget + PowerShell + native Python; the file-locking, process, and `claude`
+launch paths all go through `scripts/platform_lib.py`. When something fails, fix it where it
+broke — do not reach for a Unix environment as a workaround.
+
 ## Before you start: are we resuming?
 
 Read `profile/` and `profile/capabilities.json`. If a step's outputs already exist, tell them

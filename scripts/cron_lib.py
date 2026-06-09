@@ -7,7 +7,6 @@ When a job fires, it creates a task via task_lib.create_task() and
 optionally auto-dispatches it.
 """
 
-import fcntl
 import json
 import os
 import subprocess
@@ -15,6 +14,9 @@ import sys
 from datetime import datetime, timezone, timedelta
 
 from croniter import croniter
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import platform_lib  # cross-platform file locking (replaces Unix-only fcntl)
 
 # ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -43,7 +45,7 @@ def _next_cron_id():
     """Atomically read, increment, and return next cron job ID."""
     fd = open(COUNTER_FILE, "r+")
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        platform_lib.lock(fd)
         current = int(fd.read().strip())
         cron_id = f"CRON-{current:04d}"
         fd.seek(0)
@@ -51,7 +53,7 @@ def _next_cron_id():
         fd.truncate()
         return cron_id
     finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        platform_lib.unlock(fd)
         fd.close()
 
 
@@ -63,13 +65,13 @@ def _load_jobs():
         return []
     fd = open(JOBS_FILE, "r")
     try:
-        fcntl.flock(fd, fcntl.LOCK_SH)
+        platform_lib.lock(fd, exclusive=False)
         data = json.load(fd)
         return data if isinstance(data, list) else []
     except (json.JSONDecodeError, ValueError):
         return []
     finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        platform_lib.unlock(fd)
         fd.close()
 
 
@@ -78,11 +80,11 @@ def _save_jobs(jobs):
     os.makedirs(CRON_DIR, exist_ok=True)
     fd = open(JOBS_FILE, "w")
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        platform_lib.lock(fd)
         json.dump(jobs, fd, indent=2, default=str)
         fd.write("\n")
     finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        platform_lib.unlock(fd)
         fd.close()
 
 

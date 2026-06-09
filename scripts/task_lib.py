@@ -9,7 +9,6 @@ One implementation, zero duplication, zero drift.
 
 import os
 import sys
-import fcntl
 import shutil
 import re
 from datetime import datetime, timezone
@@ -17,6 +16,9 @@ from pathlib import Path
 from io import StringIO
 
 from ruamel.yaml import YAML
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import platform_lib  # cross-platform file locking (replaces Unix-only fcntl)
 
 # ─── Load LangFuse env vars if not already set ───────────────────────────────
 _PM_OS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -196,12 +198,12 @@ def _trigger_doc_sync(local_path):
 def _next_id():
     """Atomically read, increment, and return next task ID.
 
-    Uses fcntl.flock on _counter for concurrency safety.
+    Locks _counter for concurrency safety (cross-platform via platform_lib).
     Returns string like 'TASK-0042'.
     """
     fd = open(COUNTER_FILE, "r+")
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        platform_lib.lock(fd)
         current = int(fd.read().strip())
         task_id = f"TASK-{current:04d}"
         fd.seek(0)
@@ -209,7 +211,7 @@ def _next_id():
         fd.truncate()
         return task_id
     finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        platform_lib.unlock(fd)
         fd.close()
 
 

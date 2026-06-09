@@ -117,3 +117,4 @@ Headless env vars: `CLAUDE_CODE_AUTO_APPROVE_FILE_READS=true`, `CLAUDE_CODE_AUTO
 - Never overwrite large files without confirmation.
 - When unsure of a path, list directories first.
 - For batch operations, show a plan and await approval.
+- **Magnolia runs natively on macOS and Windows** — never recommend WSL, Ubuntu, or a Linux VM to make it work. A script that errors on Windows is a portability bug to fix natively (the OS seam is `scripts/platform_lib.py`), not a reason to install a Unix layer.

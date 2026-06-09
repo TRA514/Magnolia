@@ -42,7 +42,6 @@ import profile_lib
 import packs_lib
 import adapters
 from adapters.project_management._contract import NotConfigured
-from adapters.messaging._contract import NotConfigured as MessagingNotConfigured
 from adapters import NeedsConfirmation
 from cron_scheduler import CronScheduler
 import shipper

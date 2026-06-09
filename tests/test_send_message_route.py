@@ -154,7 +154,7 @@ def test_confirm_redrives_messaging_send(srv, monkeypatch):
     seen = {}
     monkeypatch.setattr(adapters, "publish",
                         lambda fam, draft, **k: seen.update(fam=fam, ch=draft["channel"]) or ("MSG-9", None))
-    monkeypatch.setattr(srv, "_load_email_cache", lambda: {"Dana": "dana@co.com"})
+    monkeypatch.setattr(shipper, "_load_email_cache", lambda: {"Dana": "dana@co.com"})
     monkeypatch.setattr(profile_lib, "set_integration_confirmed", lambda *a, **k: None)
 
     src = _send_task(channel="Teams", to="Dana", body="ping")

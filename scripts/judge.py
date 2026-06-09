@@ -490,6 +490,22 @@ def write_back(task_id, verdict, rubric_version, kind):
         return False
 
 
+def _post_judge(task_id, verdict):
+    import enforce_lib
+    return enforce_lib.apply_post_judge(task_id, verdict)
+
+
+def _finalize(task_id, verdict, rubric_version, kind):
+    """Persist the verdict, then run trust-ladder enforcement. Strictly additive:
+    an enforcement failure never breaks judging (judge exits 0)."""
+    ok = write_back(task_id, verdict, rubric_version, kind)
+    try:
+        _post_judge(task_id, verdict)
+    except Exception as e:
+        log(f"post-judge enforcement failed for {task_id} (non-fatal): {e}")
+    return ok
+
+
 def score_langfuse_trace(task_id, verdict, kind):
     """Write a judge-score onto the task's worker-execution trace + a judge trace."""
     try:
@@ -568,7 +584,7 @@ def judge_task(task_id):
         log(f"could not parse a verdict for {task_id}; leaving unscored")
         return 0
 
-    wrote = write_back(task_id, verdict, rubric_version, kind)
+    wrote = _finalize(task_id, verdict, rubric_version, kind)
     score_langfuse_trace(task_id, verdict, kind)
     log(f"done: {task_id} [{kind}] → {verdict['score']}/10 {verdict['dimensions']} (written={wrote})")
     return 0

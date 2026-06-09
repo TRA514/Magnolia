@@ -22,7 +22,7 @@ import sys
 import threading
 import traceback
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 
 
 class ReusableHTTPServer(ThreadingHTTPServer):
@@ -1111,6 +1111,32 @@ def handle_graduate(handler, task_id):
         _error_response(handler, f"Graduate failed: {e}", status=500)
         return
     _json_response(handler, {"ok": True})
+
+
+def handle_get_autonomy(handler):
+    """GET /api/config/autonomy — current global Autonomous-Mode posture flag."""
+    _json_response(handler, {"enabled": profile_lib.autonomy_enforcement()})
+
+
+def handle_set_autonomy(handler):
+    """POST /api/config/autonomy {"enabled": bool} — flip the posture flag."""
+    try:
+        body = _read_request_body(handler)
+    except (json.JSONDecodeError, ValueError) as e:
+        _error_response(handler, f"Invalid JSON body: {e}", status=400)
+        return
+    enabled = bool(body.get("enabled"))
+    profile_lib.set_autonomy_enforcement(enabled)
+    _json_response(handler, {"ok": True, "enabled": enabled})
+
+
+def handle_demote(handler, task_type):
+    """POST /api/tasks/{type}/demote — kill switch: drop a type to supervised."""
+    if not task_type:
+        _error_response(handler, "Missing task_type", status=400)
+        return
+    tier = ladder_lib.kill_to_supervised(task_type)
+    _json_response(handler, {"ok": True, "task_type": task_type, "tier": tier})
 
 
 def handle_keep(handler, task_id):
@@ -2229,6 +2255,14 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
                 handle_update_message(self, task_id)
             return True
 
+        # Match /api/tasks/{type}/demote — kill switch. The slot carries a
+        # task_type string (may contain hyphens, e.g. "send-message"), NOT a
+        # numeric id, so it skips _parse_task_id and is unquoted before use.
+        match = re.match(r"^/api/tasks/([^/]+)/demote$", path)
+        if match and method == "POST":
+            handle_demote(self, unquote(match.group(1)))
+            return True
+
         # Match /api/tasks/{id}/comment
         match = re.match(r"^/api/tasks/([^/]+)/comment$", path)
         if match and method == "POST":
@@ -2260,6 +2294,14 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
             return True
 
         # ─── Profile / Config API routes ───────────────────────────────
+        if path == "/api/config/autonomy" and method == "GET":
+            handle_get_autonomy(self)
+            return True
+
+        if path == "/api/config/autonomy" and method == "POST":
+            handle_set_autonomy(self)
+            return True
+
         if path == "/api/profile" and method == "GET":
             handle_get_profile(self)
             return True

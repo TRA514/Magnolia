@@ -393,11 +393,14 @@
 
   // Delegated tile-open: registered exactly ONCE for the page lifetime (not
   // per-open), so it never leaks. Reads the task id from the data-attribute the
-  // tile renders — no JS-string interpolation in an inline onclick.
+  // tile renders — no JS-string interpolation in an inline onclick. Registered
+  // in the CAPTURE phase: the tile's own onclick calls stopPropagation() (to
+  // keep the click off parent card handlers), which would otherwise prevent a
+  // bubble-phase document listener from ever seeing it. Capture runs first.
   document.addEventListener('click', (e) => {
     const btn = e.target.closest && e.target.closest('.dt-review[data-output-task]');
     if (btn) openOutputEditor(btn.dataset.outputTask);
-  });
+  }, true);
 
   window.openOutputEditor = openOutputEditor;
   window.closeOutputEditor = closeOutputEditor;

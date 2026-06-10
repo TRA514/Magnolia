@@ -254,3 +254,9 @@ button.dt-artifact { width: 100%; text-align: left; font-family: inherit; cursor
 /* Tables read on the app surface. */
 .dt-editor .milkdown .ProseMirror table { border-color: var(--border-soft); }
 .dt-editor .milkdown .ProseMirror th { background: var(--surface-hover); color: var(--text); }
+
+/* Crepe's inline selection toolbar: its icons default to --crepe-color-outline,
+   which our bridge maps to --border — so they read as disabled. Pull them up to
+   full --text (enabled), with --accent for the active state, matching our top bar. */
+.dt-editor .milkdown milkdown-toolbar .toolbar-item svg { color: var(--text); fill: var(--text); }
+.dt-editor .milkdown milkdown-toolbar .toolbar-item.active svg { color: var(--accent); fill: var(--accent); }

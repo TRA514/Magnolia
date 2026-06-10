@@ -96,7 +96,6 @@
         <span class="dte-tsep"></span>
         <button class="dte-tool" type="button" data-cmd="bullet" title="Bulleted list" aria-label="Bulleted list"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="3" cy="4.4" r="1" fill="currentColor" stroke="none"/><circle cx="3" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="3" cy="11.6" r="1" fill="currentColor" stroke="none"/><path d="M6.5 4.4h7M6.5 8h7M6.5 11.6h7"/></svg></button>
         <button class="dte-tool" type="button" data-cmd="ordered" title="Numbered list" aria-label="Numbered list"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 4.4h7M6.5 8h7M6.5 11.6h7"/><text x="0.6" y="5.8" font-size="4.6" fill="currentColor" stroke="none" style="font-family:var(--mono,monospace)">1</text><text x="0.6" y="9.6" font-size="4.6" fill="currentColor" stroke="none" style="font-family:var(--mono,monospace)">2</text><text x="0.6" y="13.4" font-size="4.6" fill="currentColor" stroke="none" style="font-family:var(--mono,monospace)">3</text></svg></button>
-        <button class="dte-tool" type="button" data-cmd="check" title="Checklist" aria-label="Checklist"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2.6" width="5.2" height="5.2" rx="1.2"/><path d="M3.1 5.1 4.1 6.1 6 4"/><rect x="2" y="9" width="5.2" height="5.2" rx="1.2"/><path d="M9.2 5.2h4.8M9.2 11.6h4.8"/></svg></button>
         <button class="dte-tool" type="button" data-cmd="quote" title="Quote" aria-label="Quote"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 4.4v7.2"/><path d="M6.6 5.4h7M6.6 8h7M6.6 10.6h4.4"/></svg></button>
         <span class="dte-tsep"></span>
         <button class="dte-tool" type="button" data-cmd="link" title="Link" aria-label="Link"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.8 9.2a2.4 2.4 0 0 0 3.4 0l2-2a2.4 2.4 0 1 0-3.4-3.4l-1 1"/><path d="M9.2 6.8a2.4 2.4 0 0 0-3.4 0l-2 2a2.4 2.4 0 1 0 3.4 3.4l1-1"/></svg></button>
@@ -136,12 +135,14 @@
   }
 
   // ── Formatting commands ──────────────────────────────────────────────
-  // Crepe (v7) exposes no command API we can reach, so the toolbar drives
-  // the editor the way a person would: dispatching the keyboard shortcuts Crepe
-  // already binds (bold/italic/headings/lists/quote) and, for the few actions
-  // with no shortcut, inserting the Markdown that Crepe's input rules convert
-  // live (strikethrough, inline code, checklist, link). Works on the real
-  // selection because the button never steals focus (mousedown preventDefault).
+  // Crepe is a sealed prebuilt bundle — its Milkdown command API can't be reached
+  // from outside (separately-imported commands are different instances). So the
+  // toolbar drives the editor the way a person does: dispatching the exact
+  // keyboard shortcuts Crepe's keymap binds (verified against the bundle). This
+  // is reliable; inserting raw markdown and hoping an input rule fires is not.
+  // Crepe's bindings: Mod-b bold · Mod-i italic · Mod-Alt-x strike · Mod-e inline
+  // code · Mod-Alt-1..3 H1-3 · Mod-Alt-8 bullet · Mod-Alt-7 ordered ·
+  // Mod-Shift-b quote · Mod-k link (opens Crepe's own in-app link tooltip).
   const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
   function fireKey(pm, key, opt) {
     const mod = IS_MAC ? { metaKey: true } : { ctrlKey: true };
@@ -151,15 +152,6 @@
       bubbles: true, cancelable: true, ...mod, ...(opt || {}),
     }));
   }
-  function selText() { const s = window.getSelection && window.getSelection(); return s ? s.toString() : ''; }
-  // Move the caret to the start of its line so start-of-line input rules (ordered
-  // list, task list) fire no matter where in the line the cursor sits.
-  function caretToLineStart() {
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-    if (sel.collapseToStart) sel.collapseToStart();
-    if (typeof sel.modify === 'function') sel.modify('move', 'backward', 'lineboundary');
-  }
 
   function runToolCommand(cmd) {
     // Fallback textarea path (Crepe unavailable).
@@ -167,24 +159,21 @@
     const pm = document.querySelector('.dt-editor .ProseMirror');
     if (!pm) return;
     pm.focus();
-    const wrap = (b, a) => document.execCommand('insertText', false, b + selText() + a);
     switch (cmd) {
       case 'bold':    fireKey(pm, 'b'); break;
       case 'italic':  fireKey(pm, 'i'); break;
-      case 'strike':  wrap('~~', '~~'); break;
-      case 'code':    wrap('`', '`'); break;
+      case 'strike':  fireKey(pm, 'x', { altKey: true }); break;
+      case 'code':    fireKey(pm, 'e'); break;
       case 'h1':      fireKey(pm, '1', { altKey: true }); break;
       case 'h2':      fireKey(pm, '2', { altKey: true }); break;
       case 'h3':      fireKey(pm, '3', { altKey: true }); break;
       case 'bullet':  fireKey(pm, '8', { altKey: true }); break;
-      case 'ordered': caretToLineStart(); document.execCommand('insertText', false, '1. '); break;
+      case 'ordered': fireKey(pm, '7', { altKey: true }); break;
       case 'quote':   fireKey(pm, 'b', { shiftKey: true }); break;
-      case 'check':   fireKey(pm, '8', { altKey: true }); setTimeout(() => { caretToLineStart(); document.execCommand('insertText', false, '[ ] '); scheduleSave(); }, 0); break;
-      case 'link': {
-        const url = window.prompt('Link URL', 'https://');
-        if (url) document.execCommand('insertText', false, `[${selText() || 'link'}](${url})`);
-        break;
-      }
+      // Mod-k opens Crepe's own link tooltip — an in-app, themed input. No native
+      // prompt(); the user types the URL right there. (Returns early: the tooltip
+      // owns the rest of the flow and the autosave poll catches the edit.)
+      case 'link':    fireKey(pm, 'k'); return;
     }
     scheduleSave();
   }

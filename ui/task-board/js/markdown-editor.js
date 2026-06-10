@@ -9,7 +9,7 @@
 // in the overflow menu.
 //
 // Depends on globals: API, escapeHtml, svgIcon, obsidianUri, openTask,
-// currentTaskId (all from core.js / icons.js / tasks.js).
+// toast (all from core.js / icons.js / tasks.js).
 
 (function () {
   // Crepe is vendored locally (no CDN at runtime) so the board works offline
@@ -30,6 +30,8 @@
   let savePoll = null;       // safety poll for edits that don't emit DOM input
   let lastSaved = '';        // last persisted markdown, to skip no-op saves
   let crepeImportPromise = null;
+  let menuClickHandler = null; // the one document click handler that dismisses the overflow menu
+  let saving = false;        // true while a PUT is in flight, to serialize saves
 
   // ── CSS injection (once) ─────────────────────────────────────────────
   function ensureCrepeCss() {
@@ -115,7 +117,10 @@
       const open = menu.classList.toggle('open');
       ofBtn.setAttribute('aria-expanded', String(open));
     });
-    document.addEventListener('click', () => { menu.classList.remove('open'); ofBtn.setAttribute('aria-expanded', 'false'); });
+    // One document listener to dismiss the menu; stored module-level so
+    // destroyEditor() can remove it on close (no per-open accumulation).
+    menuClickHandler = () => { menu.classList.remove('open'); ofBtn.setAttribute('aria-expanded', 'false'); };
+    document.addEventListener('click', menuClickHandler);
     ov.querySelector('.dte-copy').addEventListener('click', () => {
       const md = getMarkdown();
       if (navigator.clipboard) navigator.clipboard.writeText(md).catch(() => {});
@@ -221,9 +226,12 @@
   async function flushSave() {
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
     if (!editorTaskId) return;
+    // Serialize: if a PUT is already in flight, bail — the debounce/poll re-attempts.
+    if (saving) return;
     const md = getMarkdown();
     if (md === lastSaved) { setSaveState('saved'); return; }
     setSaveState('saving');
+    saving = true;
     try {
       const res = await fetch(`${API}/tasks/${editorTaskId}/output`, {
         method: 'PUT',
@@ -235,6 +243,11 @@
       setSaveState('saved');
     } catch (e) {
       setSaveState('error');
+      // The editor may already be torn down (final save on close), so the
+      // inline indicator can no-op — surface the failure via the global toast.
+      if (typeof toast === 'function') toast('Couldn’t save your latest edit - please try again.');
+    } finally {
+      saving = false;
     }
   }
 
@@ -242,6 +255,8 @@
   async function openOutputEditor(taskId) {
     const taskPane = document.querySelector('#split-modal .task-pane');
     if (!taskPane) return;
+    // Re-entrant-safe: tear down any stale editor/instance before building anew.
+    if (editorTaskId) destroyEditor();
     editorTaskId = taskId;
 
     const ov = buildOverlay(taskPane);
@@ -314,30 +329,38 @@
     fallbackEl = ta;
   }
 
+  // ── Synchronous teardown (the one place state is released) ───────────
+  // DRY: called by closeOutputEditor's transition teardown, the closeModal
+  // wrap, and openOutputEditor's re-entrancy guard. Removes the single
+  // overflow-menu document listener so it never accumulates across opens.
+  function destroyEditor() {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    if (savePoll) { clearInterval(savePoll); savePoll = null; }
+    if (menuClickHandler) { document.removeEventListener('click', menuClickHandler); menuClickHandler = null; }
+    if (crepe) { try { crepe.destroy(); } catch (_) {} crepe = null; }
+    fallbackEl = null;
+    editorTaskId = null;
+    const ov = document.querySelector('.dt-editor');
+    if (ov && ov.parentNode) ov.parentNode.removeChild(ov);
+    const taskPane = document.querySelector('#split-modal .task-pane');
+    if (taskPane) taskPane.classList.remove('has-editor');
+  }
+
   function closeOutputEditor() {
     const ov = document.querySelector('.dt-editor');
     if (!ov) return;
     // Persist any pending edit before tearing down.
     flushSave();
-    const taskPane = document.querySelector('#split-modal .task-pane');
     ov.classList.remove('is-open');
     ov.classList.add('is-closing');
-    const teardown = () => {
-      if (savePoll) { clearInterval(savePoll); savePoll = null; }
-      if (crepe) { try { crepe.destroy(); } catch (_) {} crepe = null; }
-      fallbackEl = null;
-      editorTaskId = null;
-      if (ov.parentNode) ov.parentNode.removeChild(ov);
-      if (taskPane) taskPane.classList.remove('has-editor');
-    };
     ov.addEventListener('transitionend', function onEnd(e) {
       if (e.target === ov && (e.propertyName === 'opacity' || e.propertyName === 'transform')) {
         ov.removeEventListener('transitionend', onEnd);
-        teardown();
+        destroyEditor();
       }
     });
     // Safety net if transitionend doesn't fire.
-    setTimeout(teardown, 520);
+    setTimeout(destroyEditor, 520);
   }
 
   // ── Card-face / Activity entry: open the task, then jump into the editor ──
@@ -354,25 +377,27 @@
   // Close the editor first when the whole modal closes (so it doesn't linger).
   const _origCloseModal = window.closeModal;
   window.closeModal = function () {
-    const ov = document.querySelector('.dt-editor');
-    if (ov) {
-      if (savePoll) { clearInterval(savePoll); savePoll = null; }
-      if (crepe) { try { crepe.destroy(); } catch (_) {} crepe = null; }
-      fallbackEl = null; editorTaskId = null;
-      if (ov.parentNode) ov.parentNode.removeChild(ov);
-      const tp = document.querySelector('#split-modal .task-pane');
-      if (tp) tp.classList.remove('has-editor');
-    }
+    if (document.querySelector('.dt-editor')) destroyEditor();
     if (typeof _origCloseModal === 'function') return _origCloseModal.apply(this, arguments);
   };
 
   // Esc closes the editor first (one layer at a time) without closing the modal.
+  // Capture-phase + stopImmediatePropagation pre-empts app.js's bubble-phase
+  // closeModal Esc handler, so one Esc closes one layer at a time (coupling).
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       const ov = document.querySelector('.dt-editor.is-open');
       if (ov) { e.stopImmediatePropagation(); closeOutputEditor(); }
     }
   }, true);
+
+  // Delegated tile-open: registered exactly ONCE for the page lifetime (not
+  // per-open), so it never leaks. Reads the task id from the data-attribute the
+  // tile renders — no JS-string interpolation in an inline onclick.
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest && e.target.closest('.dt-review[data-output-task]');
+    if (btn) openOutputEditor(btn.dataset.outputTask);
+  });
 
   window.openOutputEditor = openOutputEditor;
   window.closeOutputEditor = closeOutputEditor;

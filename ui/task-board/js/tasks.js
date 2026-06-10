@@ -107,7 +107,7 @@ async function openTask(taskId, keepChat) {
         const href = a.href ? ` href="${escapeHtml(a.href)}"` : '';
         const tag = a.inline ? 'button' : 'a';
         const attrs = a.inline
-          ? ` type="button" onclick="event.stopPropagation(); openOutputEditor('${a.taskId}')"`
+          ? ` type="button" data-output-task="${escapeHtml(a.taskId)}" onclick="event.stopPropagation()"`
           : `${href}${ext} onclick="event.stopPropagation()"`;
         html += `<${tag} class="dt-artifact ${a.cls}"${attrs}>`;
         html += `<span class="dt-art-top"><span class="dt-art-icon">${svgIcon(a.icon)}</span><span class="dt-art-kind">${escapeHtml(a.kind)}</span></span>`;

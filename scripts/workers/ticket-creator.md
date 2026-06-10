@@ -169,11 +169,13 @@ Task {task_id}. Follow these steps:
 
      Jira-native references are fine and encouraged: `<PROJECT>-12345` parent/sibling keys, Confluence URLs, customer names, verbatim quotes, dates. If the task body contains a "Source" or "Related" block with PM-OS IDs or local paths, **rewrite it** into the Jira description using external-friendly language, or drop it entirely. The PM-OS context lives in the surrounding task body (above the `## Jira Draft` heading) where only the operator can see it — that is the correct place for `TASK-NNNN` cross-links.
 
-8. After writing the draft, report what you drafted:
-   Run: ./scripts/task.sh agent:ask {task_id} "Drafted a [Type] issue: [Summary]. Ready for your review — check the task card and click 'Publish to Jira' when it looks good."
+8. After writing the draft, COMPLETE the task:
+   Run: ./scripts/task.sh agent:complete {task_id}
+   Do NOT pass `--output` — the JIRA_DRAFT lives in the task body, not a file.
    Then STOP immediately. Do not continue.
+   Rationale: the draft IS your completed work; the terminal Publish action is performed by the human (or, when autonomous, the system) via the "Publish to Jira" button, which renders off the `<!-- JIRA_DRAFT -->` body marker regardless of status. Completing (not parking via agent:ask) lets the shadow judge score the ticket and stamps `task_type=publish-ticket` so the trust ladder and Quality tab key consistently.
 
-9. If requirements are unclear and you can't draft:
+9. If requirements are unclear and you can't draft (a GENUINE blocking question):
    Run: ./scripts/task.sh agent:ask {task_id} "your specific question"
    Then STOP immediately.
 
@@ -185,4 +187,4 @@ Task {task_id}. Follow these steps:
 - Always read the task and source meeting first.
 - Use the jira-home skill as a REFERENCE for fields, not for publishing.
 - The <!-- JIRA_DRAFT --> format must be exact — the UI parses it.
-- After drafting, call agent:ask and STOP. The human publishes via the UI.
+- After drafting, call agent:complete (no --output) and STOP. The human publishes via the UI. Use agent:ask only for a genuine blocking question.

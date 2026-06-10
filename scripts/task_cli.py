@@ -255,13 +255,19 @@ def cmd_agent_complete(args):
 
     task_lib.update_task(args.task_id, changes=changes,
                          comment=comment, actor="agent")
-    # Trigger doc sync for the output file
+    # Trigger doc sync for the output file (still gated on --output).
     if args.output and changes.get("sharepoint_path"):
         task_lib._trigger_doc_sync(args.output)
     print(f"Agent completed {args.task_id} — awaiting human review")
     if args.output:
         print(f"  Output: {args.output}")
-        _spawn_judge(args.task_id)
+    # Spawn the shadow judge on EVERY completion, not only when --output is passed.
+    # The two action types the trust ladder governs (send-message, publish-ticket)
+    # complete WITHOUT an output file — their deliverable lives in the task body —
+    # so gating the judge on --output meant it never fired for them and enforcement
+    # never ran. The judge's own detect_kind decides gradeability and returns early
+    # (before any LLM call) when there's nothing to grade, so a no-op spawn is cheap.
+    _spawn_judge(args.task_id)
 
 
 def _spawn_judge(task_id):

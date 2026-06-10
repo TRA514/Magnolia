@@ -97,8 +97,6 @@
         <button class="dte-tool" type="button" data-cmd="bullet" title="Bulleted list" aria-label="Bulleted list"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="3" cy="4.4" r="1" fill="currentColor" stroke="none"/><circle cx="3" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="3" cy="11.6" r="1" fill="currentColor" stroke="none"/><path d="M6.5 4.4h7M6.5 8h7M6.5 11.6h7"/></svg></button>
         <button class="dte-tool" type="button" data-cmd="ordered" title="Numbered list" aria-label="Numbered list"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 4.4h7M6.5 8h7M6.5 11.6h7"/><text x="0.6" y="5.8" font-size="4.6" fill="currentColor" stroke="none" style="font-family:var(--mono,monospace)">1</text><text x="0.6" y="9.6" font-size="4.6" fill="currentColor" stroke="none" style="font-family:var(--mono,monospace)">2</text><text x="0.6" y="13.4" font-size="4.6" fill="currentColor" stroke="none" style="font-family:var(--mono,monospace)">3</text></svg></button>
         <button class="dte-tool" type="button" data-cmd="quote" title="Quote" aria-label="Quote"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 4.4v7.2"/><path d="M6.6 5.4h7M6.6 8h7M6.6 10.6h4.4"/></svg></button>
-        <span class="dte-tsep"></span>
-        <button class="dte-tool" type="button" data-cmd="link" title="Link" aria-label="Link"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.8 9.2a2.4 2.4 0 0 0 3.4 0l2-2a2.4 2.4 0 1 0-3.4-3.4l-1 1"/><path d="M9.2 6.8a2.4 2.4 0 0 0-3.4 0l-2 2a2.4 2.4 0 1 0 3.4 3.4l1-1"/></svg></button>
       </div>
       <div class="dte-scroll">
         <div class="dte-surface"></div>
@@ -142,7 +140,8 @@
   // is reliable; inserting raw markdown and hoping an input rule fires is not.
   // Crepe's bindings: Mod-b bold · Mod-i italic · Mod-Alt-x strike · Mod-e inline
   // code · Mod-Alt-1..3 H1-3 · Mod-Alt-8 bullet · Mod-Alt-7 ordered ·
-  // Mod-Shift-b quote · Mod-k link (opens Crepe's own in-app link tooltip).
+  // Mod-Shift-b quote. (Links are handled by Crepe's own selection-toolbar
+  // popover, so there's no link button in this top bar.)
   const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
   function fireKey(pm, key, opt) {
     const mod = IS_MAC ? { metaKey: true } : { ctrlKey: true };
@@ -170,10 +169,6 @@
       case 'bullet':  fireKey(pm, '8', { altKey: true }); break;
       case 'ordered': fireKey(pm, '7', { altKey: true }); break;
       case 'quote':   fireKey(pm, 'b', { shiftKey: true }); break;
-      // Mod-k opens Crepe's own link tooltip — an in-app, themed input. No native
-      // prompt(); the user types the URL right there. (Returns early: the tooltip
-      // owns the rest of the flow and the autosave poll catches the edit.)
-      case 'link':    fireKey(pm, 'k'); return;
     }
     scheduleSave();
   }
@@ -186,8 +181,7 @@
     const prefix = (p) => { const ls = v.lastIndexOf('\n', s - 1) + 1; ta.value = v.slice(0, ls) + p + v.slice(ls); };
     const map = { bold: () => wrap('**', '**'), italic: () => wrap('_', '_'), strike: () => wrap('~~', '~~'),
       code: () => wrap('`', '`'), h1: () => prefix('# '), h2: () => prefix('## '), h3: () => prefix('### '),
-      bullet: () => prefix('- '), ordered: () => prefix('1. '), quote: () => prefix('> '), check: () => prefix('- [ ] '),
-      link: () => { const url = window.prompt('Link URL', 'https://'); if (url) wrap('[', `](${url})`); } };
+      bullet: () => prefix('- '), ordered: () => prefix('1. '), quote: () => prefix('> ') };
     (map[cmd] || (() => {}))();
     ta.focus();
   }

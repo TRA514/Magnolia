@@ -111,3 +111,12 @@ def test_put_output_404_when_not_markdown(srv, tasks_root):
     h = _FakeHandler({"content": "nope"})
     srv.handle_save_output(h, tid)
     assert h.status == 404
+
+
+def test_output_routes_registered_before_generic_get():
+    import re
+    src = open(os.path.join(os.path.dirname(__file__), "..", "scripts", "task_server.py"),
+               encoding="utf-8").read()
+    out_idx = src.index('/api/tasks/([^/]+)/output$')
+    generic_idx = src.index('^/api/tasks/([^/]+)$')
+    assert out_idx < generic_idx, "output route must be matched before the generic task GET"

@@ -109,7 +109,7 @@ def _json_response(handler, data, status=200):
     handler.send_header("Content-Type", "application/json")
     handler.send_header("Content-Length", str(len(body)))
     handler.send_header("Access-Control-Allow-Origin", "*")
-    handler.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    handler.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
     handler.send_header("Access-Control-Allow-Headers", "Content-Type")
     handler.end_headers()
     handler.wfile.write(body)
@@ -2382,6 +2382,18 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
                 _error_response(self, "Invalid task ID format", status=400)
             else:
                 handle_add_comment(self, task_id)
+            return True
+
+        # Match /api/tasks/{id}/output — GET reads, PUT writes the .md artifact.
+        match = re.match(r"^/api/tasks/([^/]+)/output$", path)
+        if match and method in ("GET", "PUT"):
+            task_id = _parse_task_id(match.group(1))
+            if task_id is None:
+                _error_response(self, "Invalid task ID format", status=400)
+            elif method == "GET":
+                handle_get_output(self, task_id)
+            else:
+                handle_save_output(self, task_id)
             return True
 
         # Match /api/tasks/{id}

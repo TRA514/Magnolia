@@ -109,7 +109,7 @@ def _json_response(handler, data, status=200):
     handler.send_header("Content-Type", "application/json")
     handler.send_header("Content-Length", str(len(body)))
     handler.send_header("Access-Control-Allow-Origin", "*")
-    handler.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    handler.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
     handler.send_header("Access-Control-Allow-Headers", "Content-Type")
     handler.end_headers()
     handler.wfile.write(body)
@@ -160,6 +160,23 @@ def _read_request_body(handler):
         return {}
     raw = handler.rfile.read(length)
     return json.loads(raw.decode("utf-8"))
+
+
+def _resolve_output_path(rel):
+    """Resolve a task's agent_output to an absolute .md path inside PM_OS_DIR.
+
+    Returns the absolute path, or None when there is no path, it is not a .md
+    file, or it would escape PM_OS_DIR (path-traversal guard). Mirrors
+    handle_open_file's PM_OS_DIR resolution, plus the containment check.
+    """
+    rel = (rel or "").strip()
+    if not rel or not rel.endswith(".md"):
+        return None
+    base = os.path.realpath(PM_OS_DIR)
+    candidate = os.path.realpath(rel if os.path.isabs(rel) else os.path.join(base, rel))
+    if candidate != base and not candidate.startswith(base + os.sep):
+        return None
+    return candidate
 
 
 def _parse_activity_log(body):
@@ -699,6 +716,81 @@ def handle_get_task(handler, task_id):
 
     _enrich_sharepoint_url(result)
     _json_response(handler, result)
+
+
+def handle_get_output(handler, task_id):
+    """GET /api/tasks/{id}/output — return the task's .md artifact for inline editing."""
+    try:
+        task_data = task_lib.read_task(task_id)
+    except FileNotFoundError:
+        _error_response(handler, f"Task {task_id} not found", status=404)
+        return
+    except Exception as e:
+        _error_response(handler, f"Failed to read task: {e}", status=500)
+        return
+
+    rel = str(task_data["frontmatter"].get("agent_output") or "")
+    filepath = _resolve_output_path(rel)
+    if filepath is None:
+        _error_response(handler, "Task has no editable markdown output", status=404)
+        return
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+    except FileNotFoundError:
+        # The task points at a markdown output, but no file exists at that path
+        # yet (e.g. an agent stamped agent_output without producing the file).
+        # Return the path so the client can title the doc and show an honest
+        # "not found" state, rather than 404ing into a silent blank editor.
+        _json_response(handler, {"path": rel.strip(), "format": "markdown", "content": "", "exists": False})
+        return
+    except Exception as e:
+        _error_response(handler, f"Failed to read output: {e}", status=500)
+        return
+    _json_response(handler, {"path": rel.strip(), "format": "markdown", "content": content, "exists": True})
+
+
+def _utc_now_iso():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
+def handle_save_output(handler, task_id):
+    """PUT /api/tasks/{id}/output — persist edited markdown back to the artifact file."""
+    try:
+        task_data = task_lib.read_task(task_id)
+    except FileNotFoundError:
+        _error_response(handler, f"Task {task_id} not found", status=404)
+        return
+    except Exception as e:
+        _error_response(handler, f"Failed to read task: {e}", status=500)
+        return
+
+    rel = str(task_data["frontmatter"].get("agent_output") or "")
+    filepath = _resolve_output_path(rel)
+    if filepath is None:
+        _error_response(handler, "Task has no editable markdown output", status=404)
+        return
+    try:
+        body = _read_request_body(handler)
+    except (json.JSONDecodeError, ValueError) as e:
+        _error_response(handler, f"Invalid JSON body: {e}", status=400)
+        return
+    if not isinstance(body, dict):
+        _error_response(handler, "Request body must be a JSON object", status=400)
+        return
+    content = body.get("content")
+    if content is None:  # None = missing field (400); "" is a legitimate "cleared the document" save.
+        _error_response(handler, "Missing 'content' field", status=400)
+        return
+    try:
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+    except Exception as e:
+        _error_response(handler, f"Failed to write output: {e}", status=500)
+        return
+    _json_response(handler, {"ok": True, "savedAt": _utc_now_iso()})
 
 
 def handle_complete_task(handler, task_id):
@@ -2299,6 +2391,18 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
                 handle_add_comment(self, task_id)
             return True
 
+        # Match /api/tasks/{id}/output — GET reads, PUT writes the .md artifact.
+        match = re.match(r"^/api/tasks/([^/]+)/output$", path)
+        if match and method in ("GET", "PUT"):
+            task_id = _parse_task_id(match.group(1))
+            if task_id is None:
+                _error_response(self, "Invalid task ID format", status=400)
+            elif method == "GET":
+                handle_get_output(self, task_id)
+            else:
+                handle_save_output(self, task_id)
+            return True
+
         # Match /api/tasks/{id}
         match = re.match(r"^/api/tasks/([^/]+)$", path)
         if match and method == "GET":
@@ -2364,7 +2468,7 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
         """Handle CORS preflight requests."""
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 

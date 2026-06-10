@@ -89,7 +89,7 @@ async function openTask(taskId, keepChat) {
     if (task.agent_output && !isSendMessage) {
       const v = String(task.agent_output).trim();
       if (v.endsWith('.md')) {
-        artifacts.push({ icon: 'obsidian', cls: '', kind: 'Obsidian', name: v.split('/').pop(), path: shortArtifactPath(v), href: obsidianUri(v), label: 'Open in Obsidian', external: false });
+        artifacts.push({ icon: 'doc', cls: 'dt-review', kind: 'Markdown', name: v.split('/').pop(), path: shortArtifactPath(v), inline: true, taskId: task.id, label: 'Review & edit', external: false });
       } else {
         const mu = v.match(/https?:\/\/[^\s)]+/);
         if (mu) artifacts.push({ icon: 'output', cls: '', kind: 'Link', name: 'Agent output', path: mu[0].replace(/^https?:\/\//, ''), href: mu[0], label: 'Open', external: true });
@@ -105,12 +105,16 @@ async function openTask(taskId, keepChat) {
       artifacts.forEach(a => {
         const ext = a.external ? ' target="_blank" rel="noopener"' : '';
         const href = a.href ? ` href="${escapeHtml(a.href)}"` : '';
-        html += `<a class="dt-artifact ${a.cls}"${href}${ext} onclick="event.stopPropagation()">`;
-        html += `<span class="dt-art-top"><span class="dt-art-icon">${svgIcon(a.icon)}</span><span class="dt-art-kind">${a.kind}</span></span>`;
+        const tag = a.inline ? 'button' : 'a';
+        const attrs = a.inline
+          ? ` type="button" onclick="event.stopPropagation(); openOutputEditor('${a.taskId}')"`
+          : `${href}${ext} onclick="event.stopPropagation()"`;
+        html += `<${tag} class="dt-artifact ${a.cls}"${attrs}>`;
+        html += `<span class="dt-art-top"><span class="dt-art-icon">${svgIcon(a.icon)}</span><span class="dt-art-kind">${escapeHtml(a.kind)}</span></span>`;
         html += `<span class="dt-art-name">${escapeHtml(a.name)}</span>`;
         html += `<span class="dt-art-path">${escapeHtml(a.path)}</span>`;
-        if (a.label) html += `<span class="dt-art-open">${a.label}${svgIcon('output')}</span>`;
-        html += `</a>`;
+        if (a.label) html += `<span class="dt-art-open">${escapeHtml(a.label)}${svgIcon(a.inline ? 'arrowRight' : 'output')}</span>`;
+        html += `</${tag}>`;
       });
       html += `</div>`;
       const lastOut = (task.activity_log || []).filter(e => e.type === 'output').pop();

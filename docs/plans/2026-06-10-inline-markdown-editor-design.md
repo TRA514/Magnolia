@@ -78,8 +78,11 @@ derived in `index.html` `:root`).
 
 ```
 GET /api/tasks/{id}/output
-    → 200 { path: string, format: "markdown", content: string }
-    → 404 if the task has no agent_output, or it is not a .md path, or the file is missing
+    → 200 { path, format: "markdown", content, exists: true }   when the file exists
+    → 200 { path, format: "markdown", content: "", exists: false } when agent_output is a
+          valid .md path but no file was ever written there (client shows an honest
+          "couldn't be found" state with the right filename, not a blank editable canvas)
+    → 404 if the task has no agent_output, or it is not a .md path
 PUT /api/tasks/{id}/output
     body: { content: string }
     → 200 { ok: true, savedAt: <ISO> }

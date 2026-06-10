@@ -172,6 +172,13 @@ button.dt-artifact { width: 100%; text-align: left; font-family: inherit; cursor
   animation: spin .7s linear infinite; font-style: normal;
 }
 
+/* Honest empty state when the task's output file doesn't exist on disk. */
+.dte-empty {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  padding: 0 32px; text-align: center;
+  font-size: 13.5px; color: var(--text-dim); font-style: italic;
+}
+
 /* Plain fallback if the editor library can't be reached. */
 .dte-fallback { padding: 22px clamp(20px, 5%, 56px); min-height: 100%; box-sizing: border-box; }
 .dte-fallback-ta {

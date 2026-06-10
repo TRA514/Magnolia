@@ -130,6 +130,28 @@ def test_put_output_empty_string_content_saves(srv, tasks_root):
         assert f.read() == ""
 
 
+def test_get_output_returns_exists_true_when_file_present(srv, tasks_root):
+    tid = _seed_task_with_output(tasks_root, "product/agent-output/comp.md", "# Here\n")
+    h = _FakeHandler()
+    srv.handle_get_output(h, tid)
+    assert h.status == 200
+    assert h.json()["exists"] is True
+
+
+def test_get_output_missing_file_returns_200_exists_false_with_path(srv, tasks_root):
+    # agent_output is a valid .md path, but no file was ever written there.
+    import task_lib
+    tid, _ = task_lib.create_task("Output stamped but never produced", queue="agent")
+    task_lib.update_task(tid, changes={"agent_output": "product/agent-output/ghost.md"})
+    h = _FakeHandler()
+    srv.handle_get_output(h, tid)
+    assert h.status == 200                       # not a 404 — honest empty state
+    resp = h.json()
+    assert resp["exists"] is False
+    assert resp["content"] == ""
+    assert resp["path"] == "product/agent-output/ghost.md"   # client can still title it
+
+
 def test_output_routes_registered_before_generic_get():
     import re
     src = open(os.path.join(os.path.dirname(__file__), "..", "scripts", "task_server.py"),

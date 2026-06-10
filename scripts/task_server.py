@@ -738,12 +738,16 @@ def handle_get_output(handler, task_id):
         with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
     except FileNotFoundError:
-        _error_response(handler, f"Output file not found: {rel.strip()}", status=404)
+        # The task points at a markdown output, but no file exists at that path
+        # yet (e.g. an agent stamped agent_output without producing the file).
+        # Return the path so the client can title the doc and show an honest
+        # "not found" state, rather than 404ing into a silent blank editor.
+        _json_response(handler, {"path": rel.strip(), "format": "markdown", "content": "", "exists": False})
         return
     except Exception as e:
         _error_response(handler, f"Failed to read output: {e}", status=500)
         return
-    _json_response(handler, {"path": rel.strip(), "format": "markdown", "content": content})
+    _json_response(handler, {"path": rel.strip(), "format": "markdown", "content": content, "exists": True})
 
 
 def _utc_now_iso():

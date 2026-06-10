@@ -272,11 +272,12 @@
     void ov.offsetWidth; // commit hidden baseline
     requestAnimationFrame(() => ov.classList.add('is-open'));
 
-    // Fetch the document.
-    let content = '', path = '';
+    // Fetch the document. `exists` distinguishes a real (possibly empty) file
+    // from one the task points at but that was never written.
+    let content = '', path = '', exists = true;
     try {
       const res = await fetch(`${API}/tasks/${taskId}/output`);
-      if (res.ok) { const data = await res.json(); content = data.content || ''; path = data.path || ''; }
+      if (res.ok) { const data = await res.json(); content = data.content || ''; path = data.path || ''; exists = data.exists !== false; }
     } catch (_) {}
     docPath = path;
     lastSaved = content;
@@ -286,6 +287,15 @@
     ov.querySelector('.dte-doc-name').textContent = fname;
     const obsLink = ov.querySelector('.dte-obsidian');
     if (obsLink && typeof obsidianUri === 'function' && path) obsLink.href = obsidianUri(path);
+
+    // No file behind this task's output path — show an honest state instead of a
+    // blank editable canvas (which would silently create a phantom file on edit).
+    if (!exists) {
+      loading.style.display = 'none';
+      ov.querySelector('.dte-save').style.display = 'none';   // nothing to save
+      surface.innerHTML = '<div class="dte-empty">This document couldn’t be found.</div>';
+      return;
+    }
 
     // Mount Crepe (lazy). Fall back to a styled textarea on any failure.
     try {

@@ -772,8 +772,11 @@ def handle_save_output(handler, task_id):
     except (json.JSONDecodeError, ValueError) as e:
         _error_response(handler, f"Invalid JSON body: {e}", status=400)
         return
+    if not isinstance(body, dict):
+        _error_response(handler, "Request body must be a JSON object", status=400)
+        return
     content = body.get("content")
-    if content is None:
+    if content is None:  # None = missing field (400); "" is a legitimate "cleared the document" save.
         _error_response(handler, "Missing 'content' field", status=400)
         return
     try:
@@ -2461,7 +2464,7 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
         """Handle CORS preflight requests."""
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 

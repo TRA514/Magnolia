@@ -113,6 +113,23 @@ def test_put_output_404_when_not_markdown(srv, tasks_root):
     assert h.status == 404
 
 
+def test_put_output_400_when_body_not_object(srv, tasks_root):
+    tid = _seed_task_with_output(tasks_root, "product/agent-output/comp.md", "# Old\n")
+    h = _FakeHandler([1, 2])  # JSON array body, not an object
+    srv.handle_save_output(h, tid)
+    assert h.status == 400
+
+
+def test_put_output_empty_string_content_saves(srv, tasks_root):
+    tid = _seed_task_with_output(tasks_root, "product/agent-output/comp.md", "# Old\n")
+    h = _FakeHandler({"content": ""})
+    srv.handle_save_output(h, tid)
+    assert h.status == 200
+    import os
+    with open(os.path.join(tasks_root, "product/agent-output/comp.md"), encoding="utf-8") as f:
+        assert f.read() == ""
+
+
 def test_output_routes_registered_before_generic_get():
     import re
     src = open(os.path.join(os.path.dirname(__file__), "..", "scripts", "task_server.py"),

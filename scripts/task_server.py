@@ -718,6 +718,34 @@ def handle_get_task(handler, task_id):
     _json_response(handler, result)
 
 
+def handle_get_output(handler, task_id):
+    """GET /api/tasks/{id}/output — return the task's .md artifact for inline editing."""
+    try:
+        task_data = task_lib.read_task(task_id)
+    except FileNotFoundError:
+        _error_response(handler, f"Task {task_id} not found", status=404)
+        return
+    except Exception as e:
+        _error_response(handler, f"Failed to read task: {e}", status=500)
+        return
+
+    rel = str(task_data["frontmatter"].get("agent_output") or "")
+    filepath = _resolve_output_path(rel)
+    if filepath is None:
+        _error_response(handler, "Task has no editable markdown output", status=404)
+        return
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+    except FileNotFoundError:
+        _error_response(handler, f"Output file not found: {rel.strip()}", status=404)
+        return
+    except Exception as e:
+        _error_response(handler, f"Failed to read output: {e}", status=500)
+        return
+    _json_response(handler, {"path": rel.strip(), "format": "markdown", "content": content})
+
+
 def handle_complete_task(handler, task_id):
     """POST /api/tasks/{id}/done — Mark task complete and archive."""
     try:

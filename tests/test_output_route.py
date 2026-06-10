@@ -38,13 +38,13 @@ def srv(tasks_root, monkeypatch):
 def _seed_task_with_output(tasks_root, rel_path, content):
     """Create an agent task whose agent_output points at rel_path, and write that file."""
     import task_lib
-    t = task_lib.create_task("Competitive landscape brief", queue="agent", domain="product")
-    task_lib.update_task(t["id"], changes={"agent_output": rel_path})
+    tid, _ = task_lib.create_task("Competitive landscape brief", queue="agent", domain="product")
+    task_lib.update_task(tid, changes={"agent_output": rel_path})
     abspath = os.path.join(tasks_root, rel_path)
     os.makedirs(os.path.dirname(abspath), exist_ok=True)
     with open(abspath, "w", encoding="utf-8") as f:
         f.write(content)
-    return t["id"]
+    return tid
 
 
 def test_resolve_output_path_rejects_traversal(srv):
@@ -53,3 +53,32 @@ def test_resolve_output_path_rejects_traversal(srv):
     assert srv._resolve_output_path("") is None
     got = srv._resolve_output_path("product/agent-output/x.md")
     assert got is not None and got.endswith("product/agent-output/x.md")
+
+
+def test_get_output_returns_content(srv, tasks_root):
+    tid = _seed_task_with_output(tasks_root, "product/agent-output/comp.md",
+                                 "# Competitive Landscape\n\nFour vendors dominate.\n")
+    h = _FakeHandler()
+    srv.handle_get_output(h, tid)
+    assert h.status == 200
+    resp = h.json()
+    assert resp["format"] == "markdown"
+    assert resp["path"] == "product/agent-output/comp.md"
+    assert "Four vendors dominate." in resp["content"]
+
+
+def test_get_output_404_when_no_agent_output(srv, tasks_root):
+    import task_lib
+    tid, _ = task_lib.create_task("No output yet", queue="agent")
+    h = _FakeHandler()
+    srv.handle_get_output(h, tid)
+    assert h.status == 404
+
+
+def test_get_output_404_when_not_markdown(srv, tasks_root):
+    import task_lib
+    tid, _ = task_lib.create_task("Link output", queue="agent")
+    task_lib.update_task(tid, changes={"agent_output": "https://example.com/x"})
+    h = _FakeHandler()
+    srv.handle_get_output(h, tid)
+    assert h.status == 404

@@ -746,6 +746,46 @@ def handle_get_output(handler, task_id):
     _json_response(handler, {"path": rel.strip(), "format": "markdown", "content": content})
 
 
+def _utc_now_iso():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
+def handle_save_output(handler, task_id):
+    """PUT /api/tasks/{id}/output — persist edited markdown back to the artifact file."""
+    try:
+        task_data = task_lib.read_task(task_id)
+    except FileNotFoundError:
+        _error_response(handler, f"Task {task_id} not found", status=404)
+        return
+    except Exception as e:
+        _error_response(handler, f"Failed to read task: {e}", status=500)
+        return
+
+    rel = str(task_data["frontmatter"].get("agent_output") or "")
+    filepath = _resolve_output_path(rel)
+    if filepath is None:
+        _error_response(handler, "Task has no editable markdown output", status=404)
+        return
+    try:
+        body = _read_request_body(handler)
+    except (json.JSONDecodeError, ValueError) as e:
+        _error_response(handler, f"Invalid JSON body: {e}", status=400)
+        return
+    content = body.get("content")
+    if content is None:
+        _error_response(handler, "Missing 'content' field", status=400)
+        return
+    try:
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+    except Exception as e:
+        _error_response(handler, f"Failed to write output: {e}", status=500)
+        return
+    _json_response(handler, {"ok": True, "savedAt": _utc_now_iso()})
+
+
 def handle_complete_task(handler, task_id):
     """POST /api/tasks/{id}/done — Mark task complete and archive."""
     try:

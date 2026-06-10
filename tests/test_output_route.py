@@ -82,3 +82,32 @@ def test_get_output_404_when_not_markdown(srv, tasks_root):
     h = _FakeHandler()
     srv.handle_get_output(h, tid)
     assert h.status == 404
+
+
+def test_put_output_roundtrips_to_disk(srv, tasks_root):
+    tid = _seed_task_with_output(tasks_root, "product/agent-output/comp.md", "# Old\n")
+    h = _FakeHandler({"content": "# New title\n\nEdited body.\n"})
+    srv.handle_save_output(h, tid)
+    assert h.status == 200
+    resp = h.json()
+    assert resp["ok"] is True
+    assert "savedAt" in resp
+    import os
+    with open(os.path.join(tasks_root, "product/agent-output/comp.md"), encoding="utf-8") as f:
+        assert f.read() == "# New title\n\nEdited body.\n"
+
+
+def test_put_output_400_when_content_missing(srv, tasks_root):
+    tid = _seed_task_with_output(tasks_root, "product/agent-output/comp.md", "# Old\n")
+    h = _FakeHandler({})
+    srv.handle_save_output(h, tid)
+    assert h.status == 400
+
+
+def test_put_output_404_when_not_markdown(srv, tasks_root):
+    import task_lib
+    tid, _ = task_lib.create_task("Link output", queue="agent")
+    task_lib.update_task(tid, changes={"agent_output": "https://example.com/x"})
+    h = _FakeHandler({"content": "nope"})
+    srv.handle_save_output(h, tid)
+    assert h.status == 404

@@ -23,6 +23,8 @@ DEFAULT_THRESHOLDS = {
     "shadow_to_supervised": {"min_judged": 4, "min_approval": 0.75, "min_agreement": 0.70, "min_reacted": 3},
     "supervised_to_autonomous": {"min_judged": 12, "min_approval": 0.85, "min_agreement": 0.80, "min_reacted": 6},
     "demote_consecutive": 2,
+    "revision_bar": 7,      # judge score at/above which work passes (vs revises)
+    "max_revisions": 1,     # max judge-driven auto-revisions before parking for human
 }
 
 # The middle tier was renamed "gated" -> "supervised" (the judge supervises the
@@ -104,6 +106,17 @@ def demote(task_type, path=None):
     cur = tier_of(task_type, path=path)
     i = max(TIERS.index(cur) - 1, 0)
     return set_tier(task_type, TIERS[i], path=path)
+
+
+def kill_to_supervised(task_type, path=None):
+    """Instant kill switch: drop a type to supervised and reset its demotion streak.
+
+    The manual, immediate counterpart to graduation_assess's twice-weekly
+    auto-demote — the brake that makes shipping autonomy safe. Resetting the streak
+    avoids the assessor double-counting this manual action."""
+    set_tier(task_type, "supervised", path=path)
+    note_demotion_signal(task_type, False, path=path)
+    return "supervised"
 
 
 def all_tiers(path=None):

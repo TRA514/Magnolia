@@ -22,7 +22,7 @@ import sys
 import threading
 import traceback
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 
 
 class ReusableHTTPServer(ThreadingHTTPServer):
@@ -42,9 +42,13 @@ import profile_lib
 import packs_lib
 import adapters
 from adapters.project_management._contract import NotConfigured
-from adapters.messaging._contract import NotConfigured as MessagingNotConfigured
 from adapters import NeedsConfirmation
 from cron_scheduler import CronScheduler
+import shipper
+from shipper import (
+    _message_draft_from_task, _attempt_send_message, _record_manual_send,
+    _attempt_publish, _emit_confirm_card, _note, _load_email_cache,
+)
 
 # ─── Chat run-lock ─────────────────────────────────────────────────────────────
 # A session must never have two concurrent chat runs. The server is a
@@ -791,102 +795,6 @@ def handle_update_message(handler, task_id):
         _error_response(handler, f"Failed to update message: {e}", status=500)
 
 
-def _message_draft_from_task(task_id):
-    """Build the messaging-adapter draft from a send-message task's fields.
-
-    Channel mirrors the frontend's rendering (email if the channel reads
-    "email", else Teams). Recipients are resolved name→address via the people
-    email cache (literal addresses pass through). Returns the dict the m365
-    adapter's publish() consumes."""
-    fm = task_lib.read_task(task_id)["frontmatter"] or {}
-    raw_channel = (fm.get("message_channel") or "").lower()
-    channel = "email" if "email" in raw_channel else "teams"
-    cache = _load_email_cache()
-    to_display = fm.get("message_to") or ""
-    to = []
-    for tok in (t.strip() for t in to_display.split(",")):
-        if not tok:
-            continue
-        to.append(tok if "@" in tok else cache.get(tok, tok))
-    return {
-        "channel": channel,
-        "to": to,
-        "to_display": to_display,
-        "subject": fm.get("message_subject") or "",
-        "body": fm.get("message_body") or "",
-        "task_id": task_id,
-    }
-
-
-def _attempt_send_message(task_id, draft):
-    """Tier-2 gated send. Returns (status, payload), mirroring _attempt_publish:
-      ("needs_confirm", None)      — gate fired; nothing sent
-      ("already_sent",  None)      — task already done; nothing sent
-      ("unconfigured",  None)      — no messaging provider (caller records manually)
-      ("error",  (code, msg))      — NotConfigured -> 400, mgc/RuntimeError -> 502
-      ("ok",     (message_id, None))
-    On ok, stamps message_sent_at + message_id and archives the task."""
-    # Idempotency: a prior send stamps message_sent_at AND marks the task done.
-    # Either signal means "already sent" — message_sent_at survives even if the
-    # archive step failed, so a retry can't re-send (closes the double-send window).
-    try:
-        fm = task_lib.read_task(task_id).get("frontmatter") or {}
-        if fm.get("status") == "done" or fm.get("message_sent_at"):
-            _note(task_id, "Send skipped — task already sent (no duplicate message).")
-            return ("already_sent", None)
-    except FileNotFoundError:
-        pass
-    # Fail fast on a recipient we couldn't resolve to a real address/UPN — never
-    # send to a bare display name. Only enforced when a provider is actually
-    # configured; with no provider the caller records a manual send (labels are fine).
-    unresolved = [t for t in (draft.get("to") or []) if "@" not in t]
-    if unresolved and adapters.get("messaging") is not None:
-        msg = ("Couldn't resolve recipient(s) to an address: " + ", ".join(unresolved)
-               + " — add them to datasets/people/email_cache.json or use a full address.")
-        _note(task_id, f"Send blocked: {msg}")
-        return ("error", (400, msg))
-    try:
-        result = adapters.publish("messaging", draft)
-    except NeedsConfirmation:
-        return ("needs_confirm", None)
-    except MessagingNotConfigured as e:
-        _note(task_id, f"Send failed: {e}")
-        return ("error", (400, str(e)))
-    except RuntimeError as e:
-        # mgc/auth failure — the message carries the actionable `mgc login` hint.
-        _note(task_id, f"Send failed: {e}")
-        return ("error", (502, f"Send failed: {e}"))
-    if result is None:
-        return ("unconfigured", None)
-    message_id, _url = result
-    # Email (sendMail) returns no id — m365 reports "sent"; only stamp a real id.
-    changes = {"message_sent_at": task_lib._now_iso(),
-               "agent_output": f"Sent via {draft.get('channel')}"}
-    if message_id and message_id != "sent":
-        changes["message_id"] = message_id
-    try:
-        task_lib.update_task(task_id, changes=changes,
-            comment=f"Message sent via {draft.get('channel')} to {draft.get('to_display')}.",
-            actor="system")
-        task_lib.complete_task(task_id, actor="system")
-    except Exception as e:
-        # The send already happened — make the bookkeeping failure VISIBLE (a
-        # not-archived-but-sent task could otherwise be retried into a duplicate).
-        _note(task_id, f"WARNING: message sent but recording/archive failed: {e}")
-    return ("ok", (message_id, None))
-
-
-def _record_manual_send(task_id):
-    """Legacy fallback when no messaging provider is configured: record that the
-    operator sent the drafted message themselves, and archive (the pre-mgc
-    behavior). Returns the archive path."""
-    task_lib.update_task(
-        task_id, changes={"message_sent_at": task_lib._now_iso()},
-        comment="Message marked as sent (no send provider configured — sent manually from the draft).",
-        actor="human")
-    return task_lib.complete_task(task_id, actor="human")
-
-
 def handle_send_message(handler, task_id):
     """POST /api/tasks/{id}/send-message — actually send the drafted message.
 
@@ -1140,8 +1048,27 @@ def apply_recommendation(task_id):
 
 
 def undo_receipt(task_id):
-    """Undo a receipt: git revert the commit it recorded, mark the receipt done."""
-    t = task_lib.read_task(task_id)["frontmatter"]
+    """Undo a receipt: git revert the commit it recorded, mark the receipt done.
+
+    For an auto-shipped receipt (receipt_kind=='autoship') it cannot revert the
+    external action, so it instead demotes that action type to supervised and
+    marks the receipt done.
+    """
+    t = task_lib.read_task(task_id)["frontmatter"] or {}
+    # Auto-shipped action (email/ticket): cannot be un-sent. Undo means "stop
+    # auto-shipping this type" — drop it to supervised and flag the card. Never
+    # attempt a git revert (there is no local commit to revert).
+    if t.get("receipt_kind") == "autoship":
+        at = t.get("autoship_task_type")
+        if at:
+            ladder_lib.kill_to_supervised(at)
+            comment = (f"Undo: stopped auto-shipping '{at}' (dropped to supervised). "
+                       "The external action already happened and cannot be un-sent.")
+        else:
+            comment = ("Undo: the external action already happened and cannot be un-sent. "
+                       "(No task type recorded on this receipt, so nothing was demoted.)")
+        task_lib.update_task(task_id, changes={"status": "done"}, comment=comment, actor="human")
+        return
     rev = t.get("revert_commit")
     if not rev:
         raise ValueError("no revert_commit on this receipt")
@@ -1203,6 +1130,39 @@ def handle_graduate(handler, task_id):
         _error_response(handler, f"Graduate failed: {e}", status=500)
         return
     _json_response(handler, {"ok": True})
+
+
+def handle_get_autonomy(handler):
+    """GET /api/config/autonomy — current global Autonomous-Mode posture flag."""
+    _json_response(handler, {"enabled": profile_lib.autonomy_enforcement()})
+
+
+def handle_set_autonomy(handler):
+    """POST /api/config/autonomy {"enabled": bool} — flip the posture flag."""
+    try:
+        body = _read_request_body(handler)
+    except (json.JSONDecodeError, ValueError) as e:
+        _error_response(handler, f"Invalid JSON body: {e}", status=400)
+        return
+    if not isinstance(body.get("enabled"), bool):
+        _error_response(handler, "Body must include boolean 'enabled'", status=400)
+        return
+    enabled = body["enabled"]
+    profile_lib.set_autonomy_enforcement(enabled)
+    _json_response(handler, {"ok": True, "enabled": enabled})
+
+
+def handle_demote(handler, task_type):
+    """POST /api/tasks/{type}/demote — kill switch: drop a type to supervised."""
+    if not task_type:
+        _error_response(handler, "Missing task_type", status=400)
+        return
+    try:
+        tier = ladder_lib.kill_to_supervised(task_type)
+    except Exception as e:
+        _error_response(handler, f"Demote failed: {e}", status=500)
+        return
+    _json_response(handler, {"ok": True, "task_type": task_type, "tier": tier})
 
 
 def handle_keep(handler, task_id):
@@ -1379,28 +1339,10 @@ def handle_rerun_task(handler, task_id):
         _error_response(handler, f"Failed to reset task: {e}", status=500)
         return
 
-    # Dispatch the agent (same logic as handle_dispatch_task)
-    dispatch_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "task_dispatch.py")
-    # Strip ALL Claude-related env vars to prevent nested-session detection
-    env = {k: v for k, v in os.environ.items()
-           if not k.startswith(("CLAUDE", "CMUX_CLAUDE"))}
-    env["PATH"] = (
-        os.path.join(os.path.expanduser("~"), ".local", "bin")
-        + ":/opt/homebrew/bin"
-        + ":" + env.get("PATH", "/usr/bin:/bin")
-    )
-
-    try:
-        subprocess.Popen(
-            [sys.executable, dispatch_script, "--task", task_id, "--rerun"],
-            cwd=PM_OS_DIR,
-            env=env,
-            start_new_session=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except Exception as e:
-        _error_response(handler, f"Reset succeeded but dispatch failed: {e}", status=500)
+    # Dispatch the agent through the shared OS-aware respawn path.
+    import task_dispatch
+    if task_dispatch.respawn(task_id, rerun=True) is None:
+        _error_response(handler, "Reset succeeded but dispatch failed", status=500)
         return
 
     _json_response(handler, {
@@ -1518,87 +1460,6 @@ def handle_schedule_meeting(handler, task_id):
     })
 
 
-def _note(task_id, msg):
-    try:
-        task_lib.update_task(task_id, changes={}, comment=msg, actor="system")
-    except Exception:
-        pass
-
-
-def _attempt_publish(task_id, draft):
-    """Shared publish core for the publish-jira and confirm handlers.
-
-    Returns (status, payload):
-      ("needs_confirm",      None)        — Tier-2 gate fired; no external call made
-      ("already_published",  None)        — task already done; no external call made
-      ("unconfigured", (400, msg))        — no provider configured
-      ("error",       (code, msg))        — NotConfigured -> 400, RuntimeError -> 500
-      ("ok",          (issue_key, url))   — published; task marked done + traced
-    Records the full outcome (task comment + LangFuse trace) for the unconfigured,
-    error, and ok statuses. The needs_confirm and already_published branches are
-    early returns that skip the trace: needs_confirm records nothing (the caller
-    emits the confirm card), and already_published records only a single audit
-    comment so the duplicate-publish skip is visible in the task log."""
-    if draft is None:
-        return ("error", (400, "No JIRA_DRAFT block found in task body"))
-    # Guard against re-publishing a task that already produced a ticket (double-confirm,
-    # retry, separate tab). A JIRA_DRAFT task is marked done only by a successful publish
-    # below, so status == "done" means it was already published — never publish twice.
-    # Tolerant of a missing/virtual task id (e.g. unit tests that pass a synthetic id).
-    try:
-        existing = task_lib.read_task(task_id)
-        if (existing.get("frontmatter") or {}).get("status") == "done":
-            _note(task_id, "Publish skipped — task already published (no duplicate created).")
-            return ("already_published", None)
-    except FileNotFoundError:
-        pass
-    try:
-        result = adapters.publish("project_management", draft)
-    except NeedsConfirmation:
-        return ("needs_confirm", None)
-    except NotConfigured as e:
-        _note(task_id, f"Jira publish failed: {e}")
-        jira_publish._trace_publish(task_id, draft, error=str(e))
-        return ("error", (400, str(e)))
-    except RuntimeError as e:
-        _note(task_id, f"Jira publish failed: {e}")
-        jira_publish._trace_publish(task_id, draft, error=str(e))
-        return ("error", (500, f"Jira publish failed: {e}"))
-    if result is None:
-        msg = "No project-management tool is configured for this install"
-        _note(task_id, f"Jira publish failed: {msg}")
-        jira_publish._trace_publish(task_id, draft, error=msg)
-        return ("unconfigured", (400, msg))
-    issue_key, issue_url = result
-    output_str = f"Created {issue_key}: {issue_url}"
-    try:
-        task_lib.update_task(task_id, changes={"agent_output": output_str},
-                             comment=f"Published to Jira: {output_str}", actor="system")
-        task_lib.complete_task(task_id, actor="system")
-    except Exception:
-        pass
-    jira_publish._trace_publish(task_id, draft, issue_key=issue_key, issue_url=issue_url)
-    return ("ok", (issue_key, issue_url))
-
-
-def _emit_confirm_card(family, source_task):
-    """Write a Tier-2 confirm card to the collab queue. Confirm flips consent and
-    re-drives source_task; Reject holds off. Carries the link fields handle_confirm reads."""
-    provider = (profile_lib.provider(family) or "").title() or "your tool"
-    summary = f"Okay to let this assistant post to your {provider}?"
-    cid, _ = task_lib.create_task(
-        summary, queue="collab", domain="ops", creator="agent",
-        description=(f"This is the first time it will write to your {provider}. "
-                     "Confirm to allow it from now on, or Reject to hold off."),
-        card_type="confirm")
-    task_lib.update_task(cid, changes={
-        "confirm_family": family,
-        "confirm_source_task": source_task,
-        "receipt_summary": summary,   # shown on the task detail view; the card-list face falls back to the title
-    })
-    return cid
-
-
 def handle_publish_jira(handler, task_id):
     """POST /api/tasks/{id}/publish-jira — publish a Jira draft (Tier-2 gated)."""
     try:
@@ -1701,16 +1562,6 @@ def handle_confirm(handler, task_id):
     else:
         issue_key, issue_url = payload
         _json_response(handler, {"ok": True, "issue_key": issue_key, "issue_url": issue_url})
-
-
-def _load_email_cache():
-    """Load the people email cache (name → email mapping)."""
-    email_cache_path = os.path.join(PM_OS_DIR, "datasets", "people", "email_cache.json")
-    try:
-        with open(email_cache_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
 
 
 def handle_update_meeting_details(handler, task_id):
@@ -2430,6 +2281,14 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
                 handle_update_message(self, task_id)
             return True
 
+        # Match /api/tasks/{type}/demote — kill switch. The slot carries a
+        # task_type string (may contain hyphens, e.g. "send-message"), NOT a
+        # numeric id, so it skips _parse_task_id and is unquoted before use.
+        match = re.match(r"^/api/tasks/([^/]+)/demote$", path)
+        if match and method == "POST":
+            handle_demote(self, unquote(match.group(1)))
+            return True
+
         # Match /api/tasks/{id}/comment
         match = re.match(r"^/api/tasks/([^/]+)/comment$", path)
         if match and method == "POST":
@@ -2461,6 +2320,14 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
             return True
 
         # ─── Profile / Config API routes ───────────────────────────────
+        if path == "/api/config/autonomy" and method == "GET":
+            handle_get_autonomy(self)
+            return True
+
+        if path == "/api/config/autonomy" and method == "POST":
+            handle_set_autonomy(self)
+            return True
+
         if path == "/api/profile" and method == "GET":
             handle_get_profile(self)
             return True

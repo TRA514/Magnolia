@@ -351,8 +351,26 @@
   text-transform: uppercase; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
 }
 .q-trust.tier-shadow     { color: var(--text-muted); background: var(--surface-hover); }
-.q-trust.tier-gated      { color: var(--warning); background: var(--warning-soft); }
+.q-trust.tier-supervised { color: var(--warning); background: var(--warning-soft); }
 .q-trust.tier-autonomous { color: var(--success); background: var(--success-soft); }
+
+/* Kill switch — the calm brake in a card foot. Reads as a clear, deliberate
+   control (an outlined chip with an accent edge) without alarming red. Pushed
+   to the end of the foot by the flex spacer. Token-only. */
+.q-foot-spacer { flex: 1 1 auto; }
+.q-kill {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap;
+  padding: 5px 10px; border-radius: var(--r-btn);
+  color: var(--text-muted); background: transparent;
+  border: 1px solid var(--border); cursor: pointer;
+  transition: color var(--ease), background var(--ease), border-color var(--ease);
+}
+.q-kill svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.q-kill:hover {
+  color: var(--accent); border-color: var(--accent);
+  background: var(--surface-hover);
+}
 
 /* ═══════════════════════════════════════════════════════════════════════
    responsive — stack the two-up grids on narrow viewports
@@ -362,3 +380,82 @@
   .grad-stats { flex-wrap: wrap; }
   .grad-stat { flex-basis: calc(50% - 4px); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SETTINGS COG  ·  top-bar gear + Autonomous Mode popover
+   A quiet gear in the top-bar right cluster (next to Mood). Click opens a
+   popover holding the global Autonomous Mode switch. Built by js/settings.js
+   into the #settings-control mount; styled here TOKEN-ONLY so every mood
+   inherits. The button mirrors .mood-btn; the popover mirrors .mood-menu;
+   the switch is self-styled below via .settings-switch* (an accent-track
+   toggle in the same spirit as the schedules .cron-toggle, but its own rules).
+   When autonomy is on, .settings-btn.autonomy-on arms the gear itself.
+   ═══════════════════════════════════════════════════════════════════════ */
+.settings-control { position: relative; flex: 0 0 auto; }
+.settings-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  background: transparent; border: 1px solid transparent;
+  color: var(--text-dim); cursor: pointer;
+  border-radius: var(--r-btn);
+  transition: background var(--ease), color var(--ease), border-color var(--ease);
+}
+.settings-btn svg { width: 17px; height: 17px; transition: transform var(--ease); }
+.settings-btn:hover, .settings-btn[aria-expanded="true"] {
+  background: var(--surface-hover); color: var(--text); border-color: var(--border-soft);
+}
+.settings-btn[aria-expanded="true"] svg { transform: rotate(35deg); }
+
+/* armed: autonomy is ON — the gear reads as active without opening the panel.
+   Accent gear + a soft accent ring; token-only so it stays legible in every mood. */
+.settings-btn.autonomy-on {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.settings-btn.autonomy-on:hover, .settings-btn.autonomy-on[aria-expanded="true"] {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.settings-menu {
+  position: absolute; top: calc(100% + 8px); right: 0; min-width: 268px;
+  background: color-mix(in oklab, var(--surface) 96%, transparent);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border); border-radius: var(--r-lane); padding: 7px;
+  box-shadow: 0 26px 64px -30px rgba(0, 0, 0, 0.85);
+  z-index: 120; display: none; transform-origin: top right;
+}
+.settings-menu.open { display: block; animation: mood-pop var(--ease); }
+.settings-menu-head {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--text-dim); padding: 7px 10px 8px;
+}
+.settings-row {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  border-radius: var(--r-btn); padding: 9px 10px; cursor: pointer;
+  transition: background var(--ease);
+}
+.settings-row:hover { background: var(--surface-hover); }
+.settings-row-text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.settings-row-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.settings-row-blurb { font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
+
+/* switch — token-only, self-styled (accent track when on; same idea as .cron-toggle) */
+.settings-switch { position: relative; width: 38px; height: 21px; flex: 0 0 auto; }
+.settings-switch input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.settings-switch-track {
+  position: absolute; inset: 0; pointer-events: none;
+  background: var(--surface-hover); border: 1px solid var(--border-soft);
+  border-radius: 999px; transition: background var(--ease), border-color var(--ease);
+}
+.settings-switch-track::before {
+  content: ""; position: absolute; width: 15px; height: 15px; left: 3px; bottom: 2px;
+  background: var(--text-muted); border-radius: 50%;
+  transition: transform var(--ease), background var(--ease);
+}
+.settings-switch input:checked + .settings-switch-track { background: var(--accent-soft); border-color: var(--accent); }
+.settings-switch input:checked + .settings-switch-track::before { transform: translateX(16px); background: var(--accent); }
+.settings-switch input:disabled { cursor: progress; }
+.settings-switch input:disabled + .settings-switch-track { opacity: 0.6; }

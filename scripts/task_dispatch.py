@@ -77,6 +77,34 @@ def log(message, task_id=None):
         print(f"[{ts}] WARNING: Could not write to log file: {e}", file=sys.stderr)
 
 
+def respawn(task_id, rerun=True):
+    """Re-dispatch a single task in a fresh detached process (the shared re-run path
+    used by the board's Rerun button and the judge's revision loop).
+
+    OS-aware: strips Claude/CMUX env so the child isn't seen as a nested session, and
+    only prepends the POSIX bin dirs on non-Windows (uses os.pathsep, never a literal
+    ':'). Detaches via platform_lib.process_group_kwargs(). Returns the Popen on
+    success or None on failure (callers decide how to surface it)."""
+    script = os.path.abspath(__file__)
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "CMUX_CLAUDE"))}
+    if platform_lib.os_kind() != "windows":
+        extra = os.pathsep.join([
+            os.path.join(os.path.expanduser("~"), ".local", "bin"),
+            "/opt/homebrew/bin",
+        ])
+        env["PATH"] = extra + os.pathsep + env.get("PATH", "/usr/bin:/bin")
+    cmd = [sys.executable, script, "--task", task_id] + (["--rerun"] if rerun else [])
+    try:
+        return subprocess.Popen(
+            cmd, cwd=PM_OS_DIR, env=env,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            **platform_lib.process_group_kwargs(),
+        )
+    except Exception as e:
+        log(f"respawn failed for {task_id}: {e}", task_id=task_id)
+        return None
+
+
 # ─── Lockfile ─────────────────────────────────────────────────────────────────
 
 def acquire_lock():

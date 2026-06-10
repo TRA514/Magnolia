@@ -236,6 +236,18 @@ def cmd_agent_complete(args):
         if sp_url:
             changes["sharepoint_url"] = sp_url
 
+    # Stamp the canonical action task_type for a Jira draft so the trust ladder,
+    # judge, and Quality tab all key on 'publish-ticket' (the draft is otherwise
+    # title-pattern-routed with no task_type). Never overwrite an explicit type.
+    try:
+        td = task_lib.read_task(args.task_id)
+        existing_fm = td.get("frontmatter") or {}
+        body = td.get("body", "") or ""
+        if not existing_fm.get("task_type") and "<!-- JIRA_DRAFT -->" in body:
+            changes["task_type"] = "publish-ticket"
+    except Exception:
+        pass
+
     comment = "Agent work complete."
     if args.output:
         comment += f" Output: {args.output}"
@@ -243,13 +255,19 @@ def cmd_agent_complete(args):
 
     task_lib.update_task(args.task_id, changes=changes,
                          comment=comment, actor="agent")
-    # Trigger doc sync for the output file
+    # Trigger doc sync for the output file (still gated on --output).
     if args.output and changes.get("sharepoint_path"):
         task_lib._trigger_doc_sync(args.output)
     print(f"Agent completed {args.task_id} — awaiting human review")
     if args.output:
         print(f"  Output: {args.output}")
-        _spawn_judge(args.task_id)
+    # Spawn the shadow judge on EVERY completion, not only when --output is passed.
+    # The two action types the trust ladder governs (send-message, publish-ticket)
+    # complete WITHOUT an output file — their deliverable lives in the task body —
+    # so gating the judge on --output meant it never fired for them and enforcement
+    # never ran. The judge's own detect_kind decides gradeability and returns early
+    # (before any LLM call) when there's nothing to grade, so a no-op spawn is cheap.
+    _spawn_judge(args.task_id)
 
 
 def _spawn_judge(task_id):

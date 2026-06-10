@@ -173,7 +173,7 @@ Task {task_id}. Follow these steps:
    Run: ./scripts/task.sh agent:complete {task_id}
    Do NOT pass `--output` — the JIRA_DRAFT lives in the task body, not a file.
    Then STOP immediately. Do not continue.
-   Rationale: the draft IS your completed work; the terminal Publish action is performed by the human (or, when autonomous, the system) via the "Publish to Jira" button, which renders off the `<!-- JIRA_DRAFT -->` body marker regardless of status. Completing (not parking via agent:ask) lets the shadow judge score the ticket and stamps `task_type=publish-ticket` so the trust ladder and Quality tab key consistently.
+   Rationale: the draft IS your completed work; the terminal Publish action is performed by the human (or, when autonomous, the system) via the "Publish to Jira" button, which renders off the `<!-- JIRA_DRAFT -->` body marker once the task is complete (it also rendered in the old needs-human state). Completing (not parking via agent:ask) lets the shadow judge score the ticket and stamps `task_type=publish-ticket` so the trust ladder and Quality tab key consistently.
 
 9. If requirements are unclear and you can't draft (a GENUINE blocking question):
    Run: ./scripts/task.sh agent:ask {task_id} "your specific question"

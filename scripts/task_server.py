@@ -162,6 +162,23 @@ def _read_request_body(handler):
     return json.loads(raw.decode("utf-8"))
 
 
+def _resolve_output_path(rel):
+    """Resolve a task's agent_output to an absolute .md path inside PM_OS_DIR.
+
+    Returns the absolute path, or None when there is no path, it is not a .md
+    file, or it would escape PM_OS_DIR (path-traversal guard). Mirrors
+    handle_open_file's PM_OS_DIR resolution, plus the containment check.
+    """
+    rel = (rel or "").strip()
+    if not rel or not rel.endswith(".md"):
+        return None
+    base = os.path.realpath(PM_OS_DIR)
+    candidate = os.path.realpath(rel if os.path.isabs(rel) else os.path.join(base, rel))
+    if candidate != base and not candidate.startswith(base + os.sep):
+        return None
+    return candidate
+
+
 def _parse_activity_log(body):
     """Parse the activity log section from a task's markdown body.
 

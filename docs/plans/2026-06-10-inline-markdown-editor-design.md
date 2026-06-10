@@ -145,6 +145,17 @@ fallback), `fallbackEl`, `docPath`, `lastSaved`, `saveTimer` (debounce), `savePo
 - **Green gates before every code commit (invariant #2):** `python3 -m pytest` ·
   `python3 scripts/card_schema.py` · `python3 -m pytest tests/test_engine_no_jay.py`.
 
+## Known limitations (v1 — deferred deliberately)
+
+Surfaced in code review, accepted as acceptable for a single-user local-server tool:
+- **Autosave poll runs every 2s while the editor is open**, re-serializing the document
+  even when idle (the documented fallback for Crepe 7.5.0's missing change event). Hardened
+  with an in-flight guard so overlapping PUTs can't race `lastSaved`; further efficiency
+  (pausing the poll while saved) is deferred.
+- **No manual "retry" affordance on a failed save** — the dot shows "Save failed" and a
+  global toast surfaces it even after close, and the 2s poll self-heals on the next tick
+  (a failed save never advanced `lastSaved`), so a transient failure recovers on its own.
+
 ## Non-goals (YAGNI)
 
 - No build system / bundler added to the board.

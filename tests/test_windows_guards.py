@@ -11,6 +11,17 @@ def test_doc_sync_trigger_uses_sys_executable(monkeypatch, tmp_path):
     assert seen["cmd"][0] == sys.executable
 
 
+def test_doc_sync_trigger_detaches_via_seam(monkeypatch, tmp_path):
+    import task_lib
+    monkeypatch.setattr(task_lib.platform_lib, "process_group_kwargs",
+                        lambda: {"_seam_marker": 1})
+    seen = {}
+    monkeypatch.setattr(task_lib.subprocess, "Popen",
+                        lambda cmd, **k: seen.update(k))
+    task_lib._trigger_doc_sync(str(tmp_path / "a.md"))
+    assert seen.get("_seam_marker") == 1
+
+
 def test_otter_notify_skips_without_osascript(monkeypatch):
     monkeypatch.setattr(otter_sync.shutil, "which", lambda n: None)
     called = []

@@ -189,7 +189,7 @@ def _trigger_doc_sync(local_path):
             [sys.executable, sync_script, "sync-one", str(local_path)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_session=True,
+            **platform_lib.process_group_kwargs(),
         )
     except Exception:
         pass  # Non-critical, don't break task completion

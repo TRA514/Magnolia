@@ -81,18 +81,13 @@ def respawn(task_id, rerun=True):
     """Re-dispatch a single task in a fresh detached process (the shared re-run path
     used by the board's Rerun button and the judge's revision loop).
 
-    OS-aware: strips Claude/CMUX env so the child isn't seen as a nested session, and
-    only prepends the POSIX bin dirs on non-Windows (uses os.pathsep, never a literal
-    ':'). Detaches via platform_lib.process_group_kwargs(). Returns the Popen on
-    success or None on failure (callers decide how to surface it)."""
+    OS-aware: builds the child env via platform_lib.headless_claude_env() (strips
+    Claude/CMUX env so the child isn't seen as a nested session, and prepends the
+    POSIX bin dirs only on non-Windows). Detaches via
+    platform_lib.process_group_kwargs(). Returns the Popen on success or None on
+    failure (callers decide how to surface it)."""
     script = os.path.abspath(__file__)
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "CMUX_CLAUDE"))}
-    if platform_lib.os_kind() != "windows":
-        extra = os.pathsep.join([
-            os.path.join(os.path.expanduser("~"), ".local", "bin"),
-            "/opt/homebrew/bin",
-        ])
-        env["PATH"] = extra + os.pathsep + env.get("PATH", "/usr/bin:/bin")
+    env = platform_lib.headless_claude_env()
     cmd = [sys.executable, script, "--task", task_id] + (["--rerun"] if rerun else [])
     try:
         return subprocess.Popen(

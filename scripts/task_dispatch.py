@@ -160,14 +160,14 @@ def get_actionable_tasks():
                 timeout=30,
             )
         except subprocess.TimeoutExpired:
-            log(f"ERROR: task.sh list --queue {queue} timed out")
+            log(f"ERROR: task_cli.py list --queue {queue} timed out")
             continue
         except FileNotFoundError:
             log(f"ERROR: task_cli.py not found at {TASK_CLI}")
             return []
 
         if result.returncode != 0:
-            log(f"ERROR: task.sh list --queue {queue} failed (rc={result.returncode}): {result.stderr.strip()}")
+            log(f"ERROR: task_cli.py list --queue {queue} failed (rc={result.returncode}): {result.stderr.strip()}")
             continue
 
         try:

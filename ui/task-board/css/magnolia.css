@@ -442,6 +442,18 @@
 .settings-row-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
 .settings-row-blurb { font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
 
+/* menu items — calm full-width launchers for the Profile + Workers pages.
+   Token-only so they stay legible across every mood, matching .settings-row's rhythm. */
+.settings-link {
+  display: block; width: 100%; text-align: left;
+  background: transparent; border: none;
+  color: var(--text); font: inherit; font-size: 13.5px; font-weight: 600;
+  border-radius: var(--r-btn); padding: 9px 10px; cursor: pointer;
+  transition: background var(--ease), color var(--ease);
+}
+.settings-link:hover { background: var(--surface-hover); color: var(--text); }
+.settings-divider { height: 1px; background: var(--border-soft); margin: 6px 4px; }
+
 /* switch — token-only, self-styled (accent track when on; same idea as .cron-toggle) */
 .settings-switch { position: relative; width: 38px; height: 21px; flex: 0 0 auto; }
 .settings-switch input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }

@@ -166,8 +166,10 @@ function buildMoodControl() {
   const close = () => { menu.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); };
   const open  = () => { menu.classList.add('open');    btn.setAttribute('aria-expanded', 'true');  };
 
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
+  // No stopPropagation: let the click reach the Settings control's outside-click
+  // listener so opening this menu closes that one (only one dropdown open at a time).
+  // Our own document listener below is containment-checked, so it won't self-close.
+  btn.addEventListener('click', () => {
     menu.classList.contains('open') ? close() : open();
   });
   root.querySelectorAll('.mood-option').forEach(o => {

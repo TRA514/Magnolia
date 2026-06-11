@@ -19,6 +19,13 @@ def test_otter_notify_skips_without_osascript(monkeypatch):
     assert called == []
 
 
+def test_otter_main_exits_cleanly_without_otterai(monkeypatch):
+    import pytest
+    monkeypatch.setattr(otter_sync, "OtterAI", None)
+    with pytest.raises(SystemExit):
+        otter_sync.main()
+
+
 def test_fswatch_guard_disables_watch_without_fswatch(monkeypatch):
     monkeypatch.setattr(doc_sync_watcher.shutil, "which", lambda n: None)
     popened = []

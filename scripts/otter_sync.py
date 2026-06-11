@@ -244,6 +244,11 @@ def extract_transcript(speech_data: dict) -> str:
 
 
 def main() -> None:
+    if OtterAI is None:
+        sys.stderr.write("otterai not installed — Otter sync unavailable on this machine. "
+                         "Install with: pip install otterai\n")
+        sys.exit(1)
+
     # ── Load session ───────────────────────────────────────────────────────────
     otter = OtterAI()
     # Set default timeout on all requests made through this session

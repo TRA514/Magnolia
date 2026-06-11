@@ -3,6 +3,23 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 import transcript_post
 
 
+def test_hook_env_delegates_to_platform_lib(monkeypatch):
+    sentinel = {"PATH": "X", "FOO": "bar"}
+    monkeypatch.setattr(transcript_post.platform_lib, "headless_claude_env", lambda: sentinel)
+    assert transcript_post._hook_env() is sentinel
+
+
+def test_qmd_skipped_when_absent(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(transcript_post.platform_lib, "resolve_tool", lambda n: None)
+    monkeypatch.setattr(transcript_post.subprocess, "Popen",
+                        lambda *a, **k: calls.append(a[0]))
+    monkeypatch.setattr(transcript_post.profile_lib, "PM_OS_DIR", str(tmp_path))
+    transcript_post._run_qmd_index(transcript_post._hook_env(),
+                                   tmp_path / "logs", transcript_post._null_log())
+    assert calls == []  # qmd absent -> no Popen
+
+
 def test_run_downstream_classifies_and_fires_hooks(tmp_path, monkeypatch):
     monkeypatch.setattr(transcript_post.profile_lib, "PM_OS_DIR", str(tmp_path))
     txt = tmp_path / "2026-06-08_10-00_demo.txt"

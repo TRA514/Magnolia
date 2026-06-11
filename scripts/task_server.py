@@ -975,9 +975,9 @@ def _spawn_task_dispatch(task_id):
         [sys.executable, dispatch_script, "--task", task_id],
         cwd=PM_OS_DIR,
         env=env,
-        start_new_session=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        **platform_lib.process_group_kwargs(),
     )
 
 
@@ -1706,9 +1706,9 @@ def handle_open_file(handler, query_params):
         return
 
     # Open .docx files in the default app (Word) instead of NeoVim
-    if filepath.endswith(".docx"):
-        cmd = ["open", filepath] if sys.platform == "darwin" else ["xdg-open", filepath]
-    elif sys.platform == "darwin":
+    if filepath.endswith(".docx") or platform_lib.os_kind() == "windows":
+        cmd = platform_lib.open_file_cmd(filepath)
+    elif platform_lib.os_kind() == "darwin":
         cmd = [
             "open", "-na", "Ghostty.app", "--args",
             f"--command=nvim {shlex.quote(filepath)}",
@@ -1719,7 +1719,7 @@ def handle_open_file(handler, query_params):
             f"--command=nvim {shlex.quote(filepath)}",
         ]
 
-    subprocess.Popen(cmd, start_new_session=True)
+    subprocess.Popen(cmd, **platform_lib.process_group_kwargs())
 
     handler.send_response(204)
     handler.send_header("Access-Control-Allow-Origin", "*")

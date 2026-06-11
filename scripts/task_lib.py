@@ -10,6 +10,7 @@ One implementation, zero duplication, zero drift.
 import os
 import sys
 import shutil
+import subprocess
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -183,10 +184,9 @@ def _sharepoint_url_from_docx(docx_path):
 def _trigger_doc_sync(local_path):
     """Trigger async doc sync for an output artifact. Fire-and-forget."""
     try:
-        import subprocess
         sync_script = os.path.join(os.path.dirname(__file__), "doc_sync.py")
         subprocess.Popen(
-            ["python3", sync_script, "sync-one", str(local_path)],
+            [sys.executable, sync_script, "sync-one", str(local_path)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,

@@ -342,9 +342,9 @@ def _auto_dispatch(task_id):
             [sys.executable, dispatch_script, "--task", task_id],
             cwd=PM_OS_DIR,
             env=env,
-            start_new_session=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            **platform_lib.process_group_kwargs(),
         )
     except Exception as e:
         sys.stderr.write(f"[cron] Failed to auto-dispatch {task_id}: {e}\n")

@@ -9,6 +9,7 @@ Runs as a launchd daemon: ~/Library/LaunchAgents/com.pm-os.doc-sync.plist
 """
 
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -111,6 +112,9 @@ def process_remote_events():
 
 def watch_local(datasets_dir):
     """Watch local datasets/ directory for .md changes using fswatch."""
+    if not shutil.which("fswatch"):
+        log("fswatch not found — file-watch disabled on this platform (sync still works on demand)")
+        return
     cmd = [
         "fswatch", "-r", "--event", "Updated", "--event", "Created",
         "-e", r".*\.tmp.*", "-e", r".*~\$.*",
@@ -130,6 +134,9 @@ def watch_local(datasets_dir):
 
 def watch_remote(remote_dir):
     """Watch OneDrive PM-OS/ directory for .docx changes using fswatch."""
+    if not shutil.which("fswatch"):
+        log("fswatch not found — file-watch disabled on this platform (sync still works on demand)")
+        return
     cmd = [
         "fswatch", "-r", "--event", "Updated", "--event", "Created",
         "-e", r".*~\$.*", "-e", r".*\.tmp$",

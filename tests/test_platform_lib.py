@@ -132,3 +132,31 @@ def test_lock_windows_nonblocking_contention_returns_false(monkeypatch, tmp_path
     p.write_text("0")
     with open(p, "r+") as fd:
         assert platform_lib.lock(fd, blocking=False) is False
+
+
+# ─── resolve_tool + open_file_cmd seams ─────────────────────────────────────
+
+def test_resolve_tool_found(monkeypatch):
+    monkeypatch.setattr(platform_lib.shutil, "which", lambda n: "/usr/bin/qmd")
+    assert platform_lib.resolve_tool("qmd") == "/usr/bin/qmd"
+
+
+def test_resolve_tool_missing_returns_none(monkeypatch):
+    monkeypatch.setattr(platform_lib.shutil, "which", lambda n: None)
+    monkeypatch.setattr(platform_lib.os.path, "isfile", lambda p: False)
+    assert platform_lib.resolve_tool("qmd") is None
+
+
+def test_open_file_cmd_darwin(monkeypatch):
+    monkeypatch.setattr(platform_lib, "os_kind", lambda: "darwin")
+    assert platform_lib.open_file_cmd("/x/y.docx") == ["open", "/x/y.docx"]
+
+
+def test_open_file_cmd_windows(monkeypatch):
+    monkeypatch.setattr(platform_lib, "os_kind", lambda: "windows")
+    assert platform_lib.open_file_cmd("C:/x/y.docx") == ["cmd", "/c", "start", "", "C:/x/y.docx"]
+
+
+def test_open_file_cmd_linux(monkeypatch):
+    monkeypatch.setattr(platform_lib, "os_kind", lambda: "linux")
+    assert platform_lib.open_file_cmd("/x/y.docx") == ["xdg-open", "/x/y.docx"]

@@ -15,6 +15,7 @@ import sys
 
 # Add parent dir to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import platform_lib
 import task_lib
 
 
@@ -105,9 +106,9 @@ def cmd_add(args):
             subprocess.Popen(
                 [sys.executable, dispatch_script, "--task", task_id],
                 cwd=pm_os_dir,
-                start_new_session=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                **platform_lib.process_group_kwargs(),
             )
             print(f"  Auto-dispatching {task_id} to agent...")
 
@@ -285,7 +286,7 @@ def _spawn_judge(task_id):
             cwd=pm_os_dir,
             stdout=logf,
             stderr=logf,
-            start_new_session=True,
+            **platform_lib.process_group_kwargs(),
         )
         print(f"  Judge dispatched (log: logs/judge-{task_id}.log)")
     except Exception as e:

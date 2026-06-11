@@ -46,7 +46,7 @@ if not os.environ.get("LANGFUSE_SECRET_KEY") and os.path.isfile(_env_langfuse):
                 _line = _line.removeprefix("export ")
                 _key, _, _val = _line.partition("=")
                 os.environ[_key.strip()] = _val.strip()
-TASK_SH = os.path.join(PM_OS_DIR, "scripts", "task.sh")
+TASK_CLI = os.path.join(PM_OS_DIR, "scripts", "task_cli.py")
 LOCK_FILE = os.path.join(PM_OS_DIR, "datasets", "tasks", "_dispatch.lock")
 LOG_DIR = os.path.join(PM_OS_DIR, "logs")
 LOG_FILE = os.path.join(LOG_DIR, "dispatch.log")
@@ -81,18 +81,13 @@ def respawn(task_id, rerun=True):
     """Re-dispatch a single task in a fresh detached process (the shared re-run path
     used by the board's Rerun button and the judge's revision loop).
 
-    OS-aware: strips Claude/CMUX env so the child isn't seen as a nested session, and
-    only prepends the POSIX bin dirs on non-Windows (uses os.pathsep, never a literal
-    ':'). Detaches via platform_lib.process_group_kwargs(). Returns the Popen on
-    success or None on failure (callers decide how to surface it)."""
+    OS-aware: builds the child env via platform_lib.headless_claude_env() (strips
+    Claude/CMUX env so the child isn't seen as a nested session, and prepends the
+    POSIX bin dirs only on non-Windows). Detaches via
+    platform_lib.process_group_kwargs(). Returns the Popen on success or None on
+    failure (callers decide how to surface it)."""
     script = os.path.abspath(__file__)
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "CMUX_CLAUDE"))}
-    if platform_lib.os_kind() != "windows":
-        extra = os.pathsep.join([
-            os.path.join(os.path.expanduser("~"), ".local", "bin"),
-            "/opt/homebrew/bin",
-        ])
-        env["PATH"] = extra + os.pathsep + env.get("PATH", "/usr/bin:/bin")
+    env = platform_lib.headless_claude_env()
     cmd = [sys.executable, script, "--task", task_id] + (["--rerun"] if rerun else [])
     try:
         return subprocess.Popen(
@@ -153,21 +148,21 @@ def get_actionable_tasks():
     for queue in ("agent", "collab"):
         try:
             result = subprocess.run(
-                [TASK_SH, "list", "--queue", queue, "--json"],
+                [sys.executable, TASK_CLI, "list", "--queue", queue, "--json"],
                 capture_output=True,
                 text=True,
                 cwd=PM_OS_DIR,
                 timeout=30,
             )
         except subprocess.TimeoutExpired:
-            log(f"ERROR: task.sh list --queue {queue} timed out")
+            log(f"ERROR: task_cli.py list --queue {queue} timed out")
             continue
         except FileNotFoundError:
-            log(f"ERROR: task.sh not found at {TASK_SH}")
+            log(f"ERROR: task_cli.py not found at {TASK_CLI}")
             return []
 
         if result.returncode != 0:
-            log(f"ERROR: task.sh list --queue {queue} failed (rc={result.returncode}): {result.stderr.strip()}")
+            log(f"ERROR: task_cli.py list --queue {queue} failed (rc={result.returncode}): {result.stderr.strip()}")
             continue
 
         try:
@@ -967,7 +962,7 @@ def dispatch_task(task, dry_run=False, rerun=False, workers=None):
     )
     try:
         subprocess.run(
-            [TASK_SH, "agent:fail", task_id, "--error", error_msg],
+            [sys.executable, TASK_CLI, "agent:fail", task_id, "--error", error_msg],
             cwd=PM_OS_DIR,
             timeout=10,
         )

@@ -12,12 +12,16 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from otterai import OtterAI
+try:
+    from otterai import OtterAI
+except ImportError:  # optional third-party dep; absent on machines without Otter sync
+    OtterAI = None
 
 # ── Engine wiring ────────────────────────────────────────────────────────────────
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -65,7 +69,9 @@ log = logging.getLogger(__name__)
 
 
 def notify(title: str, message: str) -> None:
-    """Send a macOS notification via osascript."""
+    """Send a macOS notification via osascript (no-op off macOS)."""
+    if not shutil.which("osascript"):
+        return
     script = f'display notification "{message}" with title "{title}"'
     subprocess.run(["osascript", "-e", script], capture_output=True)
 
@@ -238,6 +244,11 @@ def extract_transcript(speech_data: dict) -> str:
 
 
 def main() -> None:
+    if OtterAI is None:
+        sys.stderr.write("otterai not installed — Otter sync unavailable on this machine. "
+                         "Install with: pip install otterai\n")
+        sys.exit(1)
+
     # ── Load session ───────────────────────────────────────────────────────────
     otter = OtterAI()
     # Set default timeout on all requests made through this session

@@ -107,6 +107,35 @@ def resolve_claude(path=None):
     return "claude"
 
 
+def resolve_tool(name):
+    """Absolute path to a CLI tool, or None if not found.
+
+    Honors PATHEXT on Windows via shutil.which. Unlike resolve_claude (which
+    falls back to the bare name because claude is required), this returns None
+    when the tool is genuinely absent, so callers can gracefully SKIP an
+    optional tool (qmd, etc.) instead of crashing with WinError 2.
+    """
+    found = shutil.which(name)
+    if found:
+        return found
+    for d in _CLAUDE_PREPEND_DIRS:
+        cand = os.path.join(d, name)
+        if os.path.isfile(cand):
+            return cand
+    return None
+
+
+def open_file_cmd(path):
+    """OS-correct argv to open a file in the user's default handler."""
+    kind = os_kind()
+    if kind == "darwin":
+        return ["open", path]
+    if kind == "windows":
+        # empty "" is the title arg for start; required when the path is quoted
+        return ["cmd", "/c", "start", "", path]
+    return ["xdg-open", path]
+
+
 def process_group_kwargs():
     """Popen kwargs giving the child its own killable process group."""
     if os_kind() == "windows":

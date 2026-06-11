@@ -334,14 +334,8 @@ def _auto_dispatch(task_id):
     """Fire task_dispatch.py --task {task_id} in background."""
     dispatch_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "task_dispatch.py")
 
-    # Strip Claude env vars to prevent nested-session detection
-    env = {k: v for k, v in os.environ.items()
-           if not k.startswith(("CLAUDE", "CMUX_CLAUDE"))}
-    env["PATH"] = (
-        os.path.join(os.path.expanduser("~"), ".local", "bin")
-        + ":/opt/homebrew/bin"
-        + ":" + env.get("PATH", "/usr/bin:/bin")
-    )
+    # Strip Claude env vars + keep claude on PATH, cross-platform
+    env = platform_lib.headless_claude_env()
 
     try:
         subprocess.Popen(

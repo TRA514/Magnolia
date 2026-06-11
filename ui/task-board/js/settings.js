@@ -42,8 +42,10 @@ function buildSettingsControl() {
   const close = () => { panel.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); };
   const open  = () => { panel.classList.add('open');    btn.setAttribute('aria-expanded', 'true'); refreshAutonomy(toggle); };
 
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
+  // No stopPropagation: let the click reach the Mood control's outside-click
+  // listener so opening this menu closes that one (only one dropdown open at a time).
+  // Our own document listener below is containment-checked, so it won't self-close.
+  btn.addEventListener('click', () => {
     panel.classList.contains('open') ? close() : open();
   });
 

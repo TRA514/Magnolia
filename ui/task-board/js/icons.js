@@ -40,8 +40,8 @@ const ICON = {
   undo: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 6.2H3.2V4M3.5 6A5 5 0 1 1 3 9.2"/></svg>`,
   arrowRight: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 8h9.2M9 4.4 12.6 8 9 11.6"/></svg>`,
 
-  // settings — a calm toothed cog that matches the line-mark family above
-  gear: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.05"/><path d="M8 1.5l.95 1.4a5.6 5.6 0 0 1 1.5.62l1.62-.45.92 1.6-1.1 1.25c.13.5.2 1.02.2 1.53l1.3.99-.6 1.74-1.66-.03c-.3.42-.66.79-1.07 1.09l.18 1.65-1.7.6-1.01-1.31a5.6 5.6 0 0 1-1.61 0L5.6 14.8l-1.7-.6.18-1.65c-.41-.3-.77-.67-1.07-1.09l-1.66.03-.6-1.74 1.3-.99c0-.51.07-1.03.2-1.53L1.15 5.97l.92-1.6 1.62.45c.46-.27.97-.48 1.5-.62L6.14 2.8z"/></svg>`,
+  // settings — a symmetric 8-tooth cog (computed, even 45° spacing) in the line-mark family
+  gear: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12.43 6.98L13.99 6.62L13.99 9.38L12.43 9.02L11.86 10.41L13.22 11.26L11.26 13.22L10.41 11.86L9.02 12.43L9.38 13.99L6.62 13.99L6.98 12.43L5.59 11.86L4.74 13.22L2.78 11.26L4.14 10.41L3.57 9.02L2.01 9.38L2.01 6.62L3.57 6.98L4.14 5.59L2.78 4.74L4.74 2.78L5.59 4.14L6.98 3.57L6.62 2.01L9.38 2.01L9.02 3.57L10.41 4.14L11.26 2.78L13.22 4.74L11.86 5.59Z"/><circle cx="8" cy="8" r="2.05"/></svg>`,
 };
 
 function svgIcon(name) { return ICON[name] || ''; }

@@ -46,7 +46,7 @@ if not os.environ.get("LANGFUSE_SECRET_KEY") and os.path.isfile(_env_langfuse):
                 _line = _line.removeprefix("export ")
                 _key, _, _val = _line.partition("=")
                 os.environ[_key.strip()] = _val.strip()
-TASK_SH = os.path.join(PM_OS_DIR, "scripts", "task.sh")
+TASK_CLI = os.path.join(PM_OS_DIR, "scripts", "task_cli.py")
 LOCK_FILE = os.path.join(PM_OS_DIR, "datasets", "tasks", "_dispatch.lock")
 LOG_DIR = os.path.join(PM_OS_DIR, "logs")
 LOG_FILE = os.path.join(LOG_DIR, "dispatch.log")
@@ -153,7 +153,7 @@ def get_actionable_tasks():
     for queue in ("agent", "collab"):
         try:
             result = subprocess.run(
-                [TASK_SH, "list", "--queue", queue, "--json"],
+                [sys.executable, TASK_CLI, "list", "--queue", queue, "--json"],
                 capture_output=True,
                 text=True,
                 cwd=PM_OS_DIR,
@@ -163,7 +163,7 @@ def get_actionable_tasks():
             log(f"ERROR: task.sh list --queue {queue} timed out")
             continue
         except FileNotFoundError:
-            log(f"ERROR: task.sh not found at {TASK_SH}")
+            log(f"ERROR: task_cli.py not found at {TASK_CLI}")
             return []
 
         if result.returncode != 0:
@@ -967,7 +967,7 @@ def dispatch_task(task, dry_run=False, rerun=False, workers=None):
     )
     try:
         subprocess.run(
-            [TASK_SH, "agent:fail", task_id, "--error", error_msg],
+            [sys.executable, TASK_CLI, "agent:fail", task_id, "--error", error_msg],
             cwd=PM_OS_DIR,
             timeout=10,
         )

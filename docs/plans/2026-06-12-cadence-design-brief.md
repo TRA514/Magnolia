@@ -275,36 +275,44 @@ Open question for the design agent: single file per program vs. directory split
 (`program.md` + `ledger.md`) once observation volume hurts — pick a threshold and a migration that
 respects invariant #6.
 
-## 5. The cycle pipeline (observe → reconcile → emit → log)
+## 5. The cycle — observe → reconcile → emit → log
 
-1. **Observe.** Two feeds, per the topology in §5.1: truth sync over the program's bindings (local
-   reads + provider-batched sentinels), plus whatever observations the exhaust scans have stamped
-   since the last cycle.
-   Cron fires the program's cadence (existing cron substrate; one job per cadence tier or per
-   program — design agent decides; never keyed off `family`, which is presentation-only).
-2. **Reconcile.** `scripts/cadence/reconcile.py` per program: deterministic checks first (dates,
-   adapter truth, aging policies), judged interpretation only where determinism can't reach
-   (reusing `judge.py` machinery with cadence rubrics). Outputs: drift verdict, mechanical state
-   updates (facts, each backed by a cited observation), and proposals (interpretations).
-3. **Emit.** Match emitter playbook rules. **Every action becomes a task** in the existing queues:
-   - `draft-message` → collab-queue task with drafted message (judge-scored, ladder-governed,
-     Tier-2-gated like any `send-message`).
-   - `produce-artifact` → generated digest/document (versioned, never overwritten) + a task carrying
-     it. *Attachment slice:* add `attachments: [paths]` to task frontmatter and teach the messaging
-     adapter to bundle them; degrade gracefully to inline links where a provider can't attach.
-   - `escalate` → human-queue card with the program context and the ≤2-sentence "what I need from you."
-   - `propose-update` → recommendation card whose accept applies the program mutation. This action
-     type climbs the trust ladder: shadow (propose only) → supervised → autonomous (apply + receipt)
-     — same `ladder_lib`, new action type, artifact-vs-action rules unchanged.
-4. **Log.** Append the cycle entry: what was checked, observed, emitted, and the verdict. This is the
-   program's iteration log and the audit trail.
+Every program runs the same four-step cycle. Who gathers the evidence is §5.1; when everything runs
+is §5.2.
 
-Rate-limit fence (Goodhart guard from the brainstorm doc): per-person nudge caps and response-rate
-counter-metrics are part of the emitter spec, not an afterthought. A nudge loop's loss function is
-"commitments converge at minimal social cost," and the cheap path — nudge harder — must be fenced in
-the schema (`max_nudges_per_person_per_week`), enforced by the reconciler, visible on the program.
+1. **Observe.** Gather the witnesses: local bindings are read directly (free); truth sentinels
+   deposit one **snapshot observation** per external binding; exhaust-scan observations have been
+   accumulating on the ledger since the last cycle. A snapshot is *testimony, not a verdict* —
+   "tracker says epic ABC-123 In Progress, last updated 31d ago" — staleness included.
+2. **Reconcile** (`scripts/cadence/reconcile.py`, per program). Health-check the bindings first
+   (§7.3), then weigh declared state (checkpoints, phase) against the witnesses:
+   - **Uncontradicted** structured evidence applies through the **fact door**: a mechanical update
+     citing the snapshot. *Uncontradicted* is the load-bearing word — a truth binding's reading
+     auto-applies only when nothing else on the ledger disputes it.
+   - **Contradicted** evidence is `sources-disagree`, and resolving it is the system's signature
+     move, not an error path: a 31-day-stale tracker field vs. three fresh independent transcript
+     witnesses → reality moved and the tracker didn't → propose the program update *with the
+     citations* and emit a corrective fix-the-tracker draft. **Reality wins; the bound source gets
+     driven back into agreement with it** — visibly, never silently in either direction. Witness
+     weight accounts for staleness (`last_updated` rides on every snapshot) and independence (three
+     sources beat one). Judged interpretation reuses `judge.py` machinery with cadence rubrics and
+     is spent only where witnesses disagree or arithmetic can't reach.
+   - Outputs: drift verdict and phase projection, **cached into program frontmatter** — which is all
+     the UI ever renders (the Cadence tab reads program files only, never a live source; the board
+     is the data model as-of-last-cycle).
+3. **Emit.** Match the emitter playbook (type defaults overlaid by instance policy, §7.4). **Every
+   action becomes a task** in the existing queues — Cadence never acts externally itself:
+   - `draft-message` → collab-queue task (judge-scored, ladder-governed, Tier-2-gated like any
+     `send-message`).
+   - `produce-artifact` → versioned digest/document (never overwritten) + a task carrying it.
+     *Attachment slice:* `attachments: [paths]` on task frontmatter; the messaging adapter bundles,
+     degrading to inline links.
+   - `escalate` → human-queue card: program context + the ≤2-sentence "what I need from you."
+   - `propose-update` → recommendation card whose accept applies the program mutation; climbs the
+     trust ladder as its own action type (shadow → supervised → autonomous + Keep/Undo receipt).
+4. **Log.** Append the cycle entry — checked, heard, concluded, emitted — the program's audit trail.
 
-### 5.1 Sentinel topology — sentinels are workers
+### 5.1 Sentinels are workers
 
 A sentinel is a **worker** — same definition format (`scripts/workers/*.md` frontmatter: `tools`,
 skills, tier, timeout), same dispatch substrate, same `profile_lib.resolve_model` resolution. What
@@ -331,70 +339,39 @@ poll. Three mechanisms, by cost:
    sentinel walking parent/child links via the provider's query tools to the binding's declared
    `traverse` depth — no per-program code.
 3. **The exhaust scan — one run per new document, for the whole portfolio.** When a transcript,
-   thread, or email lands, one run reads it carrying the **portfolio digest** in context and emits
-   everything in a single pass: `observe` onto existing programs, `capture` into cycle inboxes,
-   `candidate` evidence into the intake register (§6.1 — movement and intake are *two questions in
-   the same pass*). O(documents), not O(programs × documents); same shape as the existing
-   meetings-to-backlog harness; shares scan scheduling with task extraction, shares **no** output
-   path.
+   thread, or email lands, one run reads it once and routes everything it finds in a single pass
+   using §6.1's closed verb set — evidence for existing programs, captures for cycle inboxes,
+   candidates for the intake register. O(documents), not O(programs × documents); same shape as the
+   existing meetings-to-backlog harness; shares scan scheduling with task extraction, shares **no**
+   output path.
 
 **The portfolio digest** is what makes mechanisms 2–3 work: a compact index regenerated by
 `program_lib` from program files (id, title, `aliases`, type, state, bindings per program; intake
 signals of live types). It is how a run matches "the payments thing" to `PROG-0007` and knows which
 anchors to visit. Digest size at large portfolios is an open question (§11).
 
-### 5.2 Data flow — the tracker is a witness, not a verdict
+### 5.2 Operational cadence — three clocks
 
-The pipeline from source to pixel is strictly one-directional:
-
-1. **Fetch** — local reads and provider-batched truth sentinels deposit a snapshot observation per
-   binding per sweep (append-only ledger).
-2. **Hear** — exhaust scans deposit transcript/thread/email observations (same ledger).
-3. **Reconcile** — the reconciler reads declared state (checkpoints, phase) plus all observations
-   since the last cycle, and weighs the witnesses:
-   - **Uncontradicted** structured evidence applies through the fact door (mechanical update, citing
-     the snapshot). "Uncontradicted" is the load-bearing word — a truth binding's reading auto-applies
-     only when nothing else on the ledger disputes it.
-   - **Contradicted** evidence is `sources-disagree`, and resolving it is the system's signature move,
-     not an error path: a 31-day-stale tracker field vs. three independent fresh transcript witnesses
-     → the reconciler concludes reality moved and the tracker didn't, proposes the program update
-     *with the citations*, and emits the corrective action (a drafted fix-the-tracker ticket into the
-     collab queue). **Reality wins; the bound source gets driven back into agreement with it** —
-    visibly, through the verb system, never silently in either direction. Witness weight accounts
-     for staleness (`last_updated` rides on every snapshot) and independence (three sources beat one).
-   - Drift verdict and phase projection are computed and **cached into program frontmatter**; the
-     cycle log records what was checked, heard, concluded, and emitted.
-4. **Render** — the Cadence tab renders **program files only, never a live API call**. The board is a
-   view of the data model as-of-last-cycle: local-first, fast, and inspectable offline.
-
-The division of labor in one line: **determinism for the schema and the arithmetic, courier
-discipline for the fetching (verbatim fields, read-only tools), judgment for belief (witnesses
-weighed in context)** — and heavyweight judgment is spent only where witnesses disagree.
-
-### 5.3 Operational cadence — three clocks
-
-1. **The nightly quiet sweep.** Once a day, off-hours: local bindings read programmatically (free),
-   **one batched truth-sentinel run per provider** (a few small-tier agent runs — real but bounded
-   cost), then the reconciler recomputes date math, drift verdicts, and phase projections and
-   refreshes board caches. Local-first semantics: it runs on the operator's daemon, so the contract
-   is *run on schedule or on wake* — a missed 3am tick fires at next server start (croniter
-   catch-up). The guarantee is "fresh as of last night by the time you look," not a fixed hour.
-   **Bindings declare a freshness tier**: `local` syncs every sweep; tracker-MCP syncs in the nightly
-   provider batch; research-grade sources (a Zendesk mention-sweep, a Gong commitment-hunt) are real
-   research-agent runs and sync weekly or on the program's own cycle — never nightly by default.
+1. **The nightly quiet sweep.** Once a day, off-hours: local bindings read free, **one batched
+   truth-sentinel run per provider** (a few small-tier agent runs — real but bounded cost), then the
+   reconciler recomputes verdicts and refreshes board caches. Local-first semantics: it runs on the
+   operator's daemon, so the contract is *run on schedule or on wake* — a missed 3am tick fires at
+   next server start (croniter catch-up). The guarantee is "fresh as of last night by the time you
+   look," not a fixed hour. **Bindings declare a freshness tier** (`sync_cadence`, §7.2): `local`
+   syncs every sweep; tracker-MCP syncs in the nightly provider batch; research-grade sources (a
+   Zendesk mention-sweep, a Gong commitment-hunt) are real research-agent runs and sync weekly or on
+   the program's own cycle — never nightly by default.
 2. **Exhaust scans are event-driven, not scheduled.** The per-document scan (§5.1) runs when a
-   document *arrives* — a transcript synced after a 2pm meeting deposits observations that afternoon.
-   Same trigger rhythm as the existing meetings-to-backlog pipeline. Observations accumulate
-   intra-day; verdicts recompute at the next sweep or program cycle, whichever comes first.
+   document *arrives* — a transcript synced after a 2pm meeting deposits observations that
+   afternoon. Observations accumulate intra-day; verdicts recompute at the next sweep or program
+   cycle, whichever comes first.
 3. **Program cycles fire on human anchors.** Emissions are scheduled by the type/instance cadence on
-   the existing cron substrate, anchored to the operator's rhythms, not to the sweep: the
-   weekly-priorities digest drafts Sunday night to be waiting Monday morning; L10 prep fires the day
-   before the meeting; a did-it-work scoreboard refreshes weekly. Emission policy includes **send
-   windows** alongside rate caps — even autonomous-tier sends go out in business hours, because a
-   nudge is a social act and quiet hours are part of "minimal social cost."
+   the existing cron substrate (never keyed off `family`), anchored to the operator's rhythms, not
+   to the sweep: the weekly-priorities digest drafts Sunday night to be waiting Monday morning; L10
+   prep fires the day before the meeting; a did-it-work scoreboard refreshes weekly.
 
 Plus one manual override: **refresh-now** per program (re-run truth sync + reconcile on demand) for
-the walking-into-the-meeting case — added to the actions inventory in §8.3.
+the walking-into-the-meeting case — in the actions inventory, §8.3.
 
 ## 6. Program lifecycle — discovery, birth, completion, retirement
 
@@ -475,9 +452,10 @@ loop. Both are **instance-level**, agent-proposed, human-verified.
 
 - The **type** declares source *kinds* (§3 `sources`): "a pipeline initiative reads a
   project-management truth source plus transcript signals."
-- The **profile** resolves each kind to a *provider* via the existing adapter seam — one operator's
-  project management is one tracker, another's is another; engine code never knows which
-  (invariant #1). Nothing new is needed at this level.
+- The **profile** resolves each kind to a *provider* — one operator's project management is one
+  tracker, another's is another; the engine never knows which (invariant #1). This is the existing
+  integration seam (profile-configured providers, reached via MCP tools or adapters); nothing new at
+  this level.
 - The **program instance** pins *bindings*: concrete anchors inside the provider — this board, this
   epic key, this spreadsheet tab, this local path. Bindings are personal content in `datasets/`,
   so provider literals belong there (never in the engine).
@@ -485,13 +463,12 @@ loop. Both are **instance-level**, agent-proposed, human-verified.
 ### 7.2 Binding schema
 
 Each binding: `{ id, role, kind, anchor, traverse?, history?, mode, sync_cadence? }`, with `role`
-from a closed set (`sync_cadence` is the freshness tier — see §5.3):
+from a closed set (`sync_cadence` is the freshness tier — see §5.2):
 
-- **`truth`** — the structured witness. Only truth bindings can feed the *fact door*, and only when
-  uncontradicted (§5.2) — "truth" names the binding's *role in reconciliation*, not a promise that
-  the source is right; a stale tracker loses to fresher independent witnesses and gets a corrective
-  emission, never silent belief. `traverse` declares the child structure to walk under the anchor
-  (initiative → features → unit cards), so the loop tracks the tree, not just the root.
+- **`truth`** — the structured witness. Only truth bindings can feed the fact door, and only when
+  uncontradicted (§5) — "truth" names the binding's *role in reconciliation*, not a promise that the
+  source is right. `traverse` declares the child structure to walk under the anchor (initiative →
+  features → unit cards), so the loop tracks the tree, not just the root.
 - **`signal`** — evidence streams (transcripts, threads, email). Observations only, never facts.
 - **`artifact`** — the program's own output lineage. For `cycle` programs this is the central case:
   the weekly-priorities digest file *is* the source of truth —
@@ -529,12 +506,19 @@ quick action that writes back to the instance policy; **implicit** — repeated 
 emitter's cards are judge-visible, and the reconciler proposes the mute ("you've declined 4
 phase-movement nudges on this program — silence them?").
 
+The Goodhart fence lives here too. A nudge loop's loss function is "commitments converge at minimal
+social cost," and the cheap path — nudge harder — is fenced in the policy schema, not left to good
+intentions: per-person **rate caps** (`max_nudges_per_person_per_week`) and **send windows** (even
+autonomous-tier sends go out in business hours — a nudge is a social act), enforced by the
+reconciler, visible on the program. A recipient who stops responding is the loop failing, not the
+recipient.
+
 ### 7.5 Grounding at birth — the verification card
 
 Grounding is agent-first: when a candidate crosses its threshold (§6.2), a **grounding pass** runs
-*before* the proposal card is emitted — a worker explores likely sources through the profile's
-adapters (search the tracker for the initiative, walk its children, locate the sheet or file) and
-prefills bindings plus a default emission policy. The birth card then renders three verifiable
+*before* the proposal card is emitted — a worker explores the profile's providers with the same
+read-only tools sentinels use (search the tracker for the initiative, walk its children, locate the
+sheet or file) and prefills bindings plus a default emission policy. The birth card then renders three verifiable
 sections, so verification is *recognition, not form-filling*:
 
 1. **What** — the program frontmatter (type, title, checkpoints inferred from evidence).
@@ -570,7 +554,7 @@ Behavioral constraints:
 - What varies per program is keyed by the type's **state model** — never by `family`, which is
   presentation-only furniture (§3). Perceived shelf differences ("EOS reads differently than
   Roadmap") fall out of the models each shelf contains.
-- The only actions mirror the system grammar: open related cards, refresh-now (§5.3), pause/resume,
+- The only actions mirror the system grammar: open related cards, refresh-now (§5.2), pause/resume,
   archive (version-suffixed, never deleted), and the per-program kill switch (instant stop of its
   emitters — generalizing the Quality-tab brake). Nothing on this tab performs an external action
   directly. Ever.
@@ -636,8 +620,8 @@ is it watching?"* — enough to audit the program and adjust its behavior withou
 | Observations | ledger entries: timestamp · kind · claim · sentinel · source link (append-only) |
 | Emissions | when · action · linked card · outcome (pending/approved/sent/declined) |
 | Bindings | role · kind · anchor (linkable out) · health (ok/unreachable/ambiguous, from the cycle health check) · last verified |
-| Emission policy | muted kinds · audience overrides · rate caps · send windows (§5.3) — the one editable surface on the tab (mute/unmute writes to the instance) |
-| Actions | open related cards · refresh-now (re-run truth sync + reconcile for this program, §5.3) · pause/resume · archive · kill emitters |
+| Emission policy | muted kinds · audience overrides · rate caps · send windows (§7.4) — the one editable surface on the tab (mute/unmute writes to the instance) |
+| Actions | open related cards · refresh-now (re-run truth sync + reconcile for this program, §5.2) · pause/resume · archive · kill emitters |
 
 ### 8.4 Explicitly not renderable (the fence)
 

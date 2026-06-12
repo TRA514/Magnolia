@@ -442,7 +442,7 @@ A sibling top-level tab to Now/Activity/Quality/Engine/Schedules. Rendered entir
 - Intake candidates need no special UI: `program-intake` is itself a register-model program and
   renders as an ordinary row.
 
-### 8.1 Render contract — shelf and row (the complete inventory)
+### 8.1 Render contract — rows render by state model (the complete inventory)
 
 This is a **closed list**. Every element in a mockup must name its source field below; anything that
 cannot is cut. There is no other data.
@@ -451,20 +451,43 @@ cannot is cut. There is no other data.
 count. Nothing else — no rollup stats, no aggregate health at shelf level (cross-program synthesis
 is the portfolio rollup card on Now, not this tab).
 
-**Row** (collapsed) — exactly five cells; the design goal is that a healthy program's row contains
-nothing that asks for attention:
+**What rendering keys off:** the row template is selected by the program type's **state model** —
+never by `family`. Family is presentation-only furniture (§3). The shelf-level differences the
+operator perceives ("the EOS shelf reads differently than the Roadmap shelf") fall out naturally
+because the shelves *contain different models* — EOS programs are mostly `cycle` (L10 prep,
+scorecard digest) with `target`/`pipeline` rocks, while a roadmap shelf is `pipeline`. A shelf that
+mixes models renders each row with its own template: rows are self-contained list rows, not
+spreadsheet columns that must align.
 
-| # | Cell | Source | Per state model |
-|---|---|---|---|
-| 1 | **Title** | `title` frontmatter; optional muted subtext = type label (registry) when a shelf mixes types | same for all |
-| 2 | **State chip** | model-specific, token-colored (registry `presentation`) | pipeline → current phase label ("Discovery") · cycle → period + status ("W24 · sent") · target → current vs expected ("3.2 / 4.0") · register → open count + oldest age ("12 open · oldest 9d") |
-| 3 | **Drift badge** | computed verdict, cached in frontmatter — `holding · drifting · broken · blind`; a `paused` program shows `paused` here instead (drift isn't computed) | same vocabulary for all — the only universal status |
-| 4 | **Next date** | next dated event, rendered relative ("in 6d", "Mon") | pipeline → next checkpoint due · cycle → next cadence tick · target → window end / next measurement · register → next policy breach (oldest item's deadline) |
-| 5 | **Needs-you** | count of open cards on Now linked to this program (`program_id` backlink); **hidden when 0** | same for all |
+**Universal anchors** — every row, all models, the cross-shelf scanning invariants:
+
+| Anchor | Source | Notes |
+|---|---|---|
+| **Title** | `title`; optional muted subtext = type label (registry) when a shelf mixes types | always first |
+| **Drift badge** | cached verdict — `holding · drifting · broken · blind`; `paused` shown instead when paused | the only universal status vocabulary |
+| **Needs-you** | count of open cards on Now linked via `program_id` backlink | **hidden when 0**; always last |
+
+The design goal stands: a healthy program's row contains nothing that asks for attention.
+
+**The four row templates** — anchors plus model cells, ≤6 cells total per row:
+
+| Model | A healthy row reads | Model cells (sources) |
+|---|---|---|
+| **pipeline** | `Payments revamp · Discovery 12d/21d · next: discovery-exit in 9d · holding` | phase chip + time-in-phase vs window (`phase`, `phase_entered`, registry `max_age_days`) · next checkpoint + relative due (`checkpoints`) |
+| **cycle** | `Weekly priorities · W24 sent Mon 08:10 · 9/9 verified · next: Mon · holding` | period + artifact status (cycle log) · follow-through count — declared items verified done (reconciler) · next cadence tick (registry `cadence`) |
+| **target** | `Bulk-payments adoption · 3.2 / 4.0 ↗ · window ends Jul 31 · drifting` | current vs expected + trend glyph (checkpoint instruments) · measurement window end (`checkpoints`) |
+| **register** | `Customer promises · 12 open · 3 aging, oldest 9d · next breach in 2d · holding` | open-item count · aging summary vs policy thresholds · next policy-breach date (item deadlines) |
+
+Each template answers its model's native question at a glance — pipeline: *where in the flow?* ·
+cycle: *did the drumbeat happen, and was it followed through?* · target: *number vs. number?* ·
+register: *counts and aging?*
 
 ### 8.2 Render contract — expansion (fixed section order)
 
-Click a row → these sections, always in this order, sections with no data omitted:
+Click a row → these sections, always in this order, sections with no data omitted. The **time view
+(section 2) is the model-specific centerpiece**; sections 3–9 are deliberately uniform across models
+— they are the audit trail every program shares because they come from the same machinery, and that
+uniformity is what keeps drill-down learnable from shelf to shelf:
 
 | # | Section | Data (source) |
 |---|---|---|

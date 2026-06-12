@@ -111,7 +111,6 @@ to create an ungated write path or an unmeasurable promise.
 | **Reconciler** | Per cycle: declared vs. observed → drift verdict + state updates (facts) + proposals (interpretations) | Judge + enforce_lib |
 | **Emitter** | Declarative `on: <condition> → action` playbook; all actions exit as tasks | shipper / card actions |
 | **Cycle** | One heartbeat of a program: observe → reconcile → emit → log | Cron tick + receipt |
-| **Program pack** | *(demoted — not a runtime primitive)* Onboarding starter set only; see §9 | Onboarding seed, not skill-pack gating |
 
 ## 2. The four state models (closed set)
 
@@ -513,12 +512,10 @@ beyond the ledger/log data above, aggregate analytics across programs (portfolio
 or inline editing beyond the emission-policy toggle. The review rule for design: **if an element
 can't cite its row in §8.1–8.3, remove it.**
 
-## 9. Personas emerge from the portfolio (packs demoted)
+## 9. Personas emerge from the portfolio
 
-There is **no runtime pack mechanism**. An earlier draft mirrored skill packs here, but the symmetry
-is false: skill packs gate a 63-item engine catalog at background-dispatch time; the program-type
-registry is small and **instance-driven** — a type with no programs is inert. Personas therefore come
-for free from the existing architecture:
+There is no persona configuration. The program-type registry is small and **instance-driven** — a
+type with no programs is inert — so personas come for free from the existing architecture:
 
 - **Activation is implicit.** A type is *live* (for intake scanning and UI) iff the operator has ≥1
   active program of that type, or has explicitly enabled it. The portfolio is the activation state.

@@ -37,12 +37,12 @@ The four seed loops it must support on day one (detailed in the Appendix):
 ## What the design agent must deliver
 
 1. **Data model design** — finalize the schemas in Part B (program type registry, program instance
-   file, observation ledger, cycle log, emitter playbooks) with worked examples for all four seed
-   program types.
+   file, **bindings + emission policy**, observation ledger, cycle log, emitter playbooks) with worked
+   examples for all four seed program types.
 2. **Schema gate** — `scripts/program_schema.py`, the sibling of `card_schema.py`: validates the
    program-type registry (closed state-model set, theme-token-only presentation, instrumented
    checkpoints) and becomes part of invariant #2's green gates.
-3. **UI design for the Cadence tab** — see the UI contract (Part B §7). Table-first, grouped by loop
+3. **UI design for the Cadence tab** — see the UI contract (Part B §8). Table-first, grouped by loop
    family, rendered entirely from the registry (no per-type hardcoded UI), theme tokens only.
 4. **Sentinel + reconciler + emitter pipeline design** — how the observe → reconcile → emit cycle runs
    on the existing cron + dispatch substrate, and how emissions enter the existing task system.
@@ -51,8 +51,8 @@ The four seed loops it must support on day one (detailed in the Appendix):
    portfolio-janitor program.
 5. **Factory extension** — `meta-create-program-type`, the fourth sibling under `meta-factory-core`
    (scaffold → capture-to-profile → gate-green → commit → Keep/Undo receipt).
-6. **Build slices** — refine the slice plan in Part B §9 into a sequenced plan with verification steps
-   per slice (live board e2e, per conventions).
+6. **Build slices** — refine the slice plan in Part B §10 into a sequenced plan with verification
+   steps per slice (live board e2e, per conventions).
 
 ## Non-negotiable philosophy constraints
 
@@ -102,6 +102,7 @@ to create an ungated write path or an unmeasurable promise.
 | Primitive | Job | Analog on the task side |
 |---|---|---|
 | **Program** | A unit of custody: declared intent + dates + state, held over time | Task (but persistent) |
+| **Binding** | A program's pinned source: role (truth/signal/artifact) + provider anchor or local path + traversal scope | Adapter seam, made instance-level (§7) |
 | **Program type** | Declarative shape: state model, phases/fields, cadence, sentinels, emitters, sources | Card type in `registry.json` |
 | **State model** | One of a **closed set of four** behaviors a type builds on | (new — the fuck-up fence) |
 | **Sentinel** | Reads sources and emits observations. Two contracts: **movement** (did anything move an existing program?) and **intake** (is anything here cadence-level — new program candidate, or capture for a cycle program?) | Worker (reuses dispatch substrate, different contract) |
@@ -109,7 +110,7 @@ to create an ungated write path or an unmeasurable promise.
 | **Reconciler** | Per cycle: declared vs. observed → drift verdict + state updates (facts) + proposals (interpretations) | Judge + enforce_lib |
 | **Emitter** | Declarative `on: <condition> → action` playbook; all actions exit as tasks | shipper / card actions |
 | **Cycle** | One heartbeat of a program: observe → reconcile → emit → log | Cron tick + receipt |
-| **Program pack** | *(demoted — not a runtime primitive)* Onboarding starter set only; see §8 | Onboarding seed, not skill-pack gating |
+| **Program pack** | *(demoted — not a runtime primitive)* Onboarding starter set only; see §9 | Onboarding seed, not skill-pack gating |
 
 ## 2. The four state models (closed set)
 
@@ -177,7 +178,7 @@ no identity literals (denylist scan extends to `cadence/**`); `intake.route` ∈
 `family` is **presentation-only**: a default shelf label for grouping on the Cadence tab. It does no
 computational work (drift, state models, emitters, and scheduling are all family-independent), the
 engine never enumerates valid family values, and the profile may rename/regroup/reorder families per
-person (§7). Many types per family is the intended shape — e.g. `gtm-initiative` and
+person (§8). Many types per family is the intended shape — e.g. `gtm-initiative` and
 `internal-training` (both `pipeline`, different phases) can shelve under the same family as
 `roadmap-initiative`. The gate requires only that a default family exists.
 
@@ -198,7 +199,14 @@ phase_entered: 2026-06-12
 checkpoints:
   - { id: discovery-exit, due: 2026-07-03, instrument: "human-attested", status: pending }
   - { id: ship, due: 2026-09-15, instrument: "adapter:project_management", status: pending }
-links: { tracker_epic: "…", prd: "datasets/product/…" }
+bindings:                       # where truth lives for THIS program — see §7
+  - { id: tracker, role: truth,     kind: project_management, anchor: "epic:ABC-123",
+      traverse: ["feature", "unit"], mode: read }
+  - { id: prd,     role: reference, kind: local,              anchor: "datasets/product/…/prd-v2.md" }
+emission_policy:                # instance overlay on the type's emitter defaults — see §7.4
+  muted: [phase_movement]       # covered in daily standups; observe silently, don't card anyone
+  overrides:
+    - { emitter: nudge-owner, audience: "contact:eng-lead", max_per_week: 1 }
 drift: holding                 # cached verdict from last cycle, for the UI
 last_cycle: 2026-W24
 ---
@@ -295,9 +303,10 @@ same thing. Only material new evidence reopens one.
 
 ### 6.3 Birth
 
-The proposal is an existing **`recommendation` card** (no new card type for v1): diff body = the
-prefilled program file (type, title, checkpoints inferred from evidence, the citations that earned
-the proposal). **Accept** → program file created with `status: active` + the type's
+The proposal is an existing **`recommendation` card** (no new card type for v1), prefilled by the
+grounding pass (§7.5): the program file (type, title, checkpoints inferred from evidence, the
+citations that earned the proposal) plus its proposed bindings and emission policy, rendered for
+verification. **Accept** → program file created with `status: active` + the type's
 `bootstrap_emissions` enqueued as ordinary tasks (e.g. tracker-initiative draft via the
 ticket-creator worker → collab queue → Tier-2; roadmap-table entry as a propose-update). **Reject**
 → candidate closed-with-reason in the register.
@@ -314,7 +323,7 @@ Completion detection belongs to the **reconciler**, not a sentinel, via the two 
 
 Both emit `propose-update: archive`. Accept → `status: archived`, file moves to
 `datasets/programs/archive/` (version-suffixed, invariant #6). The manual archive button on the
-Cadence row (§7) remains; the system proposing it first is the goal state.
+Cadence row (§8) remains; the system proposing it first is the goal state.
 
 ### 6.5 The portfolio janitor
 
@@ -326,7 +335,95 @@ initiative), and archive sweeps. Self-hosting means the janitor gets a standard 
 log, emitters, and kill switch — the maintainer is governed by the same machinery it maintains, and
 extending it is editing a program type, not writing new engine code.
 
-## 7. UI contract — the Cadence tab
+## 7. Grounding — bindings and emission policy
+
+A program is only as good as its grounding: where truth lives, and what (if anything) leaves the
+loop. Both are **instance-level**, agent-proposed, human-verified.
+
+### 7.1 Three-level source resolution (portability preserved)
+
+- The **type** declares source *kinds* (§3 `sources`): "a pipeline initiative reads a
+  project-management truth source plus transcript signals."
+- The **profile** resolves each kind to a *provider* via the existing adapter seam — one operator's
+  project management is one tracker, another's is another; engine code never knows which
+  (invariant #1). Nothing new is needed at this level.
+- The **program instance** pins *bindings*: concrete anchors inside the provider — this board, this
+  epic key, this spreadsheet tab, this local path. Bindings are personal content in `datasets/`,
+  so provider literals belong there (never in the engine).
+
+### 7.2 Binding schema
+
+Each binding: `{ id, role, kind, anchor, traverse?, history?, mode }`, with `role` from a closed set:
+
+- **`truth`** — authoritative state. The reconciler's *fact door* reads only truth bindings.
+  `traverse` declares the child structure to walk under the anchor (initiative → features → unit
+  cards), so the loop tracks the tree, not just the root.
+- **`signal`** — evidence streams (transcripts, threads, email). Observations only, never facts.
+- **`artifact`** — the program's own output lineage. For `cycle` programs this is the central case:
+  the weekly-priorities digest file *is* the source of truth —
+  `{ role: artifact, kind: local, anchor: "<digest dir>", history: 4 }` means "anchor to last
+  week's, read the last four back," then the cycle recommends amendments against it.
+- **`reference`** — context the loop may read for understanding (a PRD) but never reconciles against.
+
+Local-first: local-path bindings are the always-available degenerate case; external bindings degrade
+gracefully when an adapter is unconfigured (existing pattern). **Multi-source is the default shape**,
+not an edge case — a program lists several bindings with different roles. Two `truth` bindings that
+disagree is its own drift kind (`sources-disagree`) and escalates rather than silently picking a
+winner.
+
+### 7.3 Binding health and re-grounding
+
+Bindings rot — boards move, epics get renamed, files get reorganized. The reconciler health-checks
+bindings **first** each cycle; an unreachable or ambiguous binding makes the program **blind**, a
+state surfaced distinctly from drift. (This formalizes §6.5's dead-program-vs-blind-sentinel
+distinction: binding health is how you tell.) Re-anchoring arrives as a `propose-update` card, and so
+do mid-life additions — a sentinel that finds a newly created epic matching an existing program
+proposes *adding* a binding through the same door.
+
+### 7.4 Emission policy — per-program overlay on type defaults
+
+The type's emitters (§3) are defaults; each instance carries an `emission_policy`: mutes, audiences,
+thresholds, rate caps. This is where "same type, opposite verbosity" lives: a roadmap initiative
+covered in daily standups runs effectively silent (`muted:` kills the cards, **not** the watching —
+the loop still observes and keeps the shelf current), while the L10-prep program enables the
+day-before group nudge with the audience pinned to a leadership channel. Audiences are
+contact/channel references resolved per person; the policy is plain data on the instance, editable
+any time.
+
+Learning the policy has the usual two doors: **explicit** — every emitted card carries a *mute-this*
+quick action that writes back to the instance policy; **implicit** — repeated declines of an
+emitter's cards are judge-visible, and the reconciler proposes the mute ("you've declined 4
+phase-movement nudges on this program — silence them?").
+
+### 7.5 Grounding at birth — the verification card
+
+Grounding is agent-first: when a candidate crosses its threshold (§6.2), a **grounding pass** runs
+*before* the proposal card is emitted — a worker explores likely sources through the profile's
+adapters (search the tracker for the initiative, walk its children, locate the sheet or file) and
+prefills bindings plus a default emission policy. The birth card then renders three verifiable
+sections, so verification is *recognition, not form-filling*:
+
+1. **What** — the program frontmatter (type, title, checkpoints inferred from evidence).
+2. **Where truth lives** — each proposed binding with its anchor and what was found there
+   ("epic ABC-123 · 4 features · 23 units · last updated 3d ago"), linked for inspection.
+3. **What it will say, and to whom** — the emission policy in plain language ("will: nudge the owner
+   if a checkpoint slips ≥3 days · won't: card you on phase movement").
+
+Accept → created, bound, policed. Adjust → inline edits to bindings/policy, then accept. Reject →
+closed-with-reason. v1 implements this as the existing `recommendation` card with a new registered
+**`grounding` body renderer** (the design-system-sanctioned extension point, validated by
+`card_schema.py`), not a new card type; promote to a dedicated type only if per-section actions
+prove necessary.
+
+Because grounding proposals are ordinary cards in the verb system, the judge and trust ladder apply
+for free: acceptance-without-edits is the quality signal, the operator's binding corrections are the
+calibration data, and `propose-program`/`propose-update` climb the ladder per task-type. Program
+creation is an internal Tier-1 state change, so a high-trust future where well-evidenced,
+fully-grounded births auto-apply with a Keep/Undo receipt is reachable under the existing
+enforcement rules — the operator's first sight of routine programs becomes the receipt, not the
+proposal.
+
+## 8. UI contract — the Cadence tab
 
 A sibling top-level tab to Now/Activity/Quality/Engine/Schedules. Rendered entirely from the registry
 + program frontmatter (like cards); theme tokens only; calm by default.
@@ -348,7 +445,7 @@ A sibling top-level tab to Now/Activity/Quality/Engine/Schedules. Rendered entir
   emitters — generalizing the Quality-tab brake).
 - Nothing on this tab performs an external action directly. Ever.
 
-## 8. Personas emerge from the portfolio (packs demoted)
+## 9. Personas emerge from the portfolio (packs demoted)
 
 There is **no runtime pack mechanism**. An earlier draft mirrored skill packs here, but the symmetry
 is false: skill packs gate a 63-item engine catalog at background-dispatch time; the program-type
@@ -357,7 +454,7 @@ for free from the existing architecture:
 
 - **Activation is implicit.** A type is *live* (for intake scanning and UI) iff the operator has ≥1
   active program of that type, or has explicitly enabled it. The portfolio is the activation state.
-- **The UI adapts by rendering the portfolio** (§7): only non-empty family shelves appear. An exec
+- **The UI adapts by rendering the portfolio** (§8): only non-empty family shelves appear. An exec
   who holds rocks and a scorecard digest sees exactly that view; no persona flag exists to configure
   or to get wrong.
 - **Cold start** is an onboarding concern, not a runtime one: `cadence/starter-sets.yaml` holds
@@ -370,11 +467,12 @@ for free from the existing architecture:
 - A teammate forking the engine gets the types and starter sets; their programs, sources, distros,
   and channels are theirs (profile + datasets). The asymmetry stays private; the machinery ships.
 
-## 9. Build slices (vertical, each independently verifiable)
+## 10. Build slices (vertical, each independently verifiable)
 
-1. **Substrate**: program file format + `program_lib.py` CRUD + registry + `program_schema.py` gate
-   wired into the green gates. Seed `weekly-priorities` + `roadmap-initiative` types. No UI, no agents
-   — create/read programs via CLI, gate goes green.
+1. **Substrate**: program file format (incl. bindings + emission-policy schema, §7) +
+   `program_lib.py` CRUD + registry + `program_schema.py` gate wired into the green gates. Seed
+   `weekly-priorities` + `roadmap-initiative` types. No UI, no agents — create/read programs via
+   CLI, gate goes green.
 2. **Cadence tab v1**: read-only table from program files. Manual frontmatter edits show up. (Board
    e2e verification per conventions.)
 3. **First cycle, deterministic only**: cron-fired reconcile for `pipeline` — date/aging checks, drift
@@ -388,16 +486,17 @@ for free from the existing architecture:
    with `ladder_lib`; shadow tier by default.
 7. **`register` + `target` models**: promise ledger and did-it-work scoreboard types; Pendo/metric
    instruments for `target`.
-8. **Lifecycle**: intake sentinel + `program-intake` register + birth proposal cards with bootstrap
-   emissions + archive proposals + the `portfolio-health` janitor program. (Needs slices 5–7:
-   sentinels, the proposal door, and the register model.)
+8. **Lifecycle + grounding**: intake sentinel + `program-intake` register + the grounding pass and
+   `grounding` body renderer (§7.5) + birth proposal cards with bootstrap emissions + archive
+   proposals + the `portfolio-health` janitor program. Binding health checks land here too. (Needs
+   slices 5–7: sentinels, the proposal door, and the register model.)
 9. **Attachments slice**: task `attachments:` + messaging adapter bundling + graceful degradation.
 10. **EOS types + starter set**: read-only sheet source, L10-prep cycle type, pre-L10 nudge emitters
     with rate caps; first entry in `starter-sets.yaml`.
 11. **Factory**: `meta-create-program-type` under `meta-factory-core`; portfolio rollup card (weekly
     cross-program digest) last, once ≥2 families run.
 
-## 10. Open questions for the design agent
+## 11. Open questions for the design agent
 
 - Single-file vs. directory-per-program threshold and migration (invariant #6-safe).
 - Observation dedup/merge policy when multiple sentinels cite the same evidence.
@@ -412,6 +511,12 @@ for free from the existing architecture:
   merge policy and how merged evidence is attributed.
 - Birth-threshold tuning per type: are the defaults (2 sources / explicit declaration) right for
   low-volume types like EOS rocks, which are declared once in a quarterly session?
+- Anchor schema generality: how provider-specific can `anchor` strings be before they need a
+  per-adapter grammar (`epic:KEY` vs. board/list IDs vs. sheet+tab+range)? Where does anchor
+  validation live — `program_schema.py` or the adapter contract?
+- Grounding-pass economics: runs per candidate at threshold-crossing — cost cap, and what the birth
+  card shows when grounding finds nothing (propose ungrounded with a `blind` badge, or hold the
+  candidate?).
 - Cross-program awareness: where does "these two drifts share a root cause — the same undecided
   decision" live? (Likely the portfolio rollup, not the per-program reconciler — keep the reconciler
   single-program and dumb.)

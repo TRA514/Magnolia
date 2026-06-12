@@ -42,8 +42,9 @@ The four seed loops it must support on day one (detailed in the Appendix):
 2. **Schema gate** — `scripts/program_schema.py`, the sibling of `card_schema.py`: validates the
    program-type registry (closed state-model set, theme-token-only presentation, instrumented
    checkpoints) and becomes part of invariant #2's green gates.
-3. **UI design for the Cadence tab** — see the UI contract (Part B §8). Table-first, grouped by loop
-   family, rendered entirely from the registry (no per-type hardcoded UI), theme tokens only.
+3. **UI design for the Cadence tab** — see the UI contract (Part B §8): jobs-to-be-done + data
+   inventory only. Rendered entirely from the registry (no per-type hardcoded UI), theme tokens only;
+   layout and visual treatment are the operator's designer's domain.
 4. **Sentinel + reconciler + emitter pipeline design** — how the observe → reconcile → emit cycle runs
    on the existing cron + dispatch substrate, and how emissions enter the existing task system.
    Includes the full **program lifecycle** (Part B §6): intake classification, the intake register,
@@ -425,88 +426,92 @@ proposal.
 
 ## 8. UI contract — the Cadence tab
 
-A sibling top-level tab to Now/Activity/Quality/Engine/Schedules. Rendered entirely from the registry
-+ program frontmatter (like cards); theme tokens only; calm by default.
+A sibling top-level tab to Now/Activity/Quality/Engine/Schedules. This contract is a **jobs-to-be-done
+and data inventory only** — layout, hierarchy, and visual treatment are the designer's domain.
+Behavioral constraints:
 
-- **Table-first**, grouped by `family` shelves — e.g. one operator's view reads Roadmap · Weekly ·
-  Outcomes · EOS, but those are *their* labels, not engine vocabulary. Only families containing
-  active programs render (an empty shelf is invisible — the UI adapts to the portfolio, not to a
-  persona flag), and the profile can rename, regroup, and reorder shelves. Row and expansion
-  contents are fixed by the render contract below (§8.1–8.3).
-- **Steady-state is legible**: a `cycle` program that's simply healthy renders as quiet confirmation
-  ("W24 digest sent Mon 08:10 · 9/9 declared items verified done"), not as emptiness.
-- **The only buttons** mirror the system grammar: open the related cards, pause program, archive
-  program (version-suffixed, never deleted), and the kill switch per program (instant stop of its
-  emitters — generalizing the Quality-tab brake).
-- Nothing on this tab performs an external action directly. Ever.
+- Rendered entirely from the registry + program files (no per-type hardcoded UI); theme tokens only
+  (invariant #3).
+- Programs group into `family` shelves. Only families containing active programs render; the profile
+  can rename, regroup, and reorder shelves.
+- What varies per program is keyed by the type's **state model** — never by `family`, which is
+  presentation-only furniture (§3). Perceived shelf differences ("EOS reads differently than
+  Roadmap") fall out of the models each shelf contains.
+- The only actions mirror the system grammar: open related cards, pause/resume, archive
+  (version-suffixed, never deleted), and the per-program kill switch (instant stop of its emitters —
+  generalizing the Quality-tab brake). Nothing on this tab performs an external action directly. Ever.
 - Intake candidates need no special UI: `program-intake` is itself a register-model program and
   renders as an ordinary row.
 
-### 8.1 Render contract — rows render by state model (the complete inventory)
+### 8.1 The shelf
 
-This is a **closed list**. Every element in a mockup must name its source field below; anything that
-cannot is cut. There is no other data.
+**Job to be done:** group programs into the operator's own categories so each area of custody can be
+scanned on its own.
 
-**Shelf header** (per family): the shelf label (profile override, else type default). Nothing else — no rollup stats, no aggregate health at shelf level (cross-program synthesis
-is the portfolio rollup card on Now, not this tab).
+**Data available:** the shelf label (profile override, else type default) and the programs it
+contains. Nothing else exists at shelf level — no rollup stats, no aggregate health (cross-program
+synthesis is the portfolio rollup card on Now, not this tab).
 
-**What rendering keys off:** the row template is selected by the program type's **state model** —
-never by `family`. Family is presentation-only furniture (§3). The shelf-level differences the
-operator perceives ("the EOS shelf reads differently than the Roadmap shelf") fall out naturally
-because the shelves *contain different models* — EOS programs are mostly `cycle` (L10 prep,
-scorecard digest) with `target`/`pipeline` rocks, while a roadmap shelf is `pipeline`. A shelf that
-mixes models renders each row with its own template: rows are self-contained list rows, not
-spreadsheet columns that must align.
+### 8.2 The row (collapsed program)
 
-**Universal anchors** — every row, all models, the cross-shelf scanning invariants:
+**Job to be done:** answer, at a glance, *"is this program okay, and does it need me?"* The specific
+question varies by state model:
 
-| Anchor | Source | Notes |
-|---|---|---|
-| **Title** | `title`; optional muted subtext = type label (registry) when a shelf mixes types | always first |
-| **Drift badge** | cached verdict — `holding · drifting · broken · blind`; `paused` shown instead when paused | the only universal status vocabulary |
-| **Needs-you** | count of open cards on Now linked via `program_id` backlink | **hidden when 0**; always last |
+| Model | The row's question |
+|---|---|
+| **pipeline** | where is this in the flow, and is it on time? |
+| **cycle** | did the last beat happen and get followed through — and when is the next? |
+| **target** | is the actual tracking the expected? |
+| **register** | how much is open, and is anything aging past policy? |
 
-The design goal stands: a healthy program's row contains nothing that asks for attention.
+**Data available to every row:**
 
-**The four row templates** — anchors plus model cells, ≤6 cells total per row:
+| Field | Source |
+|---|---|
+| title | `title` frontmatter |
+| type label | registry |
+| status | `active · paused · archived` |
+| drift verdict | `holding · drifting · broken · blind` (not computed while paused) |
+| needs-you count | open cards on Now linked via `program_id` backlink |
 
-| Model | A healthy row reads | Model cells (sources) |
-|---|---|---|
-| **pipeline** | `Payments revamp · Discovery 12d/21d · next: discovery-exit in 9d · holding` | phase chip + time-in-phase vs window (`phase`, `phase_entered`, registry `max_age_days`) · next checkpoint + relative due (`checkpoints`) |
-| **cycle** | `Weekly priorities · W24 sent Mon 08:10 · 9/9 verified · next: Mon · holding` | period + artifact status (cycle log) · follow-through count — declared items verified done (reconciler) · next cadence tick (registry `cadence`) |
-| **target** | `Bulk-payments adoption · 3.2 / 4.0 ↗ · window ends Jul 31 · drifting` | current vs expected + trend glyph (checkpoint instruments) · measurement window end (`checkpoints`) |
-| **register** | `Customer promises · 12 open · 3 aging, oldest 9d · next breach in 2d · holding` | open-item count · aging summary vs policy thresholds · next policy-breach date (item deadlines) |
+**Additional data per model:**
 
-Each template answers its model's native question at a glance — pipeline: *where in the flow?* ·
-cycle: *did the drumbeat happen, and was it followed through?* · target: *number vs. number?* ·
-register: *counts and aging?*
+| Model | Fields (sources) |
+|---|---|
+| **pipeline** | current phase (`phase`, label from registry) · time in phase (`phase_entered`) vs. window (registry `max_age_days`) · next checkpoint + due (`checkpoints`) |
+| **cycle** | current period · last artifact + produced/sent timestamp (cycle log) · follow-through count, declared items verified done (reconciler) · next cadence tick (registry `cadence`) |
+| **target** | current value · expected value · recent series (checkpoint instruments) · measurement window end (`checkpoints`) |
+| **register** | open-item count · items past aging thresholds + oldest age · next policy-breach date (item deadlines) |
 
-### 8.2 Render contract — expansion (fixed section order)
+Which fields appear and how is design's call; the fence (§8.4) only says nothing outside these lists
+exists.
 
-Click a row → these sections, always in this order, sections with no data omitted. The **time view
-(section 2) is the model-specific centerpiece**; sections 3–9 are deliberately uniform across models
-— they are the audit trail every program shares because they come from the same machinery, and that
-uniformity is what keeps drill-down learnable from shelf to shelf:
+### 8.3 The expanded view
 
-| # | Section | Data (source) |
-|---|---|---|
-| 1 | **Intent** | the program's `## Intent` paragraph (instance body) |
-| 2 | **Time view** | one visualization per state model: pipeline → phase rail (`phases` + `phase_entered` vs. `max_age_days` windows) · cycle → last N periods strip with per-period status (cycle log) · target → predicted-vs-actual series with tolerance band (checkpoint instruments) · register → item list (item, owner, age, closure condition) + aging distribution |
-| 3 | **Checkpoints** | table from `checkpoints`: label · due · instrument · status (pending/met/missed) |
-| 4 | **Last cycle** | the most recent cycle-log entry verbatim (checked · observed · emitted · verdict) + link to full cycle history |
-| 5 | **Recent observations** | newest 5 from the ledger: timestamp · kind · claim · sentinel · source link; link to full ledger |
-| 6 | **Emissions** | newest 5: when · action · linked card · outcome (pending/approved/sent/declined) |
-| 7 | **Bindings** | per binding: role · kind · anchor (linked out) · health (ok/unreachable/ambiguous, from the cycle health check) · last verified |
-| 8 | **Emission policy** | muted kinds · audience overrides · rate caps, with the mute/unmute affordance (writes to the instance — the one inline edit on this tab) |
-| 9 | **Controls** | open related cards · pause/resume · archive · kill emitters |
+**Job to be done:** answer *"why is it in this state, what has the loop been doing about it, and what
+is it watching?"* — enough to audit the program and adjust its behavior without leaving the tab.
 
-### 8.3 Explicitly not renderable (the fence)
+**Data available:**
+
+| Group | Fields (sources) |
+|---|---|
+| Intent | the program's `## Intent` paragraph (instance body) |
+| Model history | pipeline → phase history with entered dates vs. windows · cycle → per-period status history (cycle log) · target → predicted-vs-actual series (checkpoint instruments) · register → item list: item, owner, age, closure condition |
+| Checkpoints | label · due · instrument · status (pending/met/missed), from `checkpoints` |
+| Cycle log | entries: checked · observed · emitted · verdict (append-only) |
+| Observations | ledger entries: timestamp · kind · claim · sentinel · source link (append-only) |
+| Emissions | when · action · linked card · outcome (pending/approved/sent/declined) |
+| Bindings | role · kind · anchor (linkable out) · health (ok/unreachable/ambiguous, from the cycle health check) · last verified |
+| Emission policy | muted kinds · audience overrides · rate caps — the one editable surface on the tab (mute/unmute writes to the instance) |
+| Actions | open related cards · pause/resume · archive · kill emitters |
+
+### 8.4 Explicitly not renderable (the fence)
 
 No data exists for — and no mockup may invent — percent-complete bars, velocity/burndown charts
-(outside the `target` time view), people avatars or workload views, priority scores, activity feeds
-beyond the ledger/log sections above, aggregate analytics across programs (portfolio rollup card
-only), or inline editing of program content (the §8.2 #8 policy toggle is the sole exception). The
-review rule for design: **if an element can't cite its row in §8.1/§8.2, remove it.**
+(beyond the `target` series above), people avatars or workload views, priority scores, activity feeds
+beyond the ledger/log data above, aggregate analytics across programs (portfolio rollup card only),
+or inline editing beyond the emission-policy toggle. The review rule for design: **if an element
+can't cite its row in §8.1–8.3, remove it.**
 
 ## 9. Personas emerge from the portfolio (packs demoted)
 

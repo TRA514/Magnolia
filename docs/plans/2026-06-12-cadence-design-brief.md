@@ -431,19 +431,60 @@ A sibling top-level tab to Now/Activity/Quality/Engine/Schedules. Rendered entir
 - **Table-first**, grouped by `family` shelves — e.g. one operator's view reads Roadmap · Weekly ·
   Outcomes · EOS, but those are *their* labels, not engine vocabulary. Only families containing
   active programs render (an empty shelf is invisible — the UI adapts to the portfolio, not to a
-  persona flag), and the profile can rename, regroup, and reorder shelves. One row per program:
-  **headline · state chip** (type-specific label, token-colored) · **drift badge**
-  (holding/drifting/broken — the only universal status) · **next checkpoint + date** ·
-  **last cycle one-liner** · **needs-you count** (linking to the matching cards on Now).
-- **Row expansion**: the time view (pipeline → phase timeline vs. windows; target → predicted-vs-actual
-  sparkline; cycle → cadence history; register → aging distribution), the observation ledger with
-  source links, and the emission history with outcomes (sent/approved/declined).
+  persona flag), and the profile can rename, regroup, and reorder shelves. Row and expansion
+  contents are fixed by the render contract below (§8.1–8.3).
 - **Steady-state is legible**: a `cycle` program that's simply healthy renders as quiet confirmation
   ("W24 digest sent Mon 08:10 · 9/9 declared items verified done"), not as emptiness.
 - **The only buttons** mirror the system grammar: open the related cards, pause program, archive
   program (version-suffixed, never deleted), and the kill switch per program (instant stop of its
   emitters — generalizing the Quality-tab brake).
 - Nothing on this tab performs an external action directly. Ever.
+- Intake candidates need no special UI: `program-intake` is itself a register-model program and
+  renders as an ordinary row.
+
+### 8.1 Render contract — shelf and row (the complete inventory)
+
+This is a **closed list**. Every element in a mockup must name its source field below; anything that
+cannot is cut. There is no other data.
+
+**Shelf header** (per family): the shelf label (profile override, else type default) and a program
+count. Nothing else — no rollup stats, no aggregate health at shelf level (cross-program synthesis
+is the portfolio rollup card on Now, not this tab).
+
+**Row** (collapsed) — exactly five cells; the design goal is that a healthy program's row contains
+nothing that asks for attention:
+
+| # | Cell | Source | Per state model |
+|---|---|---|---|
+| 1 | **Title** | `title` frontmatter; optional muted subtext = type label (registry) when a shelf mixes types | same for all |
+| 2 | **State chip** | model-specific, token-colored (registry `presentation`) | pipeline → current phase label ("Discovery") · cycle → period + status ("W24 · sent") · target → current vs expected ("3.2 / 4.0") · register → open count + oldest age ("12 open · oldest 9d") |
+| 3 | **Drift badge** | computed verdict, cached in frontmatter — `holding · drifting · broken · blind`; a `paused` program shows `paused` here instead (drift isn't computed) | same vocabulary for all — the only universal status |
+| 4 | **Next date** | next dated event, rendered relative ("in 6d", "Mon") | pipeline → next checkpoint due · cycle → next cadence tick · target → window end / next measurement · register → next policy breach (oldest item's deadline) |
+| 5 | **Needs-you** | count of open cards on Now linked to this program (`program_id` backlink); **hidden when 0** | same for all |
+
+### 8.2 Render contract — expansion (fixed section order)
+
+Click a row → these sections, always in this order, sections with no data omitted:
+
+| # | Section | Data (source) |
+|---|---|---|
+| 1 | **Intent** | the program's `## Intent` paragraph (instance body) |
+| 2 | **Time view** | one visualization per state model: pipeline → phase rail (`phases` + `phase_entered` vs. `max_age_days` windows) · cycle → last N periods strip with per-period status (cycle log) · target → predicted-vs-actual series with tolerance band (checkpoint instruments) · register → item list (item, owner, age, closure condition) + aging distribution |
+| 3 | **Checkpoints** | table from `checkpoints`: label · due · instrument · status (pending/met/missed) |
+| 4 | **Last cycle** | the most recent cycle-log entry verbatim (checked · observed · emitted · verdict) + link to full cycle history |
+| 5 | **Recent observations** | newest 5 from the ledger: timestamp · kind · claim · sentinel · source link; link to full ledger |
+| 6 | **Emissions** | newest 5: when · action · linked card · outcome (pending/approved/sent/declined) |
+| 7 | **Bindings** | per binding: role · kind · anchor (linked out) · health (ok/unreachable/ambiguous, from the cycle health check) · last verified |
+| 8 | **Emission policy** | muted kinds · audience overrides · rate caps, with the mute/unmute affordance (writes to the instance — the one inline edit on this tab) |
+| 9 | **Controls** | open related cards · pause/resume · archive · kill emitters |
+
+### 8.3 Explicitly not renderable (the fence)
+
+No data exists for — and no mockup may invent — percent-complete bars, velocity/burndown charts
+(outside the `target` time view), people avatars or workload views, priority scores, activity feeds
+beyond the ledger/log sections above, aggregate analytics across programs (portfolio rollup card
+only), or inline editing of program content (the §8.2 #8 policy toggle is the sole exception). The
+review rule for design: **if an element can't cite its row in §8.1/§8.2, remove it.**
 
 ## 9. Personas emerge from the portfolio (packs demoted)
 

@@ -368,6 +368,28 @@ The division of labor in one line: **determinism for fetching and arithmetic (in
 hallucinate), judgment for belief (witnesses must be weighed in context)** — and judgment is spent
 only where witnesses disagree, which is what keeps cycles cheap.
 
+### 5.3 Operational cadence — three clocks
+
+1. **The nightly quiet sweep.** Once a day, off-hours: truth sync polls every binding, the reconciler
+   recomputes date math, drift verdicts, and phase projections, board caches refresh. Cheap by
+   construction (API polls + arithmetic; judgment only on disagreement), so it runs portfolio-wide
+   every night. Local-first semantics: it runs on the operator's daemon, so the contract is *run on
+   schedule or on wake* — a missed 3am tick fires at next server start (croniter catch-up). The
+   guarantee is "fresh as of last night by the time you look," not a fixed wall-clock hour.
+2. **Exhaust scans are event-driven, not scheduled.** The per-document scan (§5.1.2) runs when a
+   document *arrives* — a transcript synced after a 2pm meeting deposits observations that afternoon.
+   Same trigger rhythm as the existing meetings-to-backlog pipeline. Observations accumulate
+   intra-day; verdicts recompute at the next sweep or program cycle, whichever comes first.
+3. **Program cycles fire on human anchors.** Emissions are scheduled by the type/instance cadence on
+   the existing cron substrate, anchored to the operator's rhythms, not to the sweep: the
+   weekly-priorities digest drafts Sunday night to be waiting Monday morning; L10 prep fires the day
+   before the meeting; a did-it-work scoreboard refreshes weekly. Emission policy includes **send
+   windows** alongside rate caps — even autonomous-tier sends go out in business hours, because a
+   nudge is a social act and quiet hours are part of "minimal social cost."
+
+Plus one manual override: **refresh-now** per program (re-run truth sync + reconcile on demand) for
+the walking-into-the-meeting case — added to the actions inventory in §8.3.
+
 ## 6. Program lifecycle — discovery, birth, completion, retirement
 
 §5 assumes programs exist. This section is where they come from and where they go. Lifecycle:
@@ -541,9 +563,10 @@ Behavioral constraints:
 - What varies per program is keyed by the type's **state model** — never by `family`, which is
   presentation-only furniture (§3). Perceived shelf differences ("EOS reads differently than
   Roadmap") fall out of the models each shelf contains.
-- The only actions mirror the system grammar: open related cards, pause/resume, archive
-  (version-suffixed, never deleted), and the per-program kill switch (instant stop of its emitters —
-  generalizing the Quality-tab brake). Nothing on this tab performs an external action directly. Ever.
+- The only actions mirror the system grammar: open related cards, refresh-now (§5.3), pause/resume,
+  archive (version-suffixed, never deleted), and the per-program kill switch (instant stop of its
+  emitters — generalizing the Quality-tab brake). Nothing on this tab performs an external action
+  directly. Ever.
 - Intake candidates need no special UI: `program-intake` is itself a register-model program and
   renders as an ordinary row.
 
@@ -606,8 +629,8 @@ is it watching?"* — enough to audit the program and adjust its behavior withou
 | Observations | ledger entries: timestamp · kind · claim · sentinel · source link (append-only) |
 | Emissions | when · action · linked card · outcome (pending/approved/sent/declined) |
 | Bindings | role · kind · anchor (linkable out) · health (ok/unreachable/ambiguous, from the cycle health check) · last verified |
-| Emission policy | muted kinds · audience overrides · rate caps — the one editable surface on the tab (mute/unmute writes to the instance) |
-| Actions | open related cards · pause/resume · archive · kill emitters |
+| Emission policy | muted kinds · audience overrides · rate caps · send windows (§5.3) — the one editable surface on the tab (mute/unmute writes to the instance) |
+| Actions | open related cards · refresh-now (re-run truth sync + reconcile for this program, §5.3) · pause/resume · archive · kill emitters |
 
 ### 8.4 Explicitly not renderable (the fence)
 

@@ -438,7 +438,7 @@ def _spawn(cmd, exit_holder=None):
     route can stream events as they arrive.
 
     Lifecycle ownership (C1): the child is launched in its OWN session/process
-    group (start_new_session=True) so the whole `claude` process TREE can be
+    group (via platform_lib.process_group_kwargs()) so the whole `claude` process TREE can be
     killed as a unit. A try/finally guarantees teardown even when the consumer
     closes the generator early — the normal SSE case, where the browser
     disconnects and the generator receives GeneratorExit at the `yield`. On any

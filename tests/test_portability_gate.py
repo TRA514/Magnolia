@@ -33,6 +33,13 @@ def test_flags_sys_platform(tmp_path):
     assert any("sys.platform" in o or "platform branch" in o for o in offenders)
 
 
+def test_flags_platform_system(tmp_path):
+    f = tmp_path / "bad.py"
+    f.write_text('if platform.system() == "Windows":\n    pass\n', encoding="utf-8")
+    offenders = pg.scan([str(f)])
+    assert any("platform.system" in o or "platform branch" in o for o in offenders)
+
+
 def test_does_not_flag_sh_substring_midstring(tmp_path):
     f = tmp_path / "good.py"
     f.write_text('url = "https://esm.sh/@milkdown/core"\nname = "bashful"\n',

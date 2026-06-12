@@ -24,6 +24,7 @@ RULES = [
     (re.compile(r"\bstart_new_session\s*="),       "start_new_session= (use platform_lib.process_group_kwargs())"),
     (re.compile(r"os\.name\s*==\s*['\"]nt['\"]"),  "os.name=='nt' platform branch (route through platform_lib)"),
     (re.compile(r"sys\.platform"),                 "sys.platform branch (route through platform_lib.os_kind())"),
+    (re.compile(r"platform\.system\s*\("),         "platform.system() branch (route through platform_lib.os_kind())"),
     (re.compile(r"""\[\s*["']bash["']"""),         "direct bash invocation of a shell script (call Python via sys.executable)"),
     (re.compile(r"""["'][^"']*\.sh["']"""),        "invoking a .sh shell script (port to Python; .sh is non-portable)"),
 ]

@@ -102,6 +102,8 @@ Flags the leak-past-the-seam patterns:
 Wired as a 4th gate that rides the existing `pytest` invocation. Allowlists
 `platform_lib.py` itself. Closes the seam the portability epic left open.
 
+**Implemented narrower than first sketched:** the gate scans runtime code (`.py`/`.js`) only and enforces the OS/shell structural rules (`.sh`/bash, `os.name`/`sys.platform`/`platform.system()`, `start_new_session`). The em-dash/smart-quote and path-separator rules were dropped -- markdown legitimately uses em-dashes, and the real em-dash bug lives in runtime-generated text the gate cannot see. That ASCII-safe-output discipline moved into the build-contract standing item in `meta-scope-extension` and the magnolia-build iron law. See the `portability_gate.py` module docstring and invariant #8 for the authoritative scope.
+
 ## Explicitly NOT building (YAGNI)
 
 - **No structure-lint gate** — PR/divergence de-prioritized for a local project.

@@ -136,3 +136,11 @@ def test_meta_integration_discovery_denylist_clean():
     body = _read(".claude/skills/meta-integration-discovery/SKILL.md")
     for pat in (r"\bjay\b", r"board 1096", r"/Users/", r"~/pm-os"):
         assert not re.search(pat, body, re.IGNORECASE), f"leaks /{pat}/"
+
+
+def test_scope_skills_in_core_pack():
+    from ruamel.yaml import YAML
+    packs = YAML(typ="safe").load((REPO / ".claude/packs.yaml").read_text())
+    core = packs["core"]["skills"]
+    assert "meta-scope-extension" in core
+    assert "meta-integration-discovery" in core

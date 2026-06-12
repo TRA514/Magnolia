@@ -35,6 +35,8 @@ core:
     - meta-create-worker
     - meta-create-card-type
     - meta-create-adapter
+    - meta-scope-extension
+    - meta-integration-discovery
     - meta-refine-workflow
     - workflow-magnolia-build
     - workflow-doctor

@@ -118,13 +118,45 @@ Types choose exactly one. New state models require a design doc and a gate chang
 
 | Model | Shape | Drift means | Seed examples |
 |---|---|---|---|
-| **pipeline** | Ordered phases, each with an entry/exit window | Phase overage, date slip, sequence violation, starved supply | Roadmap initiatives; launch checklists |
+| **pipeline** | Ordered phases, each with an entry/exit window | Checkpoint slip, phase overage, starved supply | Roadmap initiatives; launch checklists |
 | **cycle** | Recurring steady-state with a cadence artifact; no phases | Artifact late/missing; captured items not reflected; declared items failing the is-it-done gate | Weekly priorities; L10 prep; scorecard digest |
 | **target** | Metric(s) vs. expected trajectory over a window | Actual diverging from predicted beyond tolerance | Did-it-work scoreboard; EA ramp; forecast honesty |
 | **register** | A set of items, each with an owner and a closure condition | Item aging past policy; orphaned items; closures unverified or uncommunicated | Customer-promise ledger; decision log; risk register; bug-queue aging |
 
 Drift verdicts are uniform across models — `holding` / `drifting` / `broken` — so the UI, escalation
 policy, and portfolio rollups never special-case a type. What *computes* the verdict is model-specific.
+
+### 2.1 Phases are reported, never enforced (pipeline)
+
+The pipeline model is **not a workflow engine**. The system never moves work through phases, never
+gates a transition, and never blocks anything for being "out of order." `phase` is a **projection** —
+"where does the evidence say this is?" — computed each cycle, known through three doors in order of
+preference:
+
+1. **Derived** (the workhorse): the type declares `phase_rules` — a small mapping from truth-binding
+   state to phase ("epic has children in an active sprint → execution"; "epic status Done →
+   shipped"). Phase becomes a projection of tracker truth; zero bookkeeping. `phase_entered` = the
+   first cycle the projection changed.
+2. **Observed**: a sentinel hears "design review passed, build starts Monday" → interpretation door,
+   `propose-update` card.
+3. **Attested**: the operator says so (`human-attested`).
+
+Consequences, stated so nobody rebuilds the tar pit later:
+
+- **Backward moves are history, not errors.** Real work bounces planning↔execution; the projection
+  follows the evidence and the phase history records the bounce. There is no sequence enforcement
+  anywhere.
+- **Phases stay coarse on purpose.** They answer "where is the center of gravity," nothing finer.
+  Incremental delivery (early-adopter cohort live, partial ship, ramp) is *not* modeled in phases —
+  it lives in **checkpoints** and in the tracker itself, one click away through the binding. A shop
+  that wants EA/ramp/GA as phases declares them in its type; the mechanism doesn't change.
+- **Checkpoints carry the drift.** A checkpoint is a *dated, instrumented promise* — "X will be true
+  by DATE, measured by INSTRUMENT" ("EA cohort live by Jul 15 — Pendo segment exists"). Most pipeline
+  drift is date math against checkpoints: deterministic, cheap, and the thing that actually matters.
+  Phase overage (time-in-phase vs. the type's window) is a softer, secondary signal.
+- **Minimum viable pipeline program = a title + a truth binding + two or three dated checkpoints.**
+  Phase is derived sugar on top; if a type declares no `phase_rules`, phase is attested-or-absent and
+  the program still works. This is the floor slice 3 builds.
 
 ## 3. Program type — registry entry (draft schema)
 
@@ -144,6 +176,14 @@ policy, and portfolio rollups never special-case a type. What *computes* the ver
     { "id": "verified",   "label": "Verified", "terminal": true }
   ],
   "cadence": "weekly",
+  "phase_rules": {
+    "from": "binding:tracker",
+    "map": [
+      { "when": "epic.children_in_active_sprint > 0", "phase": "execution" },
+      { "when": "epic.status == 'Done'",              "phase": "shipped" }
+    ],
+    "fallback": "human-attested"
+  },
   "sources": [
     { "kind": "transcripts", "mode": "read" },
     { "kind": "project_management", "mode": "read", "via": "adapter" },
@@ -192,6 +232,7 @@ program_id: PROG-0007
 type: roadmap-initiative
 status: active                 # candidate | active | paused | archived (§6); drift computed only for active
 title: "Payments reconciliation revamp"
+aliases: ["payments revamp", "recon project"]   # how people actually refer to it; grows from observations; feeds the portfolio digest (§5.1)
 owner_role: product            # role reference, never a name (invariant #1)
 created: 2026-06-12T09:00:00Z
 phase: discovery
@@ -235,14 +276,10 @@ respects invariant #6.
 
 ## 5. The cycle pipeline (observe → reconcile → emit → log)
 
-1. **Observe.** Cron fires the program's cadence (existing cron substrate; one job per cadence tier or
-   per program — design agent decides; never keyed off `family`, which is presentation-only). Sentinels run on the existing dispatch substrate (`claude -p`,
-   worker-style scoping) but with a distinct contract: *output is observations conforming to the
-   schema, stamped onto programs* — never artifacts, never tasks. Sentinels are defined like workers
-   (`scripts/sentinels/*.md` or a `kind: sentinel` worker flag — design agent decides), declaring
-   sources and the observation kinds they may emit. Note: sentinels ask a different question of the
-   same exhaust the task-extraction pipeline reads (transcripts, threads, email). They share scan
-   scheduling where convenient but share **no** output path.
+1. **Observe.** Two feeds, per the topology in §5.1: deterministic truth sync over the program's
+   bindings, plus whatever observations the exhaust scans have stamped since the last cycle.
+   Cron fires the program's cadence (existing cron substrate; one job per cadence tier or per
+   program — design agent decides; never keyed off `family`, which is presentation-only).
 2. **Reconcile.** `scripts/cadence/reconcile.py` per program: deterministic checks first (dates,
    adapter truth, aging policies), judged interpretation only where determinism can't reach
    (reusing `judge.py` machinery with cadence rubrics). Outputs: drift verdict, mechanical state
@@ -265,6 +302,36 @@ counter-metrics are part of the emitter spec, not an afterthought. A nudge loop'
 "commitments converge at minimal social cost," and the cheap path — nudge harder — must be fenced in
 the schema (`max_nudges_per_person_per_week`), enforced by the reconciler, visible on the program.
 
+### 5.1 Sentinel topology — three mechanisms, not a fleet
+
+"Sentinel" names a contract (source-cited observations in, never artifacts or tasks out), not an
+agent per program or per shelf. Three concrete mechanisms cover everything, and only one of them is
+an LLM agent:
+
+1. **Truth sync — not an agent.** Polling the tracker, reading the EOS sheet, checking a metric:
+   deterministic adapter code running *inside* the reconciler's cycle, per binding. No dispatch, no
+   model call for the common path. Most of what keeps the board current is this. (Sentinel names
+   like `tracker-truth` in type definitions refer to these in-cycle checks.)
+2. **The exhaust scan — one LLM pass per new document, for the whole portfolio.** When a transcript,
+   thread, or email lands, *one* run (existing dispatch substrate, `claude -p`, worker-style scoping)
+   reads it once carrying the **portfolio digest** in context, and emits everything in a single
+   pass: `observe` onto existing programs, `capture` into cycle inboxes, `candidate` evidence into
+   the intake register (§6.1's routing verbs — movement and intake are *two questions in the same
+   pass*, not two agent fleets). Cost scales with the operator's exhaust — O(documents), not
+   O(programs × documents); twenty programs cost the same scan as five. This is the same shape as
+   the existing meetings-to-backlog harness, and it shares scan *scheduling* with task extraction
+   where convenient while sharing **no** output path.
+3. **Specialty watchers — only where a type declares them.** Per-program, on the program's cadence,
+   for sources the exhaust scan can't see (e.g. `metric-watch` querying analytics for a `did-it-work`
+   target). These are worker-defined (`scripts/sentinels/*.md` or a `kind: sentinel` worker flag —
+   design agent decides) and declare which observation kinds they may emit.
+
+**The portfolio digest** is the artifact that makes mechanism 2 work: a compact index maintained by
+`program_lib` — per active program: id, title, `aliases`, type, state; plus the intake signals of
+live types. It is how a scan matches "the payments thing" in a transcript to `PROG-0007`, and it is
+regenerated from program files (never hand-maintained). Digest size at large portfolios is an open
+question (§11).
+
 ## 6. Program lifecycle — discovery, birth, completion, retirement
 
 §5 assumes programs exist. This section is where they come from and where they go. Lifecycle:
@@ -273,9 +340,9 @@ observing but mutes emitters; nothing is ever deleted.
 
 ### 6.1 Intake: the classification pass
 
-Intake sentinels run over the same exhaust as movement sentinels (transcripts, threads, email) but
-are scoped to the **active program-type registry** — the registry doubles as the classification
-taxonomy. For each new item, intake routes it with a closed verb set:
+Intake is the second question asked by the exhaust scan (§5.1) — same pass, same document — scoped
+to the **active program-type registry**, which doubles as the classification taxonomy. For each new
+item, the scan routes with a closed verb set:
 
 - **`observe`** — it's evidence about an *existing* program → observation on that program (handed to
   the movement path).
@@ -567,8 +634,10 @@ type with no programs is inert — so personas come for free from the existing a
 - Observation dedup/merge policy when multiple sentinels cite the same evidence.
 - Reconciler determinism boundary: enumerate which checks per state model are deterministic vs.
   judged, and the cadence rubrics for the judged ones.
-- Sentinel scheduling: piggyback existing transcript-processing scans vs. independent cron — cost vs.
-  freshness.
+- Portfolio-digest scaling: at what program count does the per-document exhaust scan need digest
+  compaction or sharding, and how do stale `aliases` get pruned (append-only ledger vs. curated list)?
+- `phase_rules` expression grammar: how rich can `when` clauses be before they need a real evaluator —
+  start with a fixed set of named predicates per adapter family?
 - Cycle-program "capture inbox" UX: how mid-week captures are confirmed into next week's digest.
 - Rollover conventions at period boundaries (quarterly EOS rock turnover, new-quarter roadmap
   re-seeding) — archive mechanics are specified in §6.4; the *cadence of renewal* is not.

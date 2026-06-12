@@ -35,21 +35,25 @@ State briefly that you've loaded the invariants + conventions and will work the 
 ## Step 3 — Take the ask
 Accept a PRD/spec path, pasted details, or a freeform conversation. If the ask is thin or ambiguous, ask a few targeted clarifying questions before designing — do not guess at scope.
 
-## Step 4 — Route
-- **Known engine extension** (a new worker, card-type, adapter, or skill): hand off to the matching factory skill — `meta-create-worker` / `meta-create-card-type` / `meta-create-adapter` / `meta-create-skill` (each reads `meta-factory-core` first). They own scaffold → capture → gate → commit → Keep/Undo.
-- **Larger / novel / cross-subsystem feature:** run the full loop (Step 5).
+## Step 4 — Route (always scope first)
+Before routing anywhere, run **`meta-scope-extension`** to decompose the approved design onto the engine's surfaces (adapter / worker / card / platform-UI), decide reuse-vs-extend-vs-build-new per surface against what already exists, and emit the **build contract**. Even a single-factory build is briefed from a contract — produce it first either way.
+
+- **Known single-surface extension** (a new worker, card-type, adapter, or skill): the contract will name exactly one surface — hand off to the matching factory skill, briefed by that surface's contract row — `meta-create-worker` / `meta-create-card-type` / `meta-create-adapter` / `meta-create-skill` (each reads `meta-factory-core` first). They own scaffold → capture → gate → commit → Keep/Undo.
+- **Larger / novel / multi-surface feature:** run the full loop (Step 5), with the build contract driving the per-subagent briefs.
 
 ## Step 5 — Run the loop
 Follow the superpowers workflow, in order:
 1. `superpowers:brainstorming` — design first; 2–3 options + a recommendation; get approval before writing. The operator owns WHAT; the skills own HOW.
-2. `superpowers:writing-plans` — bite-sized TDD tasks with the green gates baked in.
-3. `superpowers:subagent-driven-development` — fresh subagent per task with two-stage review (spec-compliance first, then code-quality). For epic scale, consider git worktrees / parallel dispatch for independent tasks. (Tell subagents to inspect history with `git show`/`git diff`, never `git checkout` — switching branches mid-run derails the working tree.)
-4. Live e2e verification — run the real board/feature and observe the change, not just tests.
-5. `superpowers:finishing-a-development-branch` — then branch → PR → merge per the kickoff merge authority.
+2. **scope-extension** — run `meta-scope-extension`: decompose onto surfaces (adapter / worker / card / platform-UI), decide reuse vs extend vs build-new against what exists, and emit the build contract. Run `meta-integration-discovery` for any external surface before deciding its adapter.
+3. `superpowers:writing-plans` — bite-sized TDD tasks with the green gates baked in.
+4. `superpowers:subagent-driven-development` — fresh subagent per task with two-stage review (spec-compliance first, then code-quality). Brief each subagent with its surface's **contract** from the build contract — the exact factory/seam, the composition boundary, the proving gate, and ASCII-safe runtime output (hyphen not em-dash) — never a bare "build a card". Bind it to the seam. For epic scale, consider git worktrees / parallel dispatch for independent tasks. (Tell subagents to inspect history with `git show`/`git diff`, never `git checkout` — switching branches mid-run derails the working tree.)
+5. Live e2e verification — run the real board/feature and observe the change, not just tests.
+6. `superpowers:finishing-a-development-branch` — then branch → PR → merge per the kickoff merge authority.
 
 ## Iron laws (non-negotiable)
 - **Brainstorm before building.** No code until a design is approved — even when it "looks simple."
-- **Gates green before every code commit** (invariant #2) and **never commit to `main`** — branch always.
+- **Gates green before every code commit** (invariant #2) and **never commit to `main`** — branch always. The four gates: `python3 -m pytest` (includes `tests/test_engine_no_jay.py`, the de-personalization gate), `python3 scripts/card_schema.py` (→ `registry.json OK`), and `python3 scripts/portability_gate.py` (→ `portability OK`).
+- **Bind to the seam before building.** Decompose onto a surface (via `meta-scope-extension`) and brief the subagent with that surface's contract; never let it improvise in a layer the architecture already owns — `platform_lib` for OS/shell, the card registry for display, `profile_lib` for identity. ASCII-safe runtime output (hyphen, not em-dash — it garbles on Windows terminals).
 - **The engine stays de-personalized** (invariant #1): capture team/person nuance to `profile/`, never into the artifact (invariant #4).
 - **Dev board only** (invariant #7); never operate the production install from engine work.
 - **Git stays invisible to the operator** where the factory handles it: speak Keep/Undo, not commits/reverts.
@@ -58,9 +62,11 @@ Follow the superpowers workflow, in order:
 - Preflight passed: the superpowers skills were present (installed if not), the profile was populated (onboarded if not), and the git author was the current user's own.
 - The operator typed `/magnolia-build` (or equivalent) and never had to restate the operating context.
 - The reference layer was read before any code was written.
-- The build went through brainstorm → plan → subagent-driven build → e2e verify → ship, with gates green and the engine denylist-clean.
+- The build went through brainstorm → scope-extension → plan → subagent-driven build → e2e verify → ship, with each subagent briefed from the build contract, all four gates green, and the engine denylist-clean.
+- Ship was simple: all four gates green, then commit per the kickoff merge authority (merge to `main` or open a PR) — no extra ceremony for this local project.
 
 ## Related skills
 - **superpowers:brainstorming**, **superpowers:writing-plans**, **superpowers:subagent-driven-development**, **superpowers:finishing-a-development-branch** — the loop.
+- **meta-scope-extension** — the decomposition step after brainstorm that emits the build contract; **meta-integration-discovery** — the external-capability probe it invokes per external surface.
 - **meta-factory-core** and the **meta-create-\*** family — the routing target for known engine extensions.
 - **meta-onboard** — first-time setup when `profile/` is unpopulated; **workflow-doctor** — detect/remediate a missing or degraded capability (e.g. the superpowers plugin, `gh` auth, the dev board).

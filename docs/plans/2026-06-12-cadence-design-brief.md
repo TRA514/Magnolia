@@ -42,13 +42,16 @@ The four seed loops it must support on day one (detailed in the Appendix):
 2. **Schema gate** — `scripts/program_schema.py`, the sibling of `card_schema.py`: validates the
    program-type registry (closed state-model set, theme-token-only presentation, instrumented
    checkpoints) and becomes part of invariant #2's green gates.
-3. **UI design for the Cadence tab** — see the UI contract (Part B §6). Table-first, grouped by loop
+3. **UI design for the Cadence tab** — see the UI contract (Part B §7). Table-first, grouped by loop
    family, rendered entirely from the registry (no per-type hardcoded UI), theme tokens only.
 4. **Sentinel + reconciler + emitter pipeline design** — how the observe → reconcile → emit cycle runs
    on the existing cron + dispatch substrate, and how emissions enter the existing task system.
+   Includes the full **program lifecycle** (Part B §6): intake classification, the intake register,
+   birth proposal cards with bootstrap emissions, completion/archive proposals, and the
+   portfolio-janitor program.
 5. **Factory extension** — `meta-create-program-type`, the fourth sibling under `meta-factory-core`
    (scaffold → capture-to-profile → gate-green → commit → Keep/Undo receipt).
-6. **Build slices** — refine the slice plan in Part B §8 into a sequenced plan with verification steps
+6. **Build slices** — refine the slice plan in Part B §9 into a sequenced plan with verification steps
    per slice (live board e2e, per conventions).
 
 ## Non-negotiable philosophy constraints
@@ -100,7 +103,7 @@ to create an ungated write path or an unmeasurable promise.
 | **Program** | A unit of custody: declared intent + dates + state, held over time | Task (but persistent) |
 | **Program type** | Declarative shape: state model, phases/fields, cadence, sentinels, emitters, sources | Card type in `registry.json` |
 | **State model** | One of a **closed set of four** behaviors a type builds on | (new — the fuck-up fence) |
-| **Sentinel** | Reads sources asking one question: *did anything move a program?* Emits observations | Worker (reuses dispatch substrate, different contract) |
+| **Sentinel** | Reads sources and emits observations. Two contracts: **movement** (did anything move an existing program?) and **intake** (is anything here cadence-level — new program candidate, or capture for a cycle program?) | Worker (reuses dispatch substrate, different contract) |
 | **Observation** | Append-only, source-cited evidence entry on a program | Activity-log entry |
 | **Reconciler** | Per cycle: declared vs. observed → drift verdict + state updates (facts) + proposals (interpretations) | Judge + enforce_lib |
 | **Emitter** | Declarative `on: <condition> → action` playbook; all actions exit as tasks | shipper / card actions |
@@ -151,6 +154,15 @@ policy, and portfolio rollups never special-case a type. What *computes* the ver
     { "on": "phase_overage",      "action": "propose-update", "template": "phase-stall" },
     { "on": "drift:broken",       "action": "escalate" }
   ],
+  "intake": {
+    "route": "candidate",
+    "signals": ["kickoff/initiative language", "new epic appears in tracker", "recurring theme with an owner and an outcome"],
+    "birth_threshold": { "min_independent_sources": 2, "or_explicit_declaration": true },
+    "bootstrap_emissions": [
+      { "action": "draft-ticket",   "template": "create-tracker-initiative" },
+      { "action": "propose-update", "template": "add-roadmap-entry" }
+    ]
+  },
   "presentation": { "chip_tokens": { "discovery": "--phase-early", "execution": "--phase-active" } }
 }
 ```
@@ -158,7 +170,8 @@ policy, and portfolio rollups never special-case a type. What *computes* the ver
 Gate checks (minimum): `state_model` ∈ closed set; phases only on `pipeline`; every emitter `action`
 ∈ closed action set; every source has an explicit `mode`; `mode: read` sources have no write-capable
 emitter targeting them; every checkpoint instrument resolvable; presentation uses theme tokens only;
-no identity literals (denylist scan extends to `cadence/**`).
+no identity literals (denylist scan extends to `cadence/**`); `intake.route` ∈ closed routing set
+(§6.1); `route: candidate` requires a `birth_threshold`; bootstrap emissions ∈ closed action set.
 
 ## 4. Program instance — file format (draft)
 
@@ -168,6 +181,7 @@ no identity literals (denylist scan extends to `cadence/**`).
 ---
 program_id: PROG-0007
 type: roadmap-initiative
+status: active                 # candidate | active | paused | archived (§6); drift computed only for active
 title: "Payments reconciliation revamp"
 owner_role: product            # role reference, never a name (invariant #1)
 created: 2026-06-12T09:00:00Z
@@ -235,7 +249,76 @@ counter-metrics are part of the emitter spec, not an afterthought. A nudge loop'
 "commitments converge at minimal social cost," and the cheap path — nudge harder — must be fenced in
 the schema (`max_nudges_per_person_per_week`), enforced by the reconciler, visible on the program.
 
-## 6. UI contract — the Cadence tab
+## 6. Program lifecycle — discovery, birth, completion, retirement
+
+§5 assumes programs exist. This section is where they come from and where they go. Lifecycle:
+`candidate → active → paused → archived`. Drift is computed only for `active`; `paused` keeps
+observing but mutes emitters; nothing is ever deleted.
+
+### 6.1 Intake: the classification pass
+
+Intake sentinels run over the same exhaust as movement sentinels (transcripts, threads, email) but
+are scoped to the **active program-type registry** — the registry doubles as the classification
+taxonomy. For each new item, intake routes it with a closed verb set:
+
+- **`observe`** — it's evidence about an *existing* program → observation on that program (handed to
+  the movement path).
+- **`capture`** — it's an item for a `cycle` program's inbox (a mid-week priority, an L10 issue) →
+  `capture` observation; the next digest reconciles it. New things for cycle programs are captures,
+  never births.
+- **`candidate`** — it looks program-worthy for an active type → evidence added to the intake
+  register (§6.2). Intake never creates programs directly.
+- **`ignore`** — not cadence-level. The existing task-extraction pipeline runs independently either
+  way; one item can legitimately be both a task and program evidence.
+
+Each type declares its own discovery rules in the registry `intake` block (§3): the signals to watch
+for, the routing verb, the birth threshold, and `bootstrap_emissions`. Adding a program type
+automatically teaches intake what to look for — no classifier changes.
+
+### 6.2 The intake register (self-hosting nursery)
+
+Candidates are **not** program files — `datasets/programs/` means "under custody." They are items in
+a seeded `register`-model program, `program-intake`. Each candidate accumulates source-cited evidence
+across scans. The birth proposal fires only when the type's `birth_threshold` is crossed — e.g.
+**2+ independent sources, or one explicit declaration** ("we're kicking off X"). This is the
+anti-noise fence: a single offhand mention must never become a proposal card. Declined candidates
+stay in the register append-only, closed-with-reason — the memory that prevents re-proposing the
+same thing. Only material new evidence reopens one.
+
+### 6.3 Birth
+
+The proposal is an existing **`recommendation` card** (no new card type for v1): diff body = the
+prefilled program file (type, title, checkpoints inferred from evidence, the citations that earned
+the proposal). **Accept** → program file created with `status: active` + the type's
+`bootstrap_emissions` enqueued as ordinary tasks (e.g. tracker-initiative draft via the
+ticket-creator worker → collab queue → Tier-2; roadmap-table entry as a propose-update). **Reject**
+→ candidate closed-with-reason in the register.
+
+### 6.4 Completion and retirement
+
+Completion detection belongs to the **reconciler**, not a sentinel, via the two existing doors:
+
+- **Fact**: terminal phase reached, tracker epic closed, `did-it-work` checkpoint verified → archive
+  proposal with the evidence attached.
+- **Interpretation**: no observations and no emissions for N cycles → "this program seems
+  complete/dormant — archive it?" (distinguishing *dormant program* from *blind sentinel* is the
+  portfolio janitor's job, §6.5).
+
+Both emit `propose-update: archive`. Accept → `status: archived`, file moves to
+`datasets/programs/archive/` (version-suffixed, invariant #6). The manual archive button on the
+Cadence row (§7) remains; the system proposing it first is the goal state.
+
+### 6.5 The portfolio janitor
+
+Portfolio maintenance is itself a seeded program — `portfolio-health`, `register` model, whose
+**source is the program store and the intake register**: stale actives (no observations in N cycles —
+and whether that's a dead program or a blind sentinel), candidates aging unresolved, overlapping or
+duplicate programs, supply ("enough refined work in front of the team" lives here, not in any single
+initiative), and archive sweeps. Self-hosting means the janitor gets a standard Cadence row, cycle
+log, emitters, and kill switch — the maintainer is governed by the same machinery it maintains, and
+extending it is editing a program type, not writing new engine code.
+
+## 7. UI contract — the Cadence tab
 
 A sibling top-level tab to Now/Activity/Quality/Engine/Schedules. Rendered entirely from the registry
 + program frontmatter (like cards); theme tokens only; calm by default.
@@ -254,7 +337,7 @@ A sibling top-level tab to Now/Activity/Quality/Engine/Schedules. Rendered entir
   emitters — generalizing the Quality-tab brake).
 - Nothing on this tab performs an external action directly. Ever.
 
-## 7. Personas via program packs
+## 8. Personas via program packs
 
 `cadence/packs.yaml` (or extend `.claude/packs.yaml` — design agent decides): named sets of program
 types. `profile/config.yaml` gains `active_program_packs`. Seed packs:
@@ -265,7 +348,7 @@ types. `profile/config.yaml` gains `active_program_packs`. Seed packs:
 - A teammate forking the engine gets the types; their programs, sources, distros, and channels are
   theirs (profile + datasets). The asymmetry stays private; the machinery ships.
 
-## 8. Build slices (vertical, each independently verifiable)
+## 9. Build slices (vertical, each independently verifiable)
 
 1. **Substrate**: program file format + `program_lib.py` CRUD + registry + `program_schema.py` gate
    wired into the green gates. Seed `weekly-priorities` + `roadmap-initiative` types. No UI, no agents
@@ -283,12 +366,15 @@ types. `profile/config.yaml` gains `active_program_packs`. Seed packs:
    with `ladder_lib`; shadow tier by default.
 7. **`register` + `target` models**: promise ledger and did-it-work scoreboard types; Pendo/metric
    instruments for `target`.
-8. **Attachments slice**: task `attachments:` + messaging adapter bundling + graceful degradation.
-9. **EOS pack**: read-only sheet source, L10-prep cycle type, pre-L10 nudge emitters with rate caps.
-10. **Factory**: `meta-create-program-type` under `meta-factory-core`; portfolio rollup card (weekly
+8. **Lifecycle**: intake sentinel + `program-intake` register + birth proposal cards with bootstrap
+   emissions + archive proposals + the `portfolio-health` janitor program. (Needs slices 5–7:
+   sentinels, the proposal door, and the register model.)
+9. **Attachments slice**: task `attachments:` + messaging adapter bundling + graceful degradation.
+10. **EOS pack**: read-only sheet source, L10-prep cycle type, pre-L10 nudge emitters with rate caps.
+11. **Factory**: `meta-create-program-type` under `meta-factory-core`; portfolio rollup card (weekly
     cross-program digest) last, once ≥2 families run.
 
-## 9. Open questions for the design agent
+## 10. Open questions for the design agent
 
 - Single-file vs. directory-per-program threshold and migration (invariant #6-safe).
 - Observation dedup/merge policy when multiple sentinels cite the same evidence.
@@ -297,7 +383,12 @@ types. `profile/config.yaml` gains `active_program_packs`. Seed packs:
 - Sentinel scheduling: piggyback existing transcript-processing scans vs. independent cron — cost vs.
   freshness.
 - Cycle-program "capture inbox" UX: how mid-week captures are confirmed into next week's digest.
-- Archive/rollover conventions for completed programs (quarter boundaries, EOS rock turnover).
+- Rollover conventions at period boundaries (quarterly EOS rock turnover, new-quarter roadmap
+  re-seeding) — archive mechanics are specified in §6.4; the *cadence of renewal* is not.
+- Candidate merging: two intake candidates that are the same initiative described differently —
+  merge policy and how merged evidence is attributed.
+- Birth-threshold tuning per type: are the defaults (2 sources / explicit declaration) right for
+  low-volume types like EOS rocks, which are declared once in a quarterly session?
 - Cross-program awareness: where does "these two drifts share a root cause — the same undecided
   decision" live? (Likely the portfolio rollup, not the per-program reconciler — keep the reconciler
   single-program and dumb.)
@@ -314,3 +405,5 @@ types. `profile/config.yaml` gains `active_program_packs`. Seed packs:
 | EOS facilitation | `eos-rock` (per rock), `eos-l10-prep` (cycle), `eos-scorecard-digest` (cycle) | pipeline/target + cycle | sheet-watch (read-only), transcript-watch, thread-watch | pre-L10 nudges (rate-capped), L10 issue-list artifact, escalate |
 | Customer-promise ledger (ext.) | `promise-ledger` | register | gong/transcript commitment-watch, roadmap-truth | closure draft-message, escalate on silent breaks |
 | Forecast honesty (ext.) | `forecast-honesty` | target | velocity instrument (existing estimate skill), tracker-truth | propose-update (date divergence), escalate |
+| Program intake (system) | `program-intake` (seeded) | register | intake sentinels over all exhaust | birth proposal (recommendation card) on threshold |
+| Portfolio janitor (system) | `portfolio-health` (seeded) | register | program store + intake register | archive proposals, staleness escalations, supply check |

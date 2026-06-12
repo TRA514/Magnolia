@@ -75,10 +75,11 @@ These extend the existing invariants; the design must not bend them:
   (distro lists, channels) live in `profile/` via `profile_lib`.
 - **Manual-on-purpose sources are read-only forever.** A source declared `mode: read` in a program
   type can never gain write access by configuration. The EOS sheet is the canonical example.
-- **Fact vs. interpretation.** Program state mutates through exactly two doors: (a) adapter-grounded
-  facts (e.g. tracker status changed) applied mechanically with an observation citing the evidence;
-  (b) interpretations (off-track judgments, date-change proposals) emitted as proposal cards a human
-  approves — climbing the existing trust ladder like any other action type.
+- **Fact vs. interpretation.** Program state mutates through exactly two doors: (a) **uncontradicted**
+  adapter-grounded readings (e.g. tracker status changed, nothing on the ledger disputes it) applied
+  mechanically with an observation citing the evidence; (b) interpretations — off-track judgments,
+  date-change proposals, and *contradicted* readings (stale tracker vs. fresh transcripts) — emitted
+  as proposal cards a human approves, climbing the existing trust ladder like any other action type.
 - **No uninstrumented checkpoint.** Every date, target, or invariant a program declares must name how
   it is measured (an adapter query, a metric source, a deterministic check, or explicitly
   `human-attested`). A checkpoint without an instrument fails the schema gate. (This is the LFD
@@ -308,10 +309,18 @@ the schema (`max_nudges_per_person_per_week`), enforced by the reconciler, visib
 agent per program or per shelf. Three concrete mechanisms cover everything, and only one of them is
 an LLM agent:
 
-1. **Truth sync — not an agent.** Polling the tracker, reading the EOS sheet, checking a metric:
-   deterministic adapter code running *inside* the reconciler's cycle, per binding. No dispatch, no
-   model call for the common path. Most of what keeps the board current is this. (Sentinel names
-   like `tracker-truth` in type definitions refer to these in-cycle checks.)
+1. **Truth sync — not an agent, and not a verdict.** Polling the tracker, reading the EOS sheet,
+   checking a metric: deterministic adapter code running *inside* the reconciler's cycle, per
+   binding. No dispatch, no model call for the common path. Its output is **a snapshot observation,
+   not a state update** — *"tracker says epic ABC-123 In Progress, 4/23 units done, last updated
+   31d ago"* — deposited on the ledger like any other witness testimony, staleness included.
+   **Deterministic covers fetching and arithmetic only** (read the field verbatim, compute the date
+   math); *believing* is the reconciler's job (§5.2). Tree traversal is one generic adapter-family
+   capability — `fetch(anchor, depth)` → normalized node summaries (id, title, status, dates,
+   last_updated, children) — not per-program code; `traverse` is just depth + link types. Sources
+   too messy to fetch mechanically declare `sync: judged` on the binding: a small LLM read extracts
+   into the *same* observation schema. (Sentinel names like `tracker-truth` in type definitions
+   refer to these in-cycle checks.)
 2. **The exhaust scan — one LLM pass per new document, for the whole portfolio.** When a transcript,
    thread, or email lands, *one* run (existing dispatch substrate, `claude -p`, worker-style scoping)
    reads it once carrying the **portfolio digest** in context, and emits everything in a single
@@ -331,6 +340,33 @@ an LLM agent:
 live types. It is how a scan matches "the payments thing" in a transcript to `PROG-0007`, and it is
 regenerated from program files (never hand-maintained). Digest size at large portfolios is an open
 question (§11).
+
+### 5.2 Data flow — the tracker is a witness, not a verdict
+
+The pipeline from source to pixel is strictly one-directional:
+
+1. **Fetch** — truth sync deposits a snapshot observation per binding per cycle (append-only ledger).
+2. **Hear** — exhaust scans deposit transcript/thread/email observations (same ledger).
+3. **Reconcile** — the reconciler reads declared state (checkpoints, phase) plus all observations
+   since the last cycle, and weighs the witnesses:
+   - **Uncontradicted** structured evidence applies through the fact door (mechanical update, citing
+     the snapshot). "Uncontradicted" is the load-bearing word — a truth binding's reading auto-applies
+     only when nothing else on the ledger disputes it.
+   - **Contradicted** evidence is `sources-disagree`, and resolving it is the system's signature move,
+     not an error path: a 31-day-stale tracker field vs. three independent fresh transcript witnesses
+     → the reconciler concludes reality moved and the tracker didn't, proposes the program update
+     *with the citations*, and emits the corrective action (a drafted fix-the-tracker ticket into the
+     collab queue). **Reality wins; the bound source gets driven back into agreement with it** —
+    visibly, through the verb system, never silently in either direction. Witness weight accounts
+     for staleness (`last_updated` rides on every snapshot) and independence (three sources beat one).
+   - Drift verdict and phase projection are computed and **cached into program frontmatter**; the
+     cycle log records what was checked, heard, concluded, and emitted.
+4. **Render** — the Cadence tab renders **program files only, never a live API call**. The board is a
+   view of the data model as-of-last-cycle: local-first, fast, and inspectable offline.
+
+The division of labor in one line: **determinism for fetching and arithmetic (instruments must never
+hallucinate), judgment for belief (witnesses must be weighed in context)** — and judgment is spent
+only where witnesses disagree, which is what keeps cycles cheap.
 
 ## 6. Program lifecycle — discovery, birth, completion, retirement
 
@@ -422,9 +458,11 @@ loop. Both are **instance-level**, agent-proposed, human-verified.
 
 Each binding: `{ id, role, kind, anchor, traverse?, history?, mode }`, with `role` from a closed set:
 
-- **`truth`** — authoritative state. The reconciler's *fact door* reads only truth bindings.
-  `traverse` declares the child structure to walk under the anchor (initiative → features → unit
-  cards), so the loop tracks the tree, not just the root.
+- **`truth`** — the structured witness. Only truth bindings can feed the *fact door*, and only when
+  uncontradicted (§5.2) — "truth" names the binding's *role in reconciliation*, not a promise that
+  the source is right; a stale tracker loses to fresher independent witnesses and gets a corrective
+  emission, never silent belief. `traverse` declares the child structure to walk under the anchor
+  (initiative → features → unit cards), so the loop tracks the tree, not just the root.
 - **`signal`** — evidence streams (transcripts, threads, email). Observations only, never facts.
 - **`artifact`** — the program's own output lineage. For `cycle` programs this is the central case:
   the weekly-priorities digest file *is* the source of truth —

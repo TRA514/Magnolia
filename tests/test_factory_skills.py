@@ -110,3 +110,29 @@ def test_meta_scope_extension_denylist_clean():
     body = _read(".claude/skills/meta-scope-extension/SKILL.md")
     for pat in (r"\bjay\b", r"board 1096", r"/Users/", r"~/pm-os"):
         assert not re.search(pat, body, re.IGNORECASE), f"leaks /{pat}/"
+
+
+def test_meta_integration_discovery_exists_and_frontmatter():
+    body = _read(".claude/skills/meta-integration-discovery/SKILL.md")
+    assert body.startswith("---\n")
+    fm = body.split("---\n", 2)[1]
+    assert "name: meta-integration-discovery" in fm
+    assert "Use when" in fm
+    # the four-step probe
+    assert "mechanism" in body.lower()      # enumerate MCP / CLI / REST
+    assert "MCP" in body
+    assert "read-only" in body.lower()      # validate capability via read-only probe
+    assert "scope" in body.lower()          # auth/scope reality
+    assert "Tier-2" in body or "Tier 2" in body  # consent surface
+    # feeds the adapter factory + reads structured targets from profile
+    assert "meta-create-adapter" in body
+    assert "profile/integrations.yaml" in body
+    # produces a findings doc
+    assert "findings" in body.lower()
+
+
+def test_meta_integration_discovery_denylist_clean():
+    import re
+    body = _read(".claude/skills/meta-integration-discovery/SKILL.md")
+    for pat in (r"\bjay\b", r"board 1096", r"/Users/", r"~/pm-os"):
+        assert not re.search(pat, body, re.IGNORECASE), f"leaks /{pat}/"

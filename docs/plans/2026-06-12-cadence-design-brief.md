@@ -277,8 +277,9 @@ respects invariant #6.
 
 ## 5. The cycle pipeline (observe → reconcile → emit → log)
 
-1. **Observe.** Two feeds, per the topology in §5.1: deterministic truth sync over the program's
-   bindings, plus whatever observations the exhaust scans have stamped since the last cycle.
+1. **Observe.** Two feeds, per the topology in §5.1: truth sync over the program's bindings (local
+   reads + provider-batched sentinels), plus whatever observations the exhaust scans have stamped
+   since the last cycle.
    Cron fires the program's cadence (existing cron substrate; one job per cadence tier or per
    program — design agent decides; never keyed off `family`, which is presentation-only).
 2. **Reconcile.** `scripts/cadence/reconcile.py` per program: deterministic checks first (dates,
@@ -303,49 +304,51 @@ counter-metrics are part of the emitter spec, not an afterthought. A nudge loop'
 "commitments converge at minimal social cost," and the cheap path — nudge harder — must be fenced in
 the schema (`max_nudges_per_person_per_week`), enforced by the reconciler, visible on the program.
 
-### 5.1 Sentinel topology — three mechanisms, not a fleet
+### 5.1 Sentinel topology — sentinels are workers
 
-"Sentinel" names a contract (source-cited observations in, never artifacts or tasks out), not an
-agent per program or per shelf. Three concrete mechanisms cover everything, and only one of them is
-an LLM agent:
+A sentinel is a **worker** — same definition format (`scripts/workers/*.md` frontmatter: `tools`,
+skills, tier, timeout), same dispatch substrate, same `profile_lib.resolve_model` resolution. What
+makes it a sentinel is the contract: **its only output is observations deposited on program ledgers
+via CLI** — never artifacts, never tasks, never external writes. Two disciplines enforce that:
 
-1. **Truth sync — not an agent, and not a verdict.** Polling the tracker, reading the EOS sheet,
-   checking a metric: deterministic adapter code running *inside* the reconciler's cycle, per
-   binding. No dispatch, no model call for the common path. Its output is **a snapshot observation,
-   not a state update** — *"tracker says epic ABC-123 In Progress, 4/23 units done, last updated
-   31d ago"* — deposited on the ledger like any other witness testimony, staleness included.
-   **Deterministic covers fetching and arithmetic only** (read the field verbatim, compute the date
-   math); *believing* is the reconciler's job (§5.2). Tree traversal is one generic adapter-family
-   capability — `fetch(anchor, depth)` → normalized node summaries (id, title, status, dates,
-   last_updated, children) — not per-program code; `traverse` is just depth + link types. Sources
-   too messy to fetch mechanically declare `sync: judged` on the binding: a small LLM read extracts
-   into the *same* observation schema. (Sentinel names like `tracker-truth` in type definitions
-   refer to these in-cycle checks.)
-2. **The exhaust scan — one LLM pass per new document, for the whole portfolio.** When a transcript,
-   thread, or email lands, *one* run (existing dispatch substrate, `claude -p`, worker-style scoping)
-   reads it once carrying the **portfolio digest** in context, and emits everything in a single
-   pass: `observe` onto existing programs, `capture` into cycle inboxes, `candidate` evidence into
-   the intake register (§6.1's routing verbs — movement and intake are *two questions in the same
-   pass*, not two agent fleets). Cost scales with the operator's exhaust — O(documents), not
-   O(programs × documents); twenty programs cost the same scan as five. This is the same shape as
-   the existing meetings-to-backlog harness, and it shares scan *scheduling* with task extraction
-   where convenient while sharing **no** output path.
-3. **Specialty watchers — only where a type declares them.** Per-program, on the program's cadence,
-   for sources the exhaust scan can't see (e.g. `metric-watch` querying analytics for a `did-it-work`
-   target). These are worker-defined (`scripts/sentinels/*.md` or a `kind: sentinel` worker flag —
-   design agent decides) and declare which observation kinds they may emit.
+- **Courier, not author.** Snapshot fields are recorded *verbatim from tool results* ("status field
+  reads 'In Progress', updated 2026-05-12"), never paraphrased. Determinism lives in the ledger
+  schema, the verbatim rule, and the reconciler's date math — not in the transport.
+- **Read-only tool lists, gated.** A sentinel's `tools:` may contain only query/read MCP tools and
+  read skills (`context-pendo-analytics`, `context-databricks-analytics`, tracker query skills —
+  reuse, don't rewrite). The schema gate rejects a sentinel declaring a write-capable tool; this is
+  what keeps "Cadence performs zero external writes" true with agents in the fetch path.
 
-**The portfolio digest** is the artifact that makes mechanism 2 work: a compact index maintained by
-`program_lib` — per active program: id, title, `aliases`, type, state; plus the intake signals of
-live types. It is how a scan matches "the payments thing" in a transcript to `PROG-0007`, and it is
-regenerated from program files (never hand-maintained). Digest size at large portfolios is an open
-question (§11).
+Most external sources in this system are **MCP servers reached from Claude sessions** (tracker,
+Pendo, Gong/Zendesk via Databricks) — so most truth sync is a dispatched sentinel run, not a Python
+poll. Three mechanisms, by cost:
+
+1. **Local bindings — programmatic, free.** Files in `datasets/` (digest lineages, the EOS sheet
+   export, PRDs) are read directly by the reconciler. No agent.
+2. **Provider-batched truth sentinels — one run per provider per sweep.** A single tracker-sentinel
+   dispatch queries *all* tracker-bound programs' anchors in one session and deposits one snapshot
+   observation each. Cost scales with **providers used, not programs held**. Tree traversal is the
+   sentinel walking parent/child links via the provider's query tools to the binding's declared
+   `traverse` depth — no per-program code.
+3. **The exhaust scan — one run per new document, for the whole portfolio.** When a transcript,
+   thread, or email lands, one run reads it carrying the **portfolio digest** in context and emits
+   everything in a single pass: `observe` onto existing programs, `capture` into cycle inboxes,
+   `candidate` evidence into the intake register (§6.1 — movement and intake are *two questions in
+   the same pass*). O(documents), not O(programs × documents); same shape as the existing
+   meetings-to-backlog harness; shares scan scheduling with task extraction, shares **no** output
+   path.
+
+**The portfolio digest** is what makes mechanisms 2–3 work: a compact index regenerated by
+`program_lib` from program files (id, title, `aliases`, type, state, bindings per program; intake
+signals of live types). It is how a run matches "the payments thing" to `PROG-0007` and knows which
+anchors to visit. Digest size at large portfolios is an open question (§11).
 
 ### 5.2 Data flow — the tracker is a witness, not a verdict
 
 The pipeline from source to pixel is strictly one-directional:
 
-1. **Fetch** — truth sync deposits a snapshot observation per binding per cycle (append-only ledger).
+1. **Fetch** — local reads and provider-batched truth sentinels deposit a snapshot observation per
+   binding per sweep (append-only ledger).
 2. **Hear** — exhaust scans deposit transcript/thread/email observations (same ledger).
 3. **Reconcile** — the reconciler reads declared state (checkpoints, phase) plus all observations
    since the last cycle, and weighs the witnesses:
@@ -364,19 +367,22 @@ The pipeline from source to pixel is strictly one-directional:
 4. **Render** — the Cadence tab renders **program files only, never a live API call**. The board is a
    view of the data model as-of-last-cycle: local-first, fast, and inspectable offline.
 
-The division of labor in one line: **determinism for fetching and arithmetic (instruments must never
-hallucinate), judgment for belief (witnesses must be weighed in context)** — and judgment is spent
-only where witnesses disagree, which is what keeps cycles cheap.
+The division of labor in one line: **determinism for the schema and the arithmetic, courier
+discipline for the fetching (verbatim fields, read-only tools), judgment for belief (witnesses
+weighed in context)** — and heavyweight judgment is spent only where witnesses disagree.
 
 ### 5.3 Operational cadence — three clocks
 
-1. **The nightly quiet sweep.** Once a day, off-hours: truth sync polls every binding, the reconciler
-   recomputes date math, drift verdicts, and phase projections, board caches refresh. Cheap by
-   construction (API polls + arithmetic; judgment only on disagreement), so it runs portfolio-wide
-   every night. Local-first semantics: it runs on the operator's daemon, so the contract is *run on
-   schedule or on wake* — a missed 3am tick fires at next server start (croniter catch-up). The
-   guarantee is "fresh as of last night by the time you look," not a fixed wall-clock hour.
-2. **Exhaust scans are event-driven, not scheduled.** The per-document scan (§5.1.2) runs when a
+1. **The nightly quiet sweep.** Once a day, off-hours: local bindings read programmatically (free),
+   **one batched truth-sentinel run per provider** (a few small-tier agent runs — real but bounded
+   cost), then the reconciler recomputes date math, drift verdicts, and phase projections and
+   refreshes board caches. Local-first semantics: it runs on the operator's daemon, so the contract
+   is *run on schedule or on wake* — a missed 3am tick fires at next server start (croniter
+   catch-up). The guarantee is "fresh as of last night by the time you look," not a fixed hour.
+   **Bindings declare a freshness tier**: `local` syncs every sweep; tracker-MCP syncs in the nightly
+   provider batch; research-grade sources (a Zendesk mention-sweep, a Gong commitment-hunt) are real
+   research-agent runs and sync weekly or on the program's own cycle — never nightly by default.
+2. **Exhaust scans are event-driven, not scheduled.** The per-document scan (§5.1) runs when a
    document *arrives* — a transcript synced after a 2pm meeting deposits observations that afternoon.
    Same trigger rhythm as the existing meetings-to-backlog pipeline. Observations accumulate
    intra-day; verdicts recompute at the next sweep or program cycle, whichever comes first.
@@ -478,7 +484,8 @@ loop. Both are **instance-level**, agent-proposed, human-verified.
 
 ### 7.2 Binding schema
 
-Each binding: `{ id, role, kind, anchor, traverse?, history?, mode }`, with `role` from a closed set:
+Each binding: `{ id, role, kind, anchor, traverse?, history?, mode, sync_cadence? }`, with `role`
+from a closed set (`sync_cadence` is the freshness tier — see §5.3):
 
 - **`truth`** — the structured witness. Only truth bindings can feed the *fact door*, and only when
   uncontradicted (§5.2) — "truth" names the binding's *role in reconciliation*, not a promise that

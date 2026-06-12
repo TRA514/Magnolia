@@ -26,10 +26,26 @@ def test_flags_start_new_session(tmp_path):
     assert any("start_new_session" in o for o in offenders)
 
 
+def test_flags_sys_platform(tmp_path):
+    f = tmp_path / "bad.py"
+    f.write_text('if sys.platform == "win32":\n    pass\n', encoding="utf-8")
+    offenders = pg.scan([str(f)])
+    assert any("sys.platform" in o or "platform branch" in o for o in offenders)
+
+
+def test_does_not_flag_sh_substring_midstring(tmp_path):
+    f = tmp_path / "good.py"
+    f.write_text('url = "https://esm.sh/@milkdown/core"\nname = "bashful"\n',
+                 encoding="utf-8")
+    assert pg.scan([str(f)]) == []
+
+
 def test_clean_file_passes(tmp_path):
     f = tmp_path / "good.py"
-    f.write_text('msg = "9 AM - 5 PM"\nPopen([sys.executable, "x.py"], **process_group_kwargs())\n',
-                 encoding="utf-8")
+    f.write_text(
+        '# spawns a new session group via the seam\n'
+        'Popen([sys.executable, "task_cli.py"], **process_group_kwargs())\n',
+        encoding="utf-8")
     assert pg.scan([str(f)]) == []
 
 

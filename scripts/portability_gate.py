@@ -15,6 +15,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SEAM = os.path.join(ROOT, "scripts", "platform_lib.py")
 GATE = os.path.join(ROOT, "scripts", "portability_gate.py")
 
+# Matches the bare-script and list-invocation shapes (["bash", ...], run("x.sh"),
+# f-strings ending in .sh) - the shapes the observed WinError-193 leaks took.
+# Script-with-args inside one string (run("x.sh foo")) is intentionally out of
+# scope to stay false-positive-free.
 # (pattern, label) - each flags one leak class.
 RULES = [
     (re.compile(r"\bstart_new_session\s*="),       "start_new_session= (use platform_lib.process_group_kwargs())"),
@@ -26,16 +30,15 @@ RULES = [
 
 
 def _targets():
-    return [
+    return sorted(
         f for f in (
             glob.glob(os.path.join(ROOT, "scripts", "**", "*.py"), recursive=True) +
-            glob.glob(os.path.join(ROOT, "ui", "task-board", "js", "**", "*.js"), recursive=True) +
-            glob.glob(os.path.join(ROOT, "scripts", "adapters", "**", "*.py"), recursive=True)
+            glob.glob(os.path.join(ROOT, "ui", "task-board", "js", "**", "*.js"), recursive=True)
         )
         if os.path.abspath(f) not in (os.path.abspath(SEAM), os.path.abspath(GATE))
         and "__pycache__" not in f
         and os.path.sep + "tests" + os.path.sep not in f
-    ]
+    )
 
 
 def scan(paths):

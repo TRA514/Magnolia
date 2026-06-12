@@ -81,3 +81,32 @@ def test_meta_create_card_type_lists_only_existing_pieces():
         assert renderer in body
     for action in ("mark_done", "accept", "keep", "undo", "graduate"):
         assert action in body
+
+
+def test_meta_scope_extension_exists_and_frontmatter():
+    body = _read(".claude/skills/meta-scope-extension/SKILL.md")
+    assert body.startswith("---\n")
+    fm = body.split("---\n", 2)[1]
+    assert "name: meta-scope-extension" in fm
+    assert "Use when" in fm
+    # decomposes onto the four extension surfaces
+    for surface in ("adapter", "worker", "card", "platform"):
+        assert surface in body.lower()
+    # the reuse/extend/new decision is explicit
+    assert "reuse" in body.lower()
+    assert "build contract" in body.lower() or "build-contract" in body.lower()
+    # routes to the factories + names the JS-vs-compose boundary for cards
+    assert "meta-create-worker" in body
+    assert "meta-create-card-type" in body
+    assert "meta-create-adapter" in body
+    assert "meta-integration-discovery" in body   # delegates external probing
+    assert "card-registry.js" in body or "JS work" in body  # composition boundary
+    # binds to the seam, names platform_lib
+    assert "platform_lib" in body
+
+
+def test_meta_scope_extension_denylist_clean():
+    import re
+    body = _read(".claude/skills/meta-scope-extension/SKILL.md")
+    for pat in (r"\bjay\b", r"board 1096", r"/Users/", r"~/pm-os"):
+        assert not re.search(pat, body, re.IGNORECASE), f"leaks /{pat}/"

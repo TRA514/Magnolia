@@ -447,8 +447,7 @@ A sibling top-level tab to Now/Activity/Quality/Engine/Schedules. Rendered entir
 This is a **closed list**. Every element in a mockup must name its source field below; anything that
 cannot is cut. There is no other data.
 
-**Shelf header** (per family): the shelf label (profile override, else type default) and a program
-count. Nothing else — no rollup stats, no aggregate health at shelf level (cross-program synthesis
+**Shelf header** (per family): the shelf label (profile override, else type default). Nothing else — no rollup stats, no aggregate health at shelf level (cross-program synthesis
 is the portfolio rollup card on Now, not this tab).
 
 **Row** (collapsed) — exactly five cells; the design goal is that a healthy program's row contains
@@ -457,10 +456,7 @@ nothing that asks for attention:
 | # | Cell | Source | Per state model |
 |---|---|---|---|
 | 1 | **Title** | `title` frontmatter; optional muted subtext = type label (registry) when a shelf mixes types | same for all |
-| 2 | **State chip** | model-specific, token-colored (registry `presentation`) | pipeline → current phase label ("Discovery") · cycle → period + status ("W24 · sent") · target → current vs expected ("3.2 / 4.0") · register → open count + oldest age ("12 open · oldest 9d") |
-| 3 | **Drift badge** | computed verdict, cached in frontmatter — `holding · drifting · broken · blind`; a `paused` program shows `paused` here instead (drift isn't computed) | same vocabulary for all — the only universal status |
-| 4 | **Next date** | next dated event, rendered relative ("in 6d", "Mon") | pipeline → next checkpoint due · cycle → next cadence tick · target → window end / next measurement · register → next policy breach (oldest item's deadline) |
-| 5 | **Needs-you** | count of open cards on Now linked to this program (`program_id` backlink); **hidden when 0** | same for all |
+| 2 | **State** | model-specific, token-colored (registry `presentation`) | pipeline → current phase label ("Discovery") · cycle → period + status · target → current vs expected ("3.2 / 4.0") · register |
 
 ### 8.2 Render contract — expansion (fixed section order)
 

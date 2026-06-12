@@ -69,8 +69,9 @@ These extend the existing invariants; the design must not bend them:
 - **Append-only evidence.** Observation ledgers and cycle logs are never deleted or rewritten
   (invariant #6 extended). Every observation cites its source (file + location).
 - **Profile-driven identity** (invariant #1). No person, team, company, distro, or channel literal in
-  the engine. Which program types are active is per-person (program packs, like skill packs). Routing
-  targets (distro lists, channels) live in `profile/` via `profile_lib`.
+  the engine. The Cadence view is shaped by the operator's *portfolio* (their program instances), not
+  by persona flags; family labels and section order are profile display preferences. Routing targets
+  (distro lists, channels) live in `profile/` via `profile_lib`.
 - **Manual-on-purpose sources are read-only forever.** A source declared `mode: read` in a program
   type can never gain write access by configuration. The EOS sheet is the canonical example.
 - **Fact vs. interpretation.** Program state mutates through exactly two doors: (a) adapter-grounded
@@ -89,7 +90,7 @@ workers scope, skills instruct, cards declare presentation, cron schedules, the 
 ladder governs, adapters write. Cadence must replicate that Lego quality with the same discipline:
 **sentinels observe, the reconciler judges drift, emitters propose, programs remember.** No primitive
 does two jobs. A future agent extending the system should be able to add a persona's whole world by
-dropping one program-type entry and one pack reference — and should find it *structurally impossible*
+dropping one program-type entry — and should find it *structurally impossible*
 to create an ungated write path or an unmeasurable promise.
 
 ---
@@ -108,7 +109,7 @@ to create an ungated write path or an unmeasurable promise.
 | **Reconciler** | Per cycle: declared vs. observed → drift verdict + state updates (facts) + proposals (interpretations) | Judge + enforce_lib |
 | **Emitter** | Declarative `on: <condition> → action` playbook; all actions exit as tasks | shipper / card actions |
 | **Cycle** | One heartbeat of a program: observe → reconcile → emit → log | Cron tick + receipt |
-| **Program pack** | Persona-gated set of program types, active list in profile | Skill pack |
+| **Program pack** | *(demoted — not a runtime primitive)* Onboarding starter set only; see §8 | Onboarding seed, not skill-pack gating |
 
 ## 2. The four state models (closed set)
 
@@ -173,6 +174,13 @@ emitter targeting them; every checkpoint instrument resolvable; presentation use
 no identity literals (denylist scan extends to `cadence/**`); `intake.route` ∈ closed routing set
 (§6.1); `route: candidate` requires a `birth_threshold`; bootstrap emissions ∈ closed action set.
 
+`family` is **presentation-only**: a default shelf label for grouping on the Cadence tab. It does no
+computational work (drift, state models, emitters, and scheduling are all family-independent), the
+engine never enumerates valid family values, and the profile may rename/regroup/reorder families per
+person (§7). Many types per family is the intended shape — e.g. `gtm-initiative` and
+`internal-training` (both `pipeline`, different phases) can shelve under the same family as
+`roadmap-initiative`. The gate requires only that a default family exists.
+
 ## 4. Program instance — file format (draft)
 
 `datasets/programs/PROG-0007.md` — same frontmatter-plus-ledger pattern as tasks:
@@ -219,8 +227,8 @@ respects invariant #6.
 
 ## 5. The cycle pipeline (observe → reconcile → emit → log)
 
-1. **Observe.** Cron fires the program's cadence (existing cron substrate; one job per family or per
-   program — design agent decides). Sentinels run on the existing dispatch substrate (`claude -p`,
+1. **Observe.** Cron fires the program's cadence (existing cron substrate; one job per cadence tier or
+   per program — design agent decides; never keyed off `family`, which is presentation-only). Sentinels run on the existing dispatch substrate (`claude -p`,
    worker-style scoping) but with a distinct contract: *output is observations conforming to the
    schema, stamped onto programs* — never artifacts, never tasks. Sentinels are defined like workers
    (`scripts/sentinels/*.md` or a `kind: sentinel` worker flag — design agent decides), declaring
@@ -323,7 +331,10 @@ extending it is editing a program type, not writing new engine code.
 A sibling top-level tab to Now/Activity/Quality/Engine/Schedules. Rendered entirely from the registry
 + program frontmatter (like cards); theme tokens only; calm by default.
 
-- **Table-first**, grouped by `family` (Roadmap · Weekly · Outcomes · EOS · …). One row per program:
+- **Table-first**, grouped by `family` shelves — e.g. one operator's view reads Roadmap · Weekly ·
+  Outcomes · EOS, but those are *their* labels, not engine vocabulary. Only families containing
+  active programs render (an empty shelf is invisible — the UI adapts to the portfolio, not to a
+  persona flag), and the profile can rename, regroup, and reorder shelves. One row per program:
   **headline · state chip** (type-specific label, token-colored) · **drift badge**
   (holding/drifting/broken — the only universal status) · **next checkpoint + date** ·
   **last cycle one-liner** · **needs-you count** (linking to the matching cards on Now).
@@ -337,16 +348,27 @@ A sibling top-level tab to Now/Activity/Quality/Engine/Schedules. Rendered entir
   emitters — generalizing the Quality-tab brake).
 - Nothing on this tab performs an external action directly. Ever.
 
-## 8. Personas via program packs
+## 8. Personas emerge from the portfolio (packs demoted)
 
-`cadence/packs.yaml` (or extend `.claude/packs.yaml` — design agent decides): named sets of program
-types. `profile/config.yaml` gains `active_program_packs`. Seed packs:
+There is **no runtime pack mechanism**. An earlier draft mirrored skill packs here, but the symmetry
+is false: skill packs gate a 63-item engine catalog at background-dispatch time; the program-type
+registry is small and **instance-driven** — a type with no programs is inert. Personas therefore come
+for free from the existing architecture:
 
-- **pm**: `roadmap-initiative`, `weekly-priorities`, `did-it-work`, `launch-closure`
-- **exec**: `eos-rock`, `eos-scorecard-digest`, `eos-l10-prep`, portfolio rollup
-- **eng-lead** (later): sprint-health register, dependency watch
-- A teammate forking the engine gets the types; their programs, sources, distros, and channels are
-  theirs (profile + datasets). The asymmetry stays private; the machinery ships.
+- **Activation is implicit.** A type is *live* (for intake scanning and UI) iff the operator has ≥1
+  active program of that type, or has explicitly enabled it. The portfolio is the activation state.
+- **The UI adapts by rendering the portfolio** (§7): only non-empty family shelves appear. An exec
+  who holds rocks and a scorecard digest sees exactly that view; no persona flag exists to configure
+  or to get wrong.
+- **Cold start** is an onboarding concern, not a runtime one: `cadence/starter-sets.yaml` holds
+  curated bundles the onboarding concierge offers ("you run EOS — want the L10-prep and scorecard
+  programs seeded?"). Consumed once at setup; never consulted at runtime.
+- **Dormant-type discovery**: intake may propose *activating* a non-live type at a strictly higher
+  evidence threshold — a type-activation recommendation card ("recurring quarterly rock-shaped
+  commitments in leadership meetings — start tracking rocks?"). The registry can ship rich; nothing
+  surfaces until proposed and accepted.
+- A teammate forking the engine gets the types and starter sets; their programs, sources, distros,
+  and channels are theirs (profile + datasets). The asymmetry stays private; the machinery ships.
 
 ## 9. Build slices (vertical, each independently verifiable)
 
@@ -370,7 +392,8 @@ types. `profile/config.yaml` gains `active_program_packs`. Seed packs:
    emissions + archive proposals + the `portfolio-health` janitor program. (Needs slices 5–7:
    sentinels, the proposal door, and the register model.)
 9. **Attachments slice**: task `attachments:` + messaging adapter bundling + graceful degradation.
-10. **EOS pack**: read-only sheet source, L10-prep cycle type, pre-L10 nudge emitters with rate caps.
+10. **EOS types + starter set**: read-only sheet source, L10-prep cycle type, pre-L10 nudge emitters
+    with rate caps; first entry in `starter-sets.yaml`.
 11. **Factory**: `meta-create-program-type` under `meta-factory-core`; portfolio rollup card (weekly
     cross-program digest) last, once ≥2 families run.
 

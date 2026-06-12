@@ -40,8 +40,8 @@ const ICON = {
   undo: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 6.2H3.2V4M3.5 6A5 5 0 1 1 3 9.2"/></svg>`,
   arrowRight: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 8h9.2M9 4.4 12.6 8 9 11.6"/></svg>`,
 
-  // settings — a calm gear that matches the line-mark family above
-  gear: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.1"/><path d="M8 1.6v1.7M8 12.7v1.7M14.4 8h-1.7M3.3 8H1.6M12.5 3.5l-1.2 1.2M4.7 11.3l-1.2 1.2M12.5 12.5l-1.2-1.2M4.7 4.7 3.5 3.5"/></svg>`,
+  // settings — a symmetric 8-tooth cog (computed, even 45° spacing) in the line-mark family
+  gear: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12.43 6.98L13.99 6.62L13.99 9.38L12.43 9.02L11.86 10.41L13.22 11.26L11.26 13.22L10.41 11.86L9.02 12.43L9.38 13.99L6.62 13.99L6.98 12.43L5.59 11.86L4.74 13.22L2.78 11.26L4.14 10.41L3.57 9.02L2.01 9.38L2.01 6.62L3.57 6.98L4.14 5.59L2.78 4.74L4.74 2.78L5.59 4.14L6.98 3.57L6.62 2.01L9.38 2.01L9.02 3.57L10.41 4.14L11.26 2.78L13.22 4.74L11.86 5.59Z"/><circle cx="8" cy="8" r="2.05"/></svg>`,
 };
 
 function svgIcon(name) { return ICON[name] || ''; }

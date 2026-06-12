@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -244,12 +245,18 @@ def reattach_frontmatter(frontmatter_str, body):
 
 # ─── Conversion ───────────────────────────────────────────────────────────────
 
+def _require_pandoc():
+    if not shutil.which("pandoc"):
+        raise RuntimeError("pandoc not found — install pandoc to enable Word sync")
+
+
 def md_to_docx(md_path, docx_path):
     """Convert a markdown file to docx via pandoc.
 
     Strips YAML frontmatter before conversion (pandoc doesn't need it).
     Uses reference template for styling if available.
     """
+    _require_pandoc()
     md_path = Path(md_path)
     docx_path = Path(docx_path)
 
@@ -286,6 +293,7 @@ def docx_to_md(docx_path, md_path):
 
     Re-attaches the YAML frontmatter from the existing local markdown file.
     """
+    _require_pandoc()
     docx_path = Path(docx_path)
     md_path = Path(md_path)
 

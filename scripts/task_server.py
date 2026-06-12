@@ -40,6 +40,7 @@ import cron_lib
 import jira_publish
 import profile_lib
 import packs_lib
+import platform_lib
 import adapters
 from adapters.project_management._contract import NotConfigured
 from adapters import NeedsConfirmation
@@ -969,20 +970,14 @@ def _spawn_task_dispatch(task_id):
     Add so both spawn the dispatcher identically. Raises on Popen failure.
     """
     dispatch_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "task_dispatch.py")
-    env = {k: v for k, v in os.environ.items()
-           if not k.startswith(("CLAUDE", "CMUX_CLAUDE"))}
-    env["PATH"] = (
-        os.path.join(os.path.expanduser("~"), ".local", "bin")
-        + ":/opt/homebrew/bin"
-        + ":" + env.get("PATH", "/usr/bin:/bin")
-    )
+    env = platform_lib.headless_claude_env()
     subprocess.Popen(
         [sys.executable, dispatch_script, "--task", task_id],
         cwd=PM_OS_DIR,
         env=env,
-        start_new_session=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        **platform_lib.process_group_kwargs(),
     )
 
 
@@ -1711,9 +1706,9 @@ def handle_open_file(handler, query_params):
         return
 
     # Open .docx files in the default app (Word) instead of NeoVim
-    if filepath.endswith(".docx"):
-        cmd = ["open", filepath] if sys.platform == "darwin" else ["xdg-open", filepath]
-    elif sys.platform == "darwin":
+    if filepath.endswith(".docx") or platform_lib.os_kind() == "windows":
+        cmd = platform_lib.open_file_cmd(filepath)
+    elif platform_lib.os_kind() == "darwin":
         cmd = [
             "open", "-na", "Ghostty.app", "--args",
             f"--command=nvim {shlex.quote(filepath)}",
@@ -1724,7 +1719,7 @@ def handle_open_file(handler, query_params):
             f"--command=nvim {shlex.quote(filepath)}",
         ]
 
-    subprocess.Popen(cmd, start_new_session=True)
+    subprocess.Popen(cmd, **platform_lib.process_group_kwargs())
 
     handler.send_response(204)
     handler.send_header("Access-Control-Allow-Origin", "*")

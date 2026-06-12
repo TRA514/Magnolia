@@ -4,7 +4,8 @@ function switchTab(tabName) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.topbar-tab').forEach(el => el.classList.remove('active'));
   document.getElementById(`tab-${tabName}`).classList.add('active');
-  document.querySelector(`.topbar-tab[data-tab="${tabName}"]`).classList.add('active');
+  const tabBtn = document.querySelector(`.topbar-tab[data-tab="${tabName}"]`);
+  if (tabBtn) tabBtn.classList.add('active');
   if (tabName === 'activity') renderActivity();
   if (tabName === 'quality') renderQuality();
   if (tabName === 'engine') fetchWorkers();

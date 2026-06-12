@@ -20,6 +20,9 @@ function buildSettingsControl() {
     </button>
     <div class="settings-menu" id="settings-panel" role="menu" aria-label="Settings">
       <div class="settings-menu-head">Settings</div>
+      <button type="button" class="settings-link" id="settings-open-profile" role="menuitem">Profile</button>
+      <button type="button" class="settings-link" id="settings-open-workers" role="menuitem">Workers and prompts</button>
+      <div class="settings-divider"></div>
       <label class="settings-row" for="autonomy-toggle">
         <span class="settings-row-text">
           <span class="settings-row-name">Autonomous Mode</span>
@@ -39,10 +42,23 @@ function buildSettingsControl() {
   const close = () => { panel.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); };
   const open  = () => { panel.classList.add('open');    btn.setAttribute('aria-expanded', 'true'); refreshAutonomy(toggle); };
 
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
+  // No stopPropagation: let the click reach the Mood control's outside-click
+  // listener so opening this menu closes that one (only one dropdown open at a time).
+  // Our own document listener below is containment-checked, so it won't self-close.
+  btn.addEventListener('click', () => {
     panel.classList.contains('open') ? close() : open();
   });
+
+  // The cog menu is now the launcher for the two full-content engine pages.
+  // Returning to the board is done by clicking any top-bar tab (Now, etc.).
+  const openSettingsView = (which) => {
+    switchTab('engine');   // reveals #tab-engine content (no tab button to highlight)
+    switchEngine(which);   // 'profile' | 'prompts' — shows + loads the sub-pane
+    close();               // close the popover after launching
+  };
+  root.querySelector('#settings-open-profile').addEventListener('click', (e) => { e.stopPropagation(); openSettingsView('profile'); });
+  root.querySelector('#settings-open-workers').addEventListener('click', (e) => { e.stopPropagation(); openSettingsView('prompts'); });
+
   toggle.addEventListener('change', () => setAutonomy(toggle));
   document.addEventListener('click', (e) => { if (!root.contains(e.target)) close(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });

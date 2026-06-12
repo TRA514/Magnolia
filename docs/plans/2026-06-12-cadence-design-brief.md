@@ -447,8 +447,7 @@ A sibling top-level tab to Now/Activity/Quality/Engine/Schedules. Rendered entir
 This is a **closed list**. Every element in a mockup must name its source field below; anything that
 cannot is cut. There is no other data.
 
-**Shelf header** (per family): the shelf label (profile override, else type default) and a program
-count. Nothing else — no rollup stats, no aggregate health at shelf level (cross-program synthesis
+**Shelf header** (per family): the shelf label (profile override, else type default). Nothing else — no rollup stats, no aggregate health at shelf level (cross-program synthesis
 is the portfolio rollup card on Now, not this tab).
 
 **What rendering keys off:** the row template is selected by the program type's **state model** —

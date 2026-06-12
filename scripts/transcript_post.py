@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import profile_lib  # noqa: E402
+import platform_lib  # noqa: E402
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
 
@@ -25,12 +26,23 @@ def _classify_fn():
 
 
 def _hook_env():
-    env = os.environ.copy()
-    env.pop("CLAUDECODE", None)            # allow nested claude -p
-    env.pop("CLAUDE_CODE_ENTRYPOINT", None)
-    env["PATH"] = (str(Path.home() / ".local" / "bin") + ":/opt/homebrew/bin"
-                   + ":" + env.get("PATH", "/usr/bin:/bin"))
-    return env
+    return platform_lib.headless_claude_env()
+
+
+def _run_qmd_index(env, log_dir, log):
+    qmd = platform_lib.resolve_tool("qmd")
+    if not qmd:
+        log.info("  qmd not found — skipping index update (semantic search optional)")
+        return
+    try:
+        subprocess.Popen([qmd, "update", "-c", "meetings_product"],
+                         cwd=str(profile_lib.PM_OS_DIR), env=env,
+                         stdout=open(log_dir / "qmd-index.log", "a"),
+                         stderr=subprocess.STDOUT,
+                         **platform_lib.process_group_kwargs())
+        log.info("  Triggered qmd index update (meetings_product)")
+    except Exception as exc:
+        log.warning("  QMD index update hook failed: %s", exc)
 
 
 def run_downstream(txt_path, item_id, state, log):
@@ -57,20 +69,15 @@ def run_downstream(txt_path, item_id, state, log):
     log_dir = Path(profile_lib.PM_OS_DIR) / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     env = _hook_env()
+    task_extract = str(SCRIPT_DIR / "task_extract_meetings.py")
     try:
-        subprocess.Popen([str(SCRIPT_DIR / "task-extract-meetings.sh"), final_path],
-                         cwd=str(profile_lib.PM_OS_DIR), start_new_session=True, env=env,
+        subprocess.Popen([sys.executable, task_extract, final_path],
+                         cwd=str(profile_lib.PM_OS_DIR), env=env,
                          stdout=open(log_dir / "task-extract.log", "a"),
-                         stderr=subprocess.STDOUT)
+                         stderr=subprocess.STDOUT,
+                         **platform_lib.process_group_kwargs())
         log.info("  Triggered task extraction for %s", final_path)
     except Exception as exc:
         log.warning("  Task extraction hook failed: %s", exc)
-    try:
-        subprocess.Popen(["qmd", "update", "-c", "meetings_product"],
-                         cwd=str(profile_lib.PM_OS_DIR), start_new_session=True, env=env,
-                         stdout=open(log_dir / "qmd-index.log", "a"),
-                         stderr=subprocess.STDOUT)
-        log.info("  Triggered qmd index update (meetings_product)")
-    except Exception as exc:
-        log.warning("  QMD index update hook failed: %s", exc)
+    _run_qmd_index(env, log_dir, log)
     return final_path

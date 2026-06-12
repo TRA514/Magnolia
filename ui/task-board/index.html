@@ -1270,7 +1270,6 @@
     <button class="topbar-tab active" data-tab="now" onclick="switchTab('now')">Now</button>
     <button class="topbar-tab" data-tab="schedules" onclick="switchTab('schedules')">Schedules</button>
     <button class="topbar-tab" data-tab="quality" onclick="switchTab('quality')">Quality</button>
-    <button class="topbar-tab" data-tab="engine" onclick="switchTab('engine')">Engine</button>
     <button class="topbar-tab" data-tab="activity" onclick="switchTab('activity')">Activity</button>
   </div>
   <div class="topbar-right">
@@ -1280,8 +1279,8 @@
         <path d="M8 3.4v9.2M3.4 8h9.2"/></svg>
     </button>
     <div class="topbar-stats" id="stats"></div>
-    <div class="mood-control" id="mood-control"></div>
     <div class="settings-control" id="settings-control"></div>
+    <div class="mood-control" id="mood-control"></div>
   </div>
 </div>
 
@@ -1303,10 +1302,6 @@
 
 <div id="tab-engine" class="tab-content">
   <div class="engine-shell">
-    <div class="engine-subnav" id="engine-subnav">
-      <button class="engine-subtab" data-eng="profile" onclick="switchEngine('profile')">Profile</button>
-      <button class="engine-subtab active" data-eng="prompts" onclick="switchEngine('prompts')">Workers &amp; prompts</button>
-    </div>
     <div id="engine-profile" class="engine-pane">
       <div class="profile-view" id="profile-view">
         <div class="loading">Loading…</div>

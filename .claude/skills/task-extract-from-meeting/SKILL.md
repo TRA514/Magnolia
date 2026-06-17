@@ -143,7 +143,7 @@ Before extracting any tasks, get the current task list:
 ./scripts/task.sh list --json
 ```
 
-Keep this list in context. For EVERY potential task you identify in steps 3-4, check against this list for semantic duplicates.
+Keep this list in context. For EVERY potential task you identify in steps 3–5, check against this list for semantic duplicates.
 
 **Duplicate = same underlying work**, even if:
 - Different wording ("Draft product strategy" vs "Write strategy POV document")
@@ -172,21 +172,43 @@ Keep this list in context. For EVERY potential task you identify in steps 3-4, c
 
 ### 3. Identify the Operator in the Transcript
 
-The operator may appear by first name, full name, or as the meeting organizer. Identify which speaker is the operator so you can distinguish their commitments from others'.
+Read the `participants` frontmatter field to identify the operator by name. The operator may appear in transcript text by first name, full name, or as an implicit "I" speaker. Confirm which voice is theirs before reading for commitments.
 
-### 4. Scan for Operator-Relevant Action Items Only
+### 4. Select the Primary Source (Transcript-First)
 
-For each item that passes the filter, apply the queue logic:
+**Check for `## ⬇️ Full Transcript` in the meeting file.**
 
-| Situation | Queue | Example |
-|-----------|-------|---------|
-| The operator needs research, analysis, or a document produced | `agent` | "We need to understand competitor pricing" → agent researches + writes memo |
-| The operator needs a decision made, with supporting analysis | `collab` | "We need to decide on API versioning" → agent writes tradeoff doc, the operator decides |
-| The operator needs to schedule a meeting | `collab` + `--task-type schedule-meeting` | "I'll set up a sync with Brandon" → agent finds availability, the operator picks a slot |
-| The operator must physically do it (message, access, show up) | `human` | "I'll send a Slack message to the team" |
-| The operator asked someone for something, or was promised something | `waiting` | "Alyssa will send the VPN setup article" |
+- **If the section exists and has substantive content:** use the full transcript as the primary source for steps 5 and 6. Ignore `## ⬇️ AI Summary` action items — the summary is a convenience, not ground truth. The transcript has the actual words, speaker context, and commitments the summary may have missed or misattributed.
+- **If the section is absent or empty:** fall back to `## ⬇️ AI Summary`. Treat any "Next Steps" or "Action Items" list in the summary as leads to investigate, not ground truth — apply your own attribution judgment (step 5) rather than lifting items verbatim.
 
-### 5. Create Tasks via CLI
+### 5. Pass 1 — Identify All Commitments by Speaker
+
+Read the selected source (transcript or summary) and identify every commitment, request, or deliverable promise made by any participant. For each one, record:
+
+1. **The speaker** — who said it? Use speaker labels (e.g., `Tom:`, `Tom Arnett:`, `[Tom]`) for transcript sources. For first-person speech without a label, use surrounding context (who was speaking in that exchange).
+2. **The commitment verb** — what are the attribution signals?
+   - First-person from the operator: "I'll", "I can", "let me", "I'll take that", "I'll follow up", "I'll send", "I'll look into"
+   - Third-person about the operator: "[Operator name] will", "[Operator name] to", "that's on [Operator name]", "can you [operator name]..."
+   - Direct ask to the operator: "can you…", "would you…", "could you take…"
+   - Summary bullet attributed to the operator by name: "Tom: …", "(Tom)"
+3. **The substance** — what specifically is being committed to?
+
+Do not filter yet. Collect every commitment from every speaker. This is a cataloguing pass, not a judgment pass.
+
+**Attribution caution for summary-sourced content:** Summaries sometimes list items under "Next Steps" without clear attribution, or group items together. Do not assume an unattributed bullet belongs to the operator. Look for name-attribution signals ("Tom", operator's first/last name) or return to the transcript to verify. If attribution is genuinely unclear and the transcript is available, check the transcript.
+
+### 6. Pass 2 — Filter to Operator Only
+
+Apply the filter from the top of this skill to every commitment identified in Pass 1:
+
+- Did **the operator** commit to it? → route to queue
+- Did **the operator ask someone** for something, or was the operator **promised a deliverable**? → `waiting`
+- Did someone else commit to something that doesn't involve the operator? → **skip**
+- Is attribution unclear and unverifiable? → **skip** (conservative default; do not invent tasks)
+
+Apply queue logic as described above. For each task that passes the filter, note the exact words or exchange that confirmed the operator's commitment — use this as the basis for `--description` so the task has a traceable origin.
+
+### 7. Create Tasks via CLI
 
 ```bash
 # Agent produces research artifact (note the relevant PM-OS skill)
@@ -223,7 +245,7 @@ For each item that passes the filter, apply the queue logic:
 
 **Due date:** Only set when explicitly stated in the transcript. Do not fabricate.
 
-### 6. Record Processing
+### 8. Record Processing
 
 ```bash
 # Path MUST start with "datasets/meetings/" for dedup to work correctly
@@ -246,6 +268,8 @@ echo "datasets/meetings/<domain>/<YYYY-MM>/<filename>" >> datasets/tasks/_proces
 | Fabricating due dates not stated in transcript | Leave due blank unless a date was spoken |
 | Creating a new task for work that already has an open task | Run `task.sh list --json` first; update existing task with new context instead |
 | Losing context by not updating existing task | Always append meeting context to duplicate task via `--comment` |
+| Lifting summary action items verbatim without attribution check | Pass 1 identifies *all* speakers' commitments; Pass 2 filters to operator. Never assume an unattributed summary bullet belongs to the operator. |
+| Skipping Pass 1 because the summary has a "Next Steps" section | The summary may be incomplete or misattributed. When a full transcript is available, it is the primary source. |
 
 ## Success Criteria
 
@@ -261,3 +285,4 @@ echo "datasets/meetings/<domain>/<YYYY-MM>/<filename>" >> datasets/tasks/_proces
 - Zero duplicate tasks created for work that already has an open task
 - Existing tasks enriched with new meeting context when the same topic resurfaces
 - It's OK to extract zero tasks from a meeting — many meetings have nothing for the operator
+- When a full transcript was available, it was used as the primary source and the attribution was verified at the speaker level

@@ -22,7 +22,7 @@ SEEN_IN_PROMPT = 200          # cap ledger ids interpolated into the fetch promp
 FETCH_TIMEOUT = 300           # seconds for the claude -p subprocess
 MIN_TRANSCRIPT_CHARS = 200          # below this, treat as a summary/placeholder stub
 GRANOLA_LIST_TOOLS = "mcp__claude_ai_Granola__list_meetings"
-GRANOLA_TRANSCRIPT_TOOLS = "mcp__claude_ai_Granola__get_meeting_transcript"
+GRANOLA_TRANSCRIPT_TOOLS = "mcp__claude_ai_Granola__get_meeting_transcript,Write"
 
 log = logging.getLogger("granola_sync")
 
@@ -81,13 +81,15 @@ def _list_prompt(seen_ids):
     )
 
 
-def _transcript_prompt(meeting_id):
+def _transcript_prompt(meeting_id, out_path):
     return (
         "Use the Granola MCP. Call get_meeting_transcript(meeting_id="
-        f"'{meeting_id}'). Return STRICT JSON: " '{"transcript": "<the full '
-        'verbatim transcript text>"} and NOTHING else. Do NOT summarize, '
-        "abbreviate, or describe the transcript - return the literal text. "
-        'If no transcript is available, return {"transcript": null}.'
+        f"'{meeting_id}'). Then use the Write tool to save the FULL verbatim "
+        "transcript text (exactly as returned by the tool, NOT summarized or "
+        f"abbreviated) to this exact file path: {out_path} "
+        "(write only the transcript text - no JSON, no commentary, no code fences). "
+        "After writing, reply with just: DONE. If no transcript is available, do not "
+        "write the file and reply: NONE."
     )
 
 
@@ -155,34 +157,6 @@ def _run_claude(prompt, tools, root=None):
     return None
 
 
-def _parse_transcript_output(stdout):
-    """Extract the transcript string from claude -p output. Mirrors
-    _parse_fetch_output's envelope handling, but pulls a {"transcript": ...}
-    object. Returns the transcript string, or None."""
-    if not stdout:
-        return None
-    text = stdout.strip()
-    try:
-        outer = json.loads(text)
-        if isinstance(outer, dict) and "transcript" not in outer:
-            text = outer.get("result", text)
-    except json.JSONDecodeError:
-        pass
-    if not isinstance(text, str):
-        return None
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1 or end < start:
-        return None
-    try:
-        obj = json.loads(text[start:end + 1])
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(obj, dict):
-        return None
-    t = obj.get("transcript")
-    return t if isinstance(t, str) else None
-
-
 def _looks_like_placeholder(text):
     """True when content is missing, too short, or a known summary stub - so the
     caller skips it (and does NOT mark it seen) and re-tries on the next run."""
@@ -207,9 +181,25 @@ def _list_new_meetings(state_or_ids, root=None):
 
 
 def _fetch_one_transcript(meeting_id, root=None):
-    """Phase 2: fetch ONE transcript verbatim. Returns the text or None."""
-    return _parse_transcript_output(
-        _run_claude(_transcript_prompt(meeting_id), GRANOLA_TRANSCRIPT_TOOLS, root=root))
+    """Fetch ONE transcript by having claude -p Write it to a file (not echo it
+    through its response, which truncates/summarizes long transcripts). Returns
+    the transcript text or None."""
+    tmp_dir = Path(profile_lib.PM_OS_DIR) / ".granola_tmp"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    out_path = tmp_dir / f"{meeting_id}.txt"
+    try:
+        _run_claude(_transcript_prompt(meeting_id, str(out_path)),
+                    GRANOLA_TRANSCRIPT_TOOLS, root=root)
+        try:
+            text = out_path.read_text(encoding="utf-8")
+        except OSError:
+            return None
+        return text or None
+    finally:
+        try:
+            out_path.unlink()
+        except OSError:
+            pass
 
 
 def _fetch_new_meetings(state_or_ids, root=None):

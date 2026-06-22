@@ -139,19 +139,24 @@ def test_looks_like_placeholder():
     assert granola_sync._looks_like_placeholder(real) is False
 
 
-def test_parse_transcript_output_envelope_and_bare():
-    # claude -p --output-format json envelope wrapping the model's JSON
-    wrapped = '{"result": "{\\"transcript\\": \\"Me: hi. Them: hello.\\"}"}'
-    assert granola_sync._parse_transcript_output(wrapped) == "Me: hi. Them: hello."
-    # bare object
-    assert granola_sync._parse_transcript_output('{"transcript": "abc"}') == "abc"
-    # embedded in prose
-    assert granola_sync._parse_transcript_output('sure: {"transcript": "xy"} done') == "xy"
-    # null / missing / malformed -> None
-    assert granola_sync._parse_transcript_output('{"transcript": null}') is None
-    assert granola_sync._parse_transcript_output('{"other": 1}') is None
-    assert granola_sync._parse_transcript_output("not json") is None
-    assert granola_sync._parse_transcript_output(None) is None
+def test_fetch_one_transcript_writes_then_reads(tmp_path, monkeypatch):
+    monkeypatch.setattr(granola_sync.profile_lib, "PM_OS_DIR", str(tmp_path))
+    def _fake_run(prompt, tools, root=None):
+        # the model "writes" the transcript to the path named in the prompt
+        import re
+        m = re.search(r"file path: (\S+)", prompt)
+        if m:
+            from pathlib import Path as _P
+            _P(m.group(1)).write_text("Me: hi. Them: hello. real content.", encoding="utf-8")
+        return "DONE"
+    monkeypatch.setattr(granola_sync, "_run_claude", _fake_run)
+    assert granola_sync._fetch_one_transcript("id-1") == "Me: hi. Them: hello. real content."
+
+
+def test_fetch_one_transcript_none_when_not_written(tmp_path, monkeypatch):
+    monkeypatch.setattr(granola_sync.profile_lib, "PM_OS_DIR", str(tmp_path))
+    monkeypatch.setattr(granola_sync, "_run_claude", lambda p, t, root=None: "NONE")
+    assert granola_sync._fetch_one_transcript("id-2") is None
 
 
 def test_list_new_meetings_filters_seen(monkeypatch):
@@ -162,12 +167,6 @@ def test_list_new_meetings_filters_seen(monkeypatch):
     assert [m["id"] for m in out] == ["b"]
 
 
-def test_fetch_one_transcript_good_and_bad(monkeypatch):
-    monkeypatch.setattr(granola_sync, "_run_claude",
-        lambda prompt, tools, root=None: '{"transcript": "Me: hi. Them: hello."}')
-    assert granola_sync._fetch_one_transcript("id-1") == "Me: hi. Them: hello."
-    monkeypatch.setattr(granola_sync, "_run_claude", lambda prompt, tools, root=None: None)
-    assert granola_sync._fetch_one_transcript("id-1") is None
 
 
 def test_fetch_new_meetings_skips_placeholder(monkeypatch):

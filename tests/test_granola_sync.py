@@ -188,7 +188,18 @@ def test_fetch_one_transcript_via_stream(monkeypatch):
     fake_stream = _make_stream_ndjson(transcript)
     monkeypatch.setattr(granola_sync, "_run_claude",
                         lambda p, t, **kw: fake_stream)
-    assert granola_sync._fetch_one_transcript("id-1") == transcript
+    assert granola_sync._fetch_one_transcript("id-1") == (transcript, False)
+
+
+def test_fetch_one_transcript_unfetchable_vs_transient(monkeypatch):
+    # run completed (stdout present) but no transcript -> unfetchable (mark seen)
+    no_transcript_stream = json.dumps(
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "OK"}]}})
+    monkeypatch.setattr(granola_sync, "_run_claude", lambda p, t, **kw: no_transcript_stream)
+    assert granola_sync._fetch_one_transcript("id-1") == (None, True)
+    # subprocess failure (stdout None) -> transient (retry, do NOT mark seen)
+    monkeypatch.setattr(granola_sync, "_run_claude", lambda p, t, **kw: None)
+    assert granola_sync._fetch_one_transcript("id-2") == (None, False)
 
 
 def test_list_new_meetings_filters_seen(monkeypatch):
@@ -201,20 +212,42 @@ def test_list_new_meetings_filters_seen(monkeypatch):
 
 
 
-def test_fetch_new_meetings_skips_placeholder(monkeypatch):
+def test_fetch_new_meetings_good_unfetchable_transient(monkeypatch):
     monkeypatch.setattr(granola_sync, "_list_new_meetings",
         lambda s, root=None: [
             {"id": "good", "title": "G", "created_at": "2026-06-08T10:00:00Z", "attendees": ["Ann"]},
-            {"id": "stub", "title": "S", "created_at": "2026-06-09T10:00:00Z", "attendees": []},
+            {"id": "big", "title": "B", "created_at": "2026-06-09T10:00:00Z", "attendees": []},
+            {"id": "flaky", "title": "F", "created_at": "2026-06-10T10:00:00Z", "attendees": []},
         ])
     real = "Me: real discussion about the roadmap and next steps. " * 10
     def _one(mid, root=None):
-        return real if mid == "good" else "[Full transcript available - topic keywords]"
+        return {"good": (real, False),       # got transcript
+                "big": (None, True),          # unfetchable (oversized) -> mark seen
+                "flaky": (None, False)}[mid]  # transient -> skip + retry
     monkeypatch.setattr(granola_sync, "_fetch_one_transcript", _one)
     out = granola_sync._fetch_new_meetings(set())
-    assert [m["id"] for m in out] == ["good"]            # placeholder meeting skipped
-    assert out[0]["transcript"] == real
-    assert out[0]["title"] == "G" and out[0]["attendees"] == ["Ann"]
+    by_id = {m["id"]: m for m in out}
+    assert set(by_id) == {"good", "big"}                 # flaky (transient) not returned
+    assert by_id["good"]["transcript"] == real
+    assert by_id["big"].get("unfetchable") is True and "transcript" not in by_id["big"]
+
+
+def test_main_marks_unfetchable_seen(tmp_path, monkeypatch):
+    _profile(tmp_path)
+    monkeypatch.setattr(granola_sync.profile_lib, "PM_OS_DIR", str(tmp_path))
+    monkeypatch.setattr(granola_sync, "_state_dir", lambda root=None: str(tmp_path / "st"))
+    monkeypatch.setattr(granola_sync, "_fetch_new_meetings",
+        lambda s, root=None: [{"id": "big-1", "title": "Marathon", "unfetchable": True}])
+    fired = {}
+    monkeypatch.setattr(granola_sync.transcript_post, "run_downstream",
+        lambda txt, mid, state, log: fired.setdefault(mid, True))
+    granola_sync.main(root=str(tmp_path))
+    state = json.load(open(tmp_path / "st" / "granola_downloaded.json"))
+    assert state["big-1"]["unfetchable"] is True          # recorded seen
+    assert "big-1" not in fired                            # no downstream / no file
+    # next run: already seen -> not retried
+    monkeypatch.setattr(granola_sync, "_fetch_new_meetings", lambda s, root=None: [])
+    granola_sync.main(root=str(tmp_path))
 
 
 def test_main_downstream_error_isolated(tmp_path, monkeypatch):

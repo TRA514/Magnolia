@@ -224,32 +224,48 @@ def _list_new_meetings(state_or_ids, root=None):
 
 def _fetch_one_transcript(meeting_id, root=None):
     """Fetch ONE transcript by scraping the raw get_meeting_transcript tool_result
-    from a stream-json claude -p run. The model only invokes the tool (tiny output),
-    so the transcript is never summarized/truncated. Returns the text or None."""
-    return _parse_stream_transcript(
-        _run_claude(_transcript_prompt(meeting_id), GRANOLA_TRANSCRIPT_TOOLS,
-                    root=root, stream=True, model=TRANSCRIPT_MODEL))
+    from a stream-json claude -p run. Returns (transcript, unfetchable):
+      (text, False)  - got the transcript
+      (None, True)   - the run completed but no transcript exists (genuinely
+                       unavailable: oversized output the MCP won't return inline, or
+                       a null transcript) -> caller marks it seen so it is not retried
+                       every run
+      (None, False)  - transient failure (subprocess error) -> retry next run"""
+    stdout = _run_claude(_transcript_prompt(meeting_id), GRANOLA_TRANSCRIPT_TOOLS,
+                         root=root, stream=True, model=TRANSCRIPT_MODEL)
+    if stdout is None:
+        return None, False
+    transcript = _parse_stream_transcript(stdout)
+    if transcript:
+        return transcript, False
+    return None, True
 
 
 def _fetch_new_meetings(state_or_ids, root=None):
-    """THE seam main() calls. List new meetings, then fetch each transcript one at
-    a time (reliable verbatim content). Meetings whose transcript is missing or a
-    placeholder are skipped - not returned, so they stay unseen and re-try."""
+    """THE seam main() calls. List new meetings, then fetch each transcript one at a
+    time. Returns meeting dicts: a good one carries a transcript; an unfetchable one
+    carries {"unfetchable": True} so main() marks it seen (no endless hourly retry of
+    a transcript the MCP will never return). A transient failure is skipped (stays
+    unseen, retried next run)."""
     seen = set(state_or_ids)
-    out = []
+    out, good = [], 0
     for m in _list_new_meetings(state_or_ids, root=root):
         mid = m.get("id")
         if not mid or mid in seen:
             continue
-        transcript = _fetch_one_transcript(mid, root=root)
-        if _looks_like_placeholder(transcript):
-            log.warning("  skipping %s - transcript missing or placeholder", mid)
-            continue
-        out.append({"id": mid, "title": m.get("title"),
-                    "created_at": m.get("created_at"),
-                    "attendees": m.get("attendees"), "transcript": transcript})
-        if len(out) >= MAX_NEW_PER_RUN:
-            break
+        transcript, unfetchable = _fetch_one_transcript(mid, root=root)
+        if transcript and not _looks_like_placeholder(transcript):
+            out.append({"id": mid, "title": m.get("title"),
+                        "created_at": m.get("created_at"),
+                        "attendees": m.get("attendees"), "transcript": transcript})
+            good += 1
+            if good >= MAX_NEW_PER_RUN:
+                break
+        elif unfetchable:
+            log.warning("  %s has no available transcript (oversized or none) - marking seen", mid)
+            out.append({"id": mid, "title": m.get("title"), "unfetchable": True})
+        else:
+            log.warning("  skipping %s - transient fetch failure, will retry next run", mid)
     return out
 
 
@@ -273,6 +289,15 @@ def main(root=None):
     for m in meetings:
         mid = m.get("id")
         if not mid or mid in state:
+            continue
+        if m.get("unfetchable"):
+            # No transcript the MCP will return (oversized / none). Record as seen so
+            # it is not retried every run; no file or downstream. Chunk very long
+            # workshops into shorter meetings to stay under the MCP inline limit.
+            state[mid] = {"title": m.get("title"), "unfetchable": True,
+                          "checked_at": datetime.now().isoformat()}
+            _save_state(state, root)
+            log.info("  Marked %s seen (no available transcript)", mid)
             continue
         base, dt = _basename(m.get("created_at"), m.get("title"), mid)
         folder = _meetings_dir(root) / (dt.strftime("%Y-%m") if dt else "unknown")

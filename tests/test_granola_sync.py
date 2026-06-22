@@ -106,6 +106,117 @@ def test_prompt_ids_bounds_and_recency():
         granola_sync.SEEN_IN_PROMPT
 
 
+def test_prompt_ids_tolerates_legacy_string_ledger():
+    # The on-disk ledger is {uuid: "filename.md"} (string values), not
+    # {uuid: {"downloaded_at": ...}}. _prompt_ids must not crash on it.
+    legacy = {
+        "id-a": "2026-06-15_ops_elt_vantaca.md",
+        "id-b": "2026-06-12_ops_t2_vantaca.md",
+        "id-c": "2026-06-08_strategy_x_vantaca.md",
+    }
+    ids = granola_sync._prompt_ids(legacy)
+    assert set(ids) == {"id-a", "id-b", "id-c"}     # all keys returned, no crash
+    # date-prefixed filename strings sort newest-first, same intent as downloaded_at
+    assert ids[0] == "id-a"
+
+    # mixed legacy-string + new-dict values must also be tolerated
+    mixed = {
+        "id-old": "2026-06-01_ops_x_vantaca.md",
+        "id-new": {"downloaded_at": "2026-06-20T00:00:00", "title": "New"},
+    }
+    mixed_ids = granola_sync._prompt_ids(mixed)
+    assert set(mixed_ids) == {"id-old", "id-new"}
+    assert mixed_ids[0] == "id-new"                 # newest by sort key first
+
+
+def test_looks_like_placeholder():
+    assert granola_sync._looks_like_placeholder("") is True
+    assert granola_sync._looks_like_placeholder(None) is True
+    assert granola_sync._looks_like_placeholder(
+        "[Full transcript available - engineering capacity, Atlas blockers]") is True
+    assert granola_sync._looks_like_placeholder("too short") is True
+    real = "Me: Morning. Them: Morning, how are you? " * 20  # > 200 chars of dialogue
+    assert granola_sync._looks_like_placeholder(real) is False
+
+
+def _make_stream_ndjson(transcript_text):
+    """Build a minimal synthetic stream-json output containing a tool_result event."""
+    payload = json.dumps({"id": "mtg-1", "title": "Test Meeting",
+                          "transcript": transcript_text})
+    event = {
+        "type": "user",
+        "message": {
+            "content": [
+                {
+                    "type": "tool_result",
+                    "content": [
+                        {"type": "text", "text": payload}
+                    ]
+                }
+            ]
+        }
+    }
+    return json.dumps(event)
+
+
+def test_parse_stream_transcript_positive():
+    transcript = "Me: hi. Them: hello. real content."
+    ndjson = "\n".join([
+        json.dumps({"type": "system", "subtype": "init"}),
+        "",
+        _make_stream_ndjson(transcript),
+        json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "OK"}]}}),
+    ])
+    assert granola_sync._parse_stream_transcript(ndjson) == transcript
+
+
+def test_parse_stream_transcript_negative():
+    # malformed lines / no tool_result -> None
+    ndjson = "\n".join([
+        "not json at all",
+        json.dumps({"type": "assistant", "message": {}}),
+        "",
+        "{bad json",
+    ])
+    assert granola_sync._parse_stream_transcript(ndjson) is None
+    assert granola_sync._parse_stream_transcript("") is None
+    assert granola_sync._parse_stream_transcript(None) is None
+
+
+def test_fetch_one_transcript_via_stream(monkeypatch):
+    transcript = "Me: hi. Them: hello. real content."
+    fake_stream = _make_stream_ndjson(transcript)
+    monkeypatch.setattr(granola_sync, "_run_claude",
+                        lambda p, t, **kw: fake_stream)
+    assert granola_sync._fetch_one_transcript("id-1") == transcript
+
+
+def test_list_new_meetings_filters_seen(monkeypatch):
+    monkeypatch.setattr(granola_sync, "_run_claude",
+        lambda prompt, tools, root=None: '[{"id":"a","title":"A","created_at":"2026-06-08T10:00:00Z","attendees":[]},'
+                                         '{"id":"b","title":"B","created_at":"2026-06-09T10:00:00Z","attendees":[]}]')
+    out = granola_sync._list_new_meetings({"a": "old.md"})  # 'a' already seen
+    assert [m["id"] for m in out] == ["b"]
+
+
+
+
+def test_fetch_new_meetings_skips_placeholder(monkeypatch):
+    monkeypatch.setattr(granola_sync, "_list_new_meetings",
+        lambda s, root=None: [
+            {"id": "good", "title": "G", "created_at": "2026-06-08T10:00:00Z", "attendees": ["Ann"]},
+            {"id": "stub", "title": "S", "created_at": "2026-06-09T10:00:00Z", "attendees": []},
+        ])
+    real = "Me: real discussion about the roadmap and next steps. " * 10
+    def _one(mid, root=None):
+        return real if mid == "good" else "[Full transcript available - topic keywords]"
+    monkeypatch.setattr(granola_sync, "_fetch_one_transcript", _one)
+    out = granola_sync._fetch_new_meetings(set())
+    assert [m["id"] for m in out] == ["good"]            # placeholder meeting skipped
+    assert out[0]["transcript"] == real
+    assert out[0]["title"] == "G" and out[0]["attendees"] == ["Ann"]
+
+
 def test_main_downstream_error_isolated(tmp_path, monkeypatch):
     _profile(tmp_path)
     monkeypatch.setattr(granola_sync.profile_lib, "PM_OS_DIR", str(tmp_path))

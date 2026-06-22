@@ -262,17 +262,24 @@ async function openTask(taskId, keepChat) {
     html += `<div class="dt-section">`;
     html += `<div class="dt-sec-head"><span class="dt-sec-title">Details</span></div>`;
     html += `<div class="dt-summary">`;
+    // [label, html-value, read-only?]  Editable values use editableValue().
     const sum = [
-      ['Priority', task.priority || '—'],
-      ['Domain', task.domain || '—'],
-      ['Assignee', task.assignee || '—'],
-      ['Source', taskSource(task)],
-      ['Project', task.project || '—'],
+      ['Title', editableValue(task.id, 'title', task.title || '')],
+      ['Status', editableValue(task.id, 'status', task.status || 'open')],
+      ['Priority', editableValue(task.id, 'priority', task.priority || 'low')],
+      ['Domain', editableValue(task.id, 'domain', task.domain || 'product')],
+      ['Assignee', escapeHtml(task.assignee || '—')],
+      ['Source', escapeHtml(String(taskSource(task)))],
+      ['Project', editableValue(task.id, 'project', task.project || '')],
+      ['Due', editableValue(task.id, 'due', task.due || '')],
+      ['Tags', editableValue(task.id, 'tags', (task.tags || []).join(', '))],
+      ['Created', escapeHtml(String(formatDate(task.created)))],
     ];
-    if (task.due) sum.push(['Due', task.due]);
-    sum.push(['Created', formatDate(task.created)]);
-    if (task.waiting_on) { sum.push(['Waiting on', task.waiting_on]); sum.push(['Expected', task.waiting_expected || '—']); }
-    sum.forEach(([k, v]) => html += `<div class="dt-sum-item"><span class="dt-sum-k">${k}</span><span class="dt-sum-v">${escapeHtml(String(v))}</span></div>`);
+    if (task.queue === 'waiting') {
+      sum.push(['Waiting on', editableValue(task.id, 'waiting_on', task.waiting_on || '')]);
+      sum.push(['Expected', editableValue(task.id, 'waiting_expected', task.waiting_expected || '')]);
+    }
+    sum.forEach(([k, v]) => html += `<div class="dt-sum-item"><span class="dt-sum-k">${k}</span><span class="dt-sum-v">${v}</span></div>`);
     html += `</div></div>`;
 
     // ── Human react — per-task 👍/👎 for completed/judged agent work ────

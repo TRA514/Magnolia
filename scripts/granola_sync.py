@@ -116,11 +116,14 @@ def _prompt_ids(state_or_ids):
     dedup — this only bounds prompt size. If we got a dict keyed by UUID with
     `downloaded_at`, take the most-recently-downloaded N; else a plain slice."""
     if isinstance(state_or_ids, dict):
-        ordered = sorted(
-            state_or_ids,
-            key=lambda k: (state_or_ids.get(k) or {}).get("downloaded_at") or "",
-            reverse=True,
-        )
+        def _recency(k):
+            v = state_or_ids.get(k)
+            if isinstance(v, dict):
+                return v.get("downloaded_at") or ""
+            # legacy ledger: value is the downloaded filename (date-prefixed),
+            # which sorts newest-first just like downloaded_at. Non-str -> "".
+            return v if isinstance(v, str) else ""
+        ordered = sorted(state_or_ids, key=_recency, reverse=True)
         return ordered[:SEEN_IN_PROMPT]
     return list(state_or_ids)[:SEEN_IN_PROMPT]
 

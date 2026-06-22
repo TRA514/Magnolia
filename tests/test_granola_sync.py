@@ -106,6 +106,29 @@ def test_prompt_ids_bounds_and_recency():
         granola_sync.SEEN_IN_PROMPT
 
 
+def test_prompt_ids_tolerates_legacy_string_ledger():
+    # The on-disk ledger is {uuid: "filename.md"} (string values), not
+    # {uuid: {"downloaded_at": ...}}. _prompt_ids must not crash on it.
+    legacy = {
+        "id-a": "2026-06-15_ops_elt_vantaca.md",
+        "id-b": "2026-06-12_ops_t2_vantaca.md",
+        "id-c": "2026-06-08_strategy_x_vantaca.md",
+    }
+    ids = granola_sync._prompt_ids(legacy)
+    assert set(ids) == {"id-a", "id-b", "id-c"}     # all keys returned, no crash
+    # date-prefixed filename strings sort newest-first, same intent as downloaded_at
+    assert ids[0] == "id-a"
+
+    # mixed legacy-string + new-dict values must also be tolerated
+    mixed = {
+        "id-old": "2026-06-01_ops_x_vantaca.md",
+        "id-new": {"downloaded_at": "2026-06-20T00:00:00", "title": "New"},
+    }
+    mixed_ids = granola_sync._prompt_ids(mixed)
+    assert set(mixed_ids) == {"id-old", "id-new"}
+    assert mixed_ids[0] == "id-new"                 # newest by sort key first
+
+
 def test_main_downstream_error_isolated(tmp_path, monkeypatch):
     _profile(tmp_path)
     monkeypatch.setattr(granola_sync.profile_lib, "PM_OS_DIR", str(tmp_path))

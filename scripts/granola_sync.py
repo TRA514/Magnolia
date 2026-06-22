@@ -20,8 +20,9 @@ DEFAULT_MODEL = "claude-haiku-4-5"
 MAX_NEW_PER_RUN = 20
 SEEN_IN_PROMPT = 200          # cap ledger ids interpolated into the fetch prompt
 FETCH_TIMEOUT = 300           # seconds for the claude -p subprocess
-GRANOLA_TOOLS = ("mcp__claude_ai_Granola__list_meetings,"
-                 "mcp__claude_ai_Granola__get_meeting_transcript")
+MIN_TRANSCRIPT_CHARS = 200          # below this, treat as a summary/placeholder stub
+GRANOLA_LIST_TOOLS = "mcp__claude_ai_Granola__list_meetings"
+GRANOLA_TRANSCRIPT_TOOLS = "mcp__claude_ai_Granola__get_meeting_transcript"
 
 log = logging.getLogger("granola_sync")
 
@@ -70,16 +71,23 @@ def _save_state(state, root=None):
     f.write_text(json.dumps(state, indent=2))
 
 
-def _fetch_prompt(seen_ids):
+def _list_prompt(seen_ids):
     return (
         "Use the Granola MCP. Call list_meetings(time_range='last_30_days'). "
-        "For EACH meeting whose id is NOT in this already-downloaded list, call "
-        "get_meeting_transcript(meeting_id). Already downloaded ids: "
-        + json.dumps(sorted(seen_ids)) + ". "
-        f"Return at most {MAX_NEW_PER_RUN} meetings as STRICT JSON: a JSON array of "
-        '{"id","title","created_at","attendees","transcript"} and NOTHING else. '
-        "If a transcript is unavailable (e.g. plan restriction), omit that meeting. "
-        "If there are no new meetings, return []."
+        "Return STRICT JSON: a JSON array of "
+        '{"id","title","created_at","attendees"} for every meeting, and NOTHING '
+        "else. Do not include transcripts. Already-downloaded ids (you may still "
+        "list them; they are filtered locally): " + json.dumps(sorted(seen_ids)) + "."
+    )
+
+
+def _transcript_prompt(meeting_id):
+    return (
+        "Use the Granola MCP. Call get_meeting_transcript(meeting_id="
+        f"'{meeting_id}'). Return STRICT JSON: " '{"transcript": "<the full '
+        'verbatim transcript text>"} and NOTHING else. Do NOT summarize, '
+        "abbreviate, or describe the transcript - return the literal text. "
+        'If no transcript is available, return {"transcript": null}.'
     )
 
 
@@ -128,32 +136,102 @@ def _prompt_ids(state_or_ids):
     return list(state_or_ids)[:SEEN_IN_PROMPT]
 
 
-def _fetch_new_meetings(state_or_ids, root=None):
-    """THE mockable seam. Shell out to claude -p + Granola MCP; return a list of
-    new meeting dicts. Validates JSON; one retry on malformed; [] on hard failure.
-
-    Accepts the full state dict (keyed by UUID) or a bare set/iterable of ids.
-    `seen` (the FULL set) is the authoritative local dedup; the prompt only
-    carries a bounded recent slice."""
-    seen = set(state_or_ids)
-    cmd = ["claude", "-p", _fetch_prompt(_prompt_ids(state_or_ids)),
-           "--model", _model(root), "--output-format", "json",
-           "--allowedTools", GRANOLA_TOOLS,
+def _run_claude(prompt, tools, root=None):
+    """Run one headless `claude -p` with the Granola MCP. Returns stdout or None.
+    One retry on subprocess failure; parse failures are handled by callers."""
+    cmd = ["claude", "-p", prompt, "--model", _model(root),
+           "--output-format", "json", "--allowedTools", tools,
            "--permission-mode", "bypassPermissions", "--max-turns", "30"]
     env = transcript_post._hook_env()    # strips CLAUDECODE so nested claude -p runs
     for attempt in (1, 2):
         try:
             out = subprocess.run(cmd, capture_output=True, text=True,
-                                 timeout=FETCH_TIMEOUT, env=env, cwd=str(profile_lib.PM_OS_DIR))
+                                 timeout=FETCH_TIMEOUT, env=env,
+                                 cwd=str(profile_lib.PM_OS_DIR))
         except Exception as exc:
-            log.error("claude -p fetch failed (attempt %d): %s", attempt, exc)
+            log.error("claude -p failed (attempt %d): %s", attempt, exc)
             continue
-        meetings = _parse_fetch_output(out.stdout)
-        if meetings is not None:
-            return [m for m in meetings if m.get("id") not in seen and m.get("transcript")]
-        log.warning("malformed fetch JSON (attempt %d): rc=%s stderr=%.500s",
-                    attempt, out.returncode, (out.stderr or ""))
-    return []
+        return out.stdout
+    return None
+
+
+def _parse_transcript_output(stdout):
+    """Extract the transcript string from claude -p output. Mirrors
+    _parse_fetch_output's envelope handling, but pulls a {"transcript": ...}
+    object. Returns the transcript string, or None."""
+    if not stdout:
+        return None
+    text = stdout.strip()
+    try:
+        outer = json.loads(text)
+        if isinstance(outer, dict) and "transcript" not in outer:
+            text = outer.get("result", text)
+    except json.JSONDecodeError:
+        pass
+    if not isinstance(text, str):
+        return None
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        return None
+    try:
+        obj = json.loads(text[start:end + 1])
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(obj, dict):
+        return None
+    t = obj.get("transcript")
+    return t if isinstance(t, str) else None
+
+
+def _looks_like_placeholder(text):
+    """True when content is missing, too short, or a known summary stub - so the
+    caller skips it (and does NOT mark it seen) and re-tries on the next run."""
+    if not isinstance(text, str):
+        return True
+    t = text.strip()
+    if len(t) < MIN_TRANSCRIPT_CHARS:
+        return True
+    if t.startswith("[Full transcript available"):
+        return True
+    return False
+
+
+def _list_new_meetings(state_or_ids, root=None):
+    """Phase 1: list meeting metadata (no transcripts). Returns dicts not yet seen."""
+    seen = set(state_or_ids)
+    meetings = _parse_fetch_output(
+        _run_claude(_list_prompt(_prompt_ids(state_or_ids)), GRANOLA_LIST_TOOLS, root=root))
+    if not meetings:
+        return []
+    return [m for m in meetings if m.get("id") and m.get("id") not in seen]
+
+
+def _fetch_one_transcript(meeting_id, root=None):
+    """Phase 2: fetch ONE transcript verbatim. Returns the text or None."""
+    return _parse_transcript_output(
+        _run_claude(_transcript_prompt(meeting_id), GRANOLA_TRANSCRIPT_TOOLS, root=root))
+
+
+def _fetch_new_meetings(state_or_ids, root=None):
+    """THE seam main() calls. List new meetings, then fetch each transcript one at
+    a time (reliable verbatim content). Meetings whose transcript is missing or a
+    placeholder are skipped - not returned, so they stay unseen and re-try."""
+    seen = set(state_or_ids)
+    out = []
+    for m in _list_new_meetings(state_or_ids, root=root):
+        mid = m.get("id")
+        if not mid or mid in seen:
+            continue
+        transcript = _fetch_one_transcript(mid, root=root)
+        if _looks_like_placeholder(transcript):
+            log.warning("  skipping %s - transcript missing or placeholder", mid)
+            continue
+        out.append({"id": mid, "title": m.get("title"),
+                    "created_at": m.get("created_at"),
+                    "attendees": m.get("attendees"), "transcript": transcript})
+        if len(out) >= MAX_NEW_PER_RUN:
+            break
+    return out
 
 
 def main(root=None):

@@ -850,6 +850,47 @@ def handle_update_description(handler, task_id):
         _error_response(handler, f"Failed to update description: {e}", status=500)
 
 
+def handle_update_field(handler, task_id):
+    """POST /api/tasks/{id}/field — Update one allowlisted frontmatter field.
+
+    Body: {field, value}. The field must be in task_lib.EDITABLE_FIELDS and the
+    value must pass validate_field_edit; otherwise 400. Persists via update_task,
+    which appends an activity-log entry.
+    """
+    try:
+        body = _read_request_body(handler)
+    except (json.JSONDecodeError, ValueError) as e:
+        _error_response(handler, f"Invalid JSON body: {e}", status=400)
+        return
+
+    field = body.get("field")
+    if not field:
+        _error_response(handler, "Missing 'field'", status=400)
+        return
+    if "value" not in body:
+        _error_response(handler, "Missing 'value'", status=400)
+        return
+
+    try:
+        normalized = task_lib.validate_field_edit(field, body["value"])
+    except ValueError as e:
+        _error_response(handler, str(e), status=400)
+        return
+
+    try:
+        task_lib.update_task(
+            task_id,
+            changes={field: normalized},
+            comment=f"{field} edited.",
+            actor="human",
+        )
+        _json_response(handler, {"status": "ok", "message": f"{field} updated for {task_id}"})
+    except FileNotFoundError:
+        _error_response(handler, f"Task {task_id} not found", status=404)
+    except Exception as e:
+        _error_response(handler, f"Failed to update {field}: {e}", status=500)
+
+
 def handle_update_message(handler, task_id):
     """POST /api/tasks/{id}/message — Save edits to a send-message draft.
 
@@ -2346,6 +2387,16 @@ class TaskServerHandler(SimpleHTTPRequestHandler):
                 _error_response(self, "Invalid task ID format", status=400)
             else:
                 handle_update_description(self, task_id)
+            return True
+
+        # Match /api/tasks/{id}/field
+        match = re.match(r"^/api/tasks/([^/]+)/field$", path)
+        if match and method == "POST":
+            task_id = _parse_task_id(match.group(1))
+            if task_id is None:
+                _error_response(self, "Invalid task ID format", status=400)
+            else:
+                handle_update_field(self, task_id)
             return True
 
         # Match /api/tasks/{id}/send-message  (must precede /message)

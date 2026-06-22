@@ -22,7 +22,7 @@ SEEN_IN_PROMPT = 200          # cap ledger ids interpolated into the fetch promp
 FETCH_TIMEOUT = 300           # seconds for the claude -p subprocess
 MIN_TRANSCRIPT_CHARS = 200          # below this, treat as a summary/placeholder stub
 GRANOLA_LIST_TOOLS = "mcp__claude_ai_Granola__list_meetings"
-GRANOLA_TRANSCRIPT_TOOLS = "mcp__claude_ai_Granola__get_meeting_transcript,Write"
+GRANOLA_TRANSCRIPT_TOOLS = "mcp__claude_ai_Granola__get_meeting_transcript"
 
 log = logging.getLogger("granola_sync")
 
@@ -81,15 +81,11 @@ def _list_prompt(seen_ids):
     )
 
 
-def _transcript_prompt(meeting_id, out_path):
+def _transcript_prompt(meeting_id):
     return (
         "Use the Granola MCP. Call get_meeting_transcript(meeting_id="
-        f"'{meeting_id}'). Then use the Write tool to save the FULL verbatim "
-        "transcript text (exactly as returned by the tool, NOT summarized or "
-        f"abbreviated) to this exact file path: {out_path} "
-        "(write only the transcript text - no JSON, no commentary, no code fences). "
-        "After writing, reply with just: DONE. If no transcript is available, do not "
-        "write the file and reply: NONE."
+        f"'{meeting_id}') exactly once, then reply with just: OK. Do NOT repeat, "
+        "echo, or summarize the transcript in your reply."
     )
 
 
@@ -138,11 +134,15 @@ def _prompt_ids(state_or_ids):
     return list(state_or_ids)[:SEEN_IN_PROMPT]
 
 
-def _run_claude(prompt, tools, root=None):
+def _run_claude(prompt, tools, root=None, stream=False):
     """Run one headless `claude -p` with the Granola MCP. Returns stdout or None.
-    One retry on subprocess failure; parse failures are handled by callers."""
+    One retry on subprocess failure; parse failures are handled by callers.
+    When stream=True, uses --output-format stream-json --verbose so tool_result
+    events are captured verbatim in the raw NDJSON output."""
+    fmt_args = (["--output-format", "stream-json", "--verbose"]
+                if stream else ["--output-format", "json"])
     cmd = ["claude", "-p", prompt, "--model", _model(root),
-           "--output-format", "json", "--allowedTools", tools,
+           *fmt_args, "--allowedTools", tools,
            "--permission-mode", "bypassPermissions", "--max-turns", "30"]
     env = transcript_post._hook_env()    # strips CLAUDECODE so nested claude -p runs
     for attempt in (1, 2):
@@ -154,6 +154,40 @@ def _run_claude(prompt, tools, root=None):
             log.error("claude -p failed (attempt %d): %s", attempt, exc)
             continue
         return out.stdout
+    return None
+
+
+def _parse_stream_transcript(stdout):
+    """Scrape the verbatim transcript from a claude -p stream-json run: find the
+    get_meeting_transcript tool_result and return its transcript field. The model
+    never reproduces the text, so this is reliable. Returns str or None."""
+    if not stdout:
+        return None
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict) or event.get("type") != "user":
+            continue
+        msg = event.get("message") or {}
+        for block in (msg.get("content") or []) if isinstance(msg, dict) else []:
+            if not isinstance(block, dict) or block.get("type") != "tool_result":
+                continue
+            inner = block.get("content")
+            inner_list = inner if isinstance(inner, list) else []
+            for item in inner_list:
+                if not isinstance(item, dict) or item.get("type") != "text":
+                    continue
+                try:
+                    payload = json.loads(item.get("text") or "")
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(payload, dict) and isinstance(payload.get("transcript"), str):
+                    return payload["transcript"]
     return None
 
 
@@ -181,25 +215,12 @@ def _list_new_meetings(state_or_ids, root=None):
 
 
 def _fetch_one_transcript(meeting_id, root=None):
-    """Fetch ONE transcript by having claude -p Write it to a file (not echo it
-    through its response, which truncates/summarizes long transcripts). Returns
-    the transcript text or None."""
-    tmp_dir = Path(profile_lib.PM_OS_DIR) / ".granola_tmp"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    out_path = tmp_dir / f"{meeting_id}.txt"
-    try:
-        _run_claude(_transcript_prompt(meeting_id, str(out_path)),
-                    GRANOLA_TRANSCRIPT_TOOLS, root=root)
-        try:
-            text = out_path.read_text(encoding="utf-8")
-        except OSError:
-            return None
-        return text or None
-    finally:
-        try:
-            out_path.unlink()
-        except OSError:
-            pass
+    """Fetch ONE transcript by scraping the raw get_meeting_transcript tool_result
+    from a stream-json claude -p run. The model only invokes the tool (tiny output),
+    so the transcript is never summarized/truncated. Returns the text or None."""
+    return _parse_stream_transcript(
+        _run_claude(_transcript_prompt(meeting_id), GRANOLA_TRANSCRIPT_TOOLS,
+                    root=root, stream=True))
 
 
 def _fetch_new_meetings(state_or_ids, root=None):

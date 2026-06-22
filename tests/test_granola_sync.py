@@ -139,24 +139,56 @@ def test_looks_like_placeholder():
     assert granola_sync._looks_like_placeholder(real) is False
 
 
-def test_fetch_one_transcript_writes_then_reads(tmp_path, monkeypatch):
-    monkeypatch.setattr(granola_sync.profile_lib, "PM_OS_DIR", str(tmp_path))
-    def _fake_run(prompt, tools, root=None):
-        # the model "writes" the transcript to the path named in the prompt
-        import re
-        m = re.search(r"file path: (\S+)", prompt)
-        if m:
-            from pathlib import Path as _P
-            _P(m.group(1)).write_text("Me: hi. Them: hello. real content.", encoding="utf-8")
-        return "DONE"
-    monkeypatch.setattr(granola_sync, "_run_claude", _fake_run)
-    assert granola_sync._fetch_one_transcript("id-1") == "Me: hi. Them: hello. real content."
+def _make_stream_ndjson(transcript_text):
+    """Build a minimal synthetic stream-json output containing a tool_result event."""
+    payload = json.dumps({"id": "mtg-1", "title": "Test Meeting",
+                          "transcript": transcript_text})
+    event = {
+        "type": "user",
+        "message": {
+            "content": [
+                {
+                    "type": "tool_result",
+                    "content": [
+                        {"type": "text", "text": payload}
+                    ]
+                }
+            ]
+        }
+    }
+    return json.dumps(event)
 
 
-def test_fetch_one_transcript_none_when_not_written(tmp_path, monkeypatch):
-    monkeypatch.setattr(granola_sync.profile_lib, "PM_OS_DIR", str(tmp_path))
-    monkeypatch.setattr(granola_sync, "_run_claude", lambda p, t, root=None: "NONE")
-    assert granola_sync._fetch_one_transcript("id-2") is None
+def test_parse_stream_transcript_positive():
+    transcript = "Me: hi. Them: hello. real content."
+    ndjson = "\n".join([
+        json.dumps({"type": "system", "subtype": "init"}),
+        "",
+        _make_stream_ndjson(transcript),
+        json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "OK"}]}}),
+    ])
+    assert granola_sync._parse_stream_transcript(ndjson) == transcript
+
+
+def test_parse_stream_transcript_negative():
+    # malformed lines / no tool_result -> None
+    ndjson = "\n".join([
+        "not json at all",
+        json.dumps({"type": "assistant", "message": {}}),
+        "",
+        "{bad json",
+    ])
+    assert granola_sync._parse_stream_transcript(ndjson) is None
+    assert granola_sync._parse_stream_transcript("") is None
+    assert granola_sync._parse_stream_transcript(None) is None
+
+
+def test_fetch_one_transcript_via_stream(monkeypatch):
+    transcript = "Me: hi. Them: hello. real content."
+    fake_stream = _make_stream_ndjson(transcript)
+    monkeypatch.setattr(granola_sync, "_run_claude",
+                        lambda p, t, root=None, stream=False: fake_stream)
+    assert granola_sync._fetch_one_transcript("id-1") == transcript
 
 
 def test_list_new_meetings_filters_seen(monkeypatch):

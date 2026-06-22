@@ -46,6 +46,19 @@ PRIORITIES = ["critical", "high", "medium", "low"]
 DOMAINS = ["product", "strategy", "marketing", "recruiting", "metrics", "learning", "ops", "onboarding"]
 AGENT_STATUSES = ["queued", "running", "blocked", "needs-human", "complete", "failed"]
 
+# Fields the generic inline-edit endpoint may write. Everything else
+# (id, created, updated, creator, queue, assignee, agent_*, judge_*, card_type, ...)
+# is system-managed and must NOT be writable via inline edit.
+EDITABLE_FIELDS = {
+    "title", "priority", "status", "due",
+    "waiting_on", "waiting_expected", "domain", "project", "tags",
+}
+
+# status values settable via inline edit. done/cancelled have side effects
+# (completion log, archive move) and must go through complete_task instead.
+_INLINE_STATUSES = ["open", "in-progress", "blocked"]
+_TEXT_MAXLEN = {"title": 200, "project": 500, "waiting_on": 200}
+
 PRIORITY_ORDER = {p: i for i, p in enumerate(PRIORITIES)}
 
 yaml = YAML()
@@ -616,6 +629,55 @@ def update_task(task_id, changes=None, comment=None, actor="human"):
     else:
         _write_task_file(filepath, fm, body)
         return filepath
+
+
+def validate_field_edit(field, value):
+    """Validate and normalize a single inline field edit.
+
+    Returns the normalized value to persist. Raises ValueError when the field
+    is not in EDITABLE_FIELDS or the value fails its type/enum/length rule.
+    """
+    if field not in EDITABLE_FIELDS:
+        raise ValueError(f"Field '{field}' is not editable")
+
+    if field == "priority":
+        if value not in PRIORITIES:
+            raise ValueError(f"Invalid priority '{value}'")
+        return value
+
+    if field == "status":
+        if value in ("done", "cancelled"):
+            raise ValueError("Set status to done via the done action, not inline edit")
+        if value not in _INLINE_STATUSES:
+            raise ValueError(f"Invalid status '{value}'")
+        return value
+
+    if field == "domain":
+        if value not in DOMAINS:
+            raise ValueError(f"Invalid domain '{value}'")
+        return value
+
+    if field in ("due", "waiting_expected"):
+        v = (value or "").strip() if isinstance(value, str) else ""
+        if v == "":
+            return ""
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError(f"Invalid date '{value}', expected YYYY-MM-DD")
+        return v
+
+    if field == "tags":
+        if not isinstance(value, list):
+            raise ValueError("tags must be a list")
+        return [str(t).strip() for t in value if str(t).strip()]
+
+    # free text: title, project, waiting_on
+    v = ("" if value is None else str(value)).strip()
+    maxlen = _TEXT_MAXLEN.get(field, 500)
+    if len(v) > maxlen:
+        raise ValueError(f"{field} exceeds {maxlen} characters")
+    return v
 
 
 def complete_task(task_id, output_path=None, actor="human"):

@@ -42,8 +42,8 @@ async function saveField(taskId, field, value, opts) {
 function editableValue(taskId, field, value, opts) {
   opts = opts || {};
   const shown = (value === null || value === undefined || value === '') ? '-' : String(value);
-  const dataVal = escapeHtml(value === null || value === undefined ? '' : String(value));
-  return `<span class="fe-value" data-field="${field}" data-task="${escapeHtml(taskId)}" data-value="${dataVal}" onclick="startFieldEdit(this)" title="Click to edit">${escapeHtml(shown)}</span>`;
+  const dataVal = escapeAttr(value === null || value === undefined ? '' : String(value));
+  return `<span class="fe-value" data-field="${field}" data-task="${escapeAttr(taskId)}" data-value="${dataVal}" onclick="startFieldEdit(this)" title="Click to edit">${escapeHtml(shown)}</span>`;
 }
 
 // Replace a .fe-value span with the right input control. Commits on Enter/blur

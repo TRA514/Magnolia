@@ -14,6 +14,13 @@
 // Card-face inline edit: pop a control in place of the clicked element, commit
 // to the server, and let fetchTasks() re-render the board. stopPropagation keeps
 // the click from opening the modal.
+
+// Wrapper called from data-attribute onclick — reads task/field/current from the
+// element's dataset so no data is interpolated into the JS attribute string.
+function editCardFieldEl(event, el) {
+  editCardField(event, el.dataset.feTask, el.dataset.feField, el.dataset.feCurrent || '');
+}
+
 function editCardField(event, taskId, field, current) {
   event.stopPropagation();
   const cfg = FIELD_EDITORS[field];
@@ -133,8 +140,7 @@ const _signalRenderers = {
     return `<span class="chip chip-overdue">${svgIcon('overdue')}overdue · ${task.due}</span>`;
   },
   waiting_on(task) {
-    const w = escapeHtml(task.waiting_on).replace(/'/g, "\\'");
-    return `<span class="chip chip-waiting" title="Click to edit" onclick="editCardField(event, '${task.id}', 'waiting_on', '${w}')">${svgIcon('hourglass')}${escapeHtml(task.waiting_on)}</span>`;
+    return `<span class="chip chip-waiting" title="Click to edit" data-fe-task="${escapeAttr(task.id)}" data-fe-field="waiting_on" data-fe-current="${escapeAttr(task.waiting_on)}" onclick="editCardFieldEl(event, this)">${svgIcon('hourglass')}${escapeHtml(task.waiting_on)}</span>`;
   },
   waiting_due(task) {
     const today = new Date().toISOString().slice(0, 10);
@@ -328,8 +334,8 @@ function _renderTitle(task) {
   const prioClass = `prio-${task.priority || 'low'}`;
   const p = task.priority || 'low';
   return `<div class="card-title">` +
-    `<span class="prio-dot ${prioClass}" title="${p} priority - click to change" onclick="editCardField(event, '${task.id}', 'priority', '${p}')"></span>` +
-    `<span class="card-title-text" title="Click to edit" onclick="editCardField(event, '${task.id}', 'title', '${escapeHtml(task.title).replace(/'/g, "\\'")}')">${escapeHtml(task.title)}</span>` +
+    `<span class="prio-dot ${prioClass}" title="${p} priority - click to change" data-fe-task="${escapeAttr(task.id)}" data-fe-field="priority" data-fe-current="${escapeAttr(p)}" onclick="editCardFieldEl(event, this)"></span>` +
+    `<span class="card-title-text" title="Click to edit" data-fe-task="${escapeAttr(task.id)}" data-fe-field="title" data-fe-current="${escapeAttr(task.title)}" onclick="editCardFieldEl(event, this)">${escapeHtml(task.title)}</span>` +
     `</div>`;
 }
 

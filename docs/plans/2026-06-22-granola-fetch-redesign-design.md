@@ -69,6 +69,18 @@ A direct-local-cache alternative was probed and rejected: Granola encrypts at re
 - #8 portability: keeps the existing `subprocess` + `transcript_post._hook_env()` pattern; no new OS-specific code.
 - ASCII-safe prompts and runtime strings (hyphen not em-dash).
 
+## Pivot (2026-06-22, evidence-backed): write-to-file, not model-echo
+
+Live verification of the per-meeting echo approach skipped 10/10 meetings (including a known-good one that worked in isolation). Root cause: making the model re-emit a long verbatim transcript through its JSON output is fragile and expensive — non-deterministic summarization, truncation past the 32K output-token ceiling, ~99s and ~$0.08 per meeting on Haiku. One-at-a-time helped but did not fix the core fragility.
+
+**Mechanism change (keeps the two-phase structure):** `_fetch_one_transcript` instructs `claude -p` to call `get_meeting_transcript` and then **`Write` the verbatim transcript to a file path** (provided by the script, inside `PM_OS_DIR`), returning only `DONE`/`NONE`. The script reads the file back. The model relays a tool result to disk and never reproduces the content in its response — eliminating summarization/truncation, and shrinking the response so it is far cheaper and faster.
+
+- `GRANOLA_TRANSCRIPT_TOOLS` adds `Write`.
+- `_transcript_prompt(meeting_id, out_path)` gains the out-path and instructs write-not-echo.
+- `_fetch_one_transcript` creates a temp path under `PM_OS_DIR`, runs claude -p, reads + returns the file content (or None), and cleans up the temp file.
+- `_parse_transcript_output` (the echo parser) is removed along with its test — no longer used.
+- `_looks_like_placeholder` still guards the file content in the orchestrator.
+
 ## Files touched
 
 - `scripts/granola_sync.py` — rewrite `_fetch_new_meetings`; add `_list_new_meetings`, `_fetch_one_transcript`, `_looks_like_placeholder`; split `_fetch_prompt` into list/transcript prompts.

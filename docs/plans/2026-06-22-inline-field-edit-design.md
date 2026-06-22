@@ -96,6 +96,19 @@ The `EDITABLE_FIELDS` allowlist is the single gatekeeper — the generic endpoin
 - #7 dev/prod: e2e runs on the dev board only (`:8743`).
 - #8 portability: no `platform_lib` bypass; new code is pure HTTP/JS.
 
+## Build contract (from meta-scope-extension)
+
+Single surface: **platform / UI** (backend + frontend). No adapter, no worker, no card-registry/schema change.
+
+| Surface | Decision | Seam to use | Gate |
+|---|---|---|---|
+| platform/UI — backend | extend | `task_server.py` route + handler; `task_lib.py` `EDITABLE_FIELDS` allowlist + validation; reuse `update_task(changes=…)` | `pytest` |
+| platform/UI — frontend (modal) | extend | `tasks.js` Details rows -> `field-edit.js` | live e2e on `:8743` |
+| platform/UI — frontend (card face) | build-new (JS, not registry) | new `field-edit.js`; wire `card-registry.js` slots with `stopPropagation` | `card_schema.py` (no-op green) + live e2e |
+| platform/UI — styling | extend | theme-token CSS, shared stylesheet (no per-Mood change) | `card_schema.py` token rule |
+
+**Standing item (every subagent):** runtime/UI output ASCII-safe (hyphen not em-dash, ASCII quotes). No `platform_lib` bypass. `waiting_on` is operator data, not engine identity - passes `test_engine_no_jay.py`.
+
 ## Files touched
 
 - `scripts/task_server.py` — new route + `handle_update_field`.

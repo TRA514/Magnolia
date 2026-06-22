@@ -23,6 +23,11 @@ FETCH_TIMEOUT = 300           # seconds for the claude -p subprocess
 MIN_TRANSCRIPT_CHARS = 200          # below this, treat as a summary/placeholder stub
 GRANOLA_LIST_TOOLS = "mcp__claude_ai_Granola__list_meetings"
 GRANOLA_TRANSCRIPT_TOOLS = "mcp__claude_ai_Granola__get_meeting_transcript"
+# The transcript fetch only needs the model to INVOKE one tool (we scrape the raw
+# tool_result; the model never reproduces the transcript, so its output is tiny).
+# Haiku is unreliable at actually calling the tool - it wanders or skips it - so the
+# fetch uses a stronger model. Cost stays modest because the output is tiny.
+TRANSCRIPT_MODEL = "claude-sonnet-4-6"
 
 log = logging.getLogger("granola_sync")
 
@@ -134,14 +139,17 @@ def _prompt_ids(state_or_ids):
     return list(state_or_ids)[:SEEN_IN_PROMPT]
 
 
-def _run_claude(prompt, tools, root=None, stream=False):
+def _run_claude(prompt, tools, root=None, stream=False, model=None):
     """Run one headless `claude -p` with the Granola MCP. Returns stdout or None.
     One retry on subprocess failure; parse failures are handled by callers.
     When stream=True, uses --output-format stream-json --verbose so tool_result
-    events are captured verbatim in the raw NDJSON output."""
+    events are captured verbatim in the raw NDJSON output. `model` overrides the
+    configured model (the transcript fetch uses a stronger one for reliable tool
+    calls). Do NOT restrict the tool set: the Granola MCP tools are deferred and the
+    model needs ToolSearch/ListMcpResourcesTool to discover them before calling."""
     fmt_args = (["--output-format", "stream-json", "--verbose"]
                 if stream else ["--output-format", "json"])
-    cmd = ["claude", "-p", prompt, "--model", _model(root),
+    cmd = ["claude", "-p", prompt, "--model", model or _model(root),
            *fmt_args, "--allowedTools", tools,
            "--permission-mode", "bypassPermissions", "--max-turns", "30"]
     env = transcript_post._hook_env()    # strips CLAUDECODE so nested claude -p runs
@@ -220,7 +228,7 @@ def _fetch_one_transcript(meeting_id, root=None):
     so the transcript is never summarized/truncated. Returns the text or None."""
     return _parse_stream_transcript(
         _run_claude(_transcript_prompt(meeting_id), GRANOLA_TRANSCRIPT_TOOLS,
-                    root=root, stream=True))
+                    root=root, stream=True, model=TRANSCRIPT_MODEL))
 
 
 def _fetch_new_meetings(state_or_ids, root=None):

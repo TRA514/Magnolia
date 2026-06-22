@@ -187,7 +187,7 @@ def test_fetch_one_transcript_via_stream(monkeypatch):
     transcript = "Me: hi. Them: hello. real content."
     fake_stream = _make_stream_ndjson(transcript)
     monkeypatch.setattr(granola_sync, "_run_claude",
-                        lambda p, t, root=None, stream=False: fake_stream)
+                        lambda p, t, **kw: fake_stream)
     assert granola_sync._fetch_one_transcript("id-1") == transcript
 
 

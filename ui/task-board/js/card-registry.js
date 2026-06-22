@@ -10,6 +10,42 @@
 // board.js): escapeHtml, svgIcon, meetingName, obsidianUri, QUEUE_META,
 // judgeScoreBadge, statusMark, outputLink, isCronTask, quickDone, fetchTasks.
 
+// ─── Card-face inline edit helper ───────────────────────────────────────────
+// Card-face inline edit: pop a control in place of the clicked element, commit
+// to the server, and let fetchTasks() re-render the board. stopPropagation keeps
+// the click from opening the modal.
+function editCardField(event, taskId, field, current) {
+  event.stopPropagation();
+  const cfg = FIELD_EDITORS[field];
+  if (!cfg) return;
+  const anchor = event.currentTarget;
+  let control;
+  if (cfg.type === 'enum') {
+    control = document.createElement('select');
+    cfg.values.forEach(v => {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = v; if (v === current) o.selected = true;
+      control.appendChild(o);
+    });
+  } else if (cfg.type === 'date') {
+    control = document.createElement('input'); control.type = 'date'; control.value = current || '';
+  } else {
+    control = document.createElement('input'); control.type = 'text'; control.value = current || '';
+  }
+  control.className = 'fe-input fe-input-card';
+  control.addEventListener('click', e => e.stopPropagation());
+  let done = false;
+  const commit = () => { if (done) return; done = true; saveField(taskId, field, control.value, { fromCard: true }); };
+  control.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); control.blur(); }
+    else if (e.key === 'Escape') { e.preventDefault(); done = true; fetchTasks(); }
+  });
+  if (cfg.type === 'enum') control.addEventListener('change', commit);
+  control.addEventListener('blur', commit);
+  anchor.replaceWith(control);
+  control.focus();
+}
+
 // ─── Registry load (once, cached, graceful) ─────────────────────────────────
 // We start the fetch the moment this script loads. Until it resolves (or if it
 // fails), renderCardFromRegistry falls back to the built-in `task` contract:
@@ -97,7 +133,8 @@ const _signalRenderers = {
     return `<span class="chip chip-overdue">${svgIcon('overdue')}overdue · ${task.due}</span>`;
   },
   waiting_on(task) {
-    return `<span class="chip chip-waiting">${svgIcon('hourglass')}${escapeHtml(task.waiting_on)}</span>`;
+    const w = escapeHtml(task.waiting_on).replace(/'/g, "\\'");
+    return `<span class="chip chip-waiting" title="Click to edit" onclick="editCardField(event, '${task.id}', 'waiting_on', '${w}')">${svgIcon('hourglass')}${escapeHtml(task.waiting_on)}</span>`;
   },
   waiting_due(task) {
     const today = new Date().toISOString().slice(0, 10);
@@ -289,7 +326,11 @@ function _renderHead(task, q) {
 
 function _renderTitle(task) {
   const prioClass = `prio-${task.priority || 'low'}`;
-  return `<div class="card-title"><span class="prio-dot ${prioClass}" title="${task.priority || 'low'} priority"></span><span>${escapeHtml(task.title)}</span></div>`;
+  const p = task.priority || 'low';
+  return `<div class="card-title">` +
+    `<span class="prio-dot ${prioClass}" title="${p} priority - click to change" onclick="editCardField(event, '${task.id}', 'priority', '${p}')"></span>` +
+    `<span class="card-title-text" title="Click to edit" onclick="editCardField(event, '${task.id}', 'title', '${escapeHtml(task.title).replace(/'/g, "\\'")}')">${escapeHtml(task.title)}</span>` +
+    `</div>`;
 }
 
 function _renderContext(task) {
